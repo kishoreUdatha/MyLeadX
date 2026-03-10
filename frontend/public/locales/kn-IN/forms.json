@@ -1,0 +1,57 @@
+{
+  "title": "ಫಾರ್ಮ್ ಬಿಲ್ಡರ್",
+  "subtitle": "ಲೀಡ್‌ಗಳನ್ನು ಹಿಡಿಯಲು ಕಸ್ಟಮ್ ಫಾರ್ಮ್‌ಗಳನ್ನು ರಚಿಸಿ",
+  "createForm": "ಫಾರ್ಮ್ ರಚಿಸಿ",
+  "editForm": "ಫಾರ್ಮ್ ಸಂಪಾದಿಸಿ",
+  "formName": "ಫಾರ್ಮ್ ಹೆಸರು",
+  "formDescription": "ಫಾರ್ಮ್ ವಿವರಣೆ",
+  "fields": {
+    "title": "ಫಾರ್ಮ್ ಕ್ಷೇತ್ರಗಳು",
+    "addField": "ಕ್ಷೇತ್ರ ಸೇರಿಸಿ",
+    "fieldName": "ಕ್ಷೇತ್ರ ಹೆಸರು",
+    "fieldType": "ಕ್ಷೇತ್ರ ಪ್ರಕಾರ",
+    "placeholder": "ಪ್ಲೇಸ್‌ಹೋಲ್ಡರ್",
+    "required": "ಅಗತ್ಯ",
+    "options": "ಆಯ್ಕೆಗಳು"
+  },
+  "fieldTypes": {
+    "text": "ಪಠ್ಯ",
+    "email": "ಇಮೇಲ್",
+    "phone": "ಫೋನ್",
+    "number": "ಸಂಖ್ಯೆ",
+    "textarea": "ಪಠ್ಯ ಪ್ರದೇಶ",
+    "select": "ಡ್ರಾಪ್‌ಡೌನ್",
+    "checkbox": "ಚೆಕ್‌ಬಾಕ್ಸ್",
+    "radio": "ರೇಡಿಯೋ",
+    "date": "ದಿನಾಂಕ"
+  },
+  "settings": {
+    "title": "ಫಾರ್ಮ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "submitButton": "ಸಲ್ಲಿಸು ಬಟನ್ ಪಠ್ಯ",
+    "successMessage": "ಯಶಸ್ವಿ ಸಂದೇಶ",
+    "redirectUrl": "ರಿಡೈರೆಕ್ಟ್ URL",
+    "notifyEmail": "ಅಧಿಸೂಚನೆ ಇಮೇಲ್"
+  },
+  "preview": {
+    "title": "ಪೂರ್ವವೀಕ್ಷಣೆ",
+    "mobile": "ಮೊಬೈಲ್",
+    "desktop": "ಡೆಸ್ಕ್‌ಟಾಪ್"
+  },
+  "actions": {
+    "save": "ಫಾರ್ಮ್ ಉಳಿಸಿ",
+    "publish": "ಪ್ರಕಟಿಸಿ",
+    "unpublish": "ಅಪ್ರಕಟಿಸಿ",
+    "duplicate": "ನಕಲಿಸಿ",
+    "delete": "ಅಳಿಸಿ",
+    "embedCode": "ಎಂಬೆಡ್ ಕೋಡ್ ಪಡೆಯಿರಿ",
+    "shareLink": "ಲಿಂಕ್ ಹಂಚಿಕೊಳ್ಳಿ"
+  },
+  "status": {
+    "draft": "ಕರಡು",
+    "published": "ಪ್ರಕಟಿಸಲಾಗಿದೆ"
+  },
+  "empty": {
+    "title": "ಇನ್ನೂ ಫಾರ್ಮ್‌ಗಳಿಲ್ಲ",
+    "description": "ಲೀಡ್‌ಗಳನ್ನು ಹಿಡಿಯಲು ನಿಮ್ಮ ಮೊದಲ ಫಾರ್ಮ್ ರಚಿಸಿ"
+  }
+}

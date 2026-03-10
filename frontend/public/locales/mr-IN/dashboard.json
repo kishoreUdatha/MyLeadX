@@ -1,0 +1,48 @@
+{
+  "welcome": "पुन्हा स्वागत आहे, {{name}}!",
+  "subtitle": "आज तुमच्या लीड्ससोबत काय चालू आहे ते येथे आहे.",
+  "addLead": "लीड जोडा",
+  "stats": {
+    "totalLeads": "एकूण लीड्स",
+    "today": "आज",
+    "thisWeek": "या आठवड्यात",
+    "thisMonth": "या महिन्यात"
+  },
+  "leadsByStatus": {
+    "title": "स्थितीनुसार लीड्स",
+    "noLeads": "अजून लीड्स नाहीत",
+    "startBy": "लीड्स अपलोड किंवा तयार करून सुरुवात करा"
+  },
+  "leadSources": {
+    "title": "लीड स्रोत",
+    "noData": "स्रोत डेटा उपलब्ध नाही"
+  },
+  "quickActions": {
+    "title": "जलद क्रिया",
+    "bulkUpload": {
+      "name": "बल्क अपलोड",
+      "description": "Excel/CSV मधून लीड्स अपलोड करा"
+    },
+    "newLeads": {
+      "name": "नवीन लीड्स",
+      "description": "संपर्क न केलेले लीड्स पहा"
+    },
+    "createForm": {
+      "name": "फॉर्म तयार करा",
+      "description": "सानुकूल लीड फॉर्म तयार करा"
+    },
+    "campaigns": {
+      "name": "मोहिमा",
+      "description": "बल्क मेसेजेस पाठवा"
+    }
+  },
+  "status": {
+    "NEW": "नवीन",
+    "CONTACTED": "संपर्क केला",
+    "QUALIFIED": "पात्र",
+    "NEGOTIATION": "वाटाघाटी",
+    "WON": "जिंकले",
+    "LOST": "गमावले",
+    "FOLLOW_UP": "फॉलो अप"
+  }
+}

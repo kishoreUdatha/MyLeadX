@@ -1,0 +1,57 @@
+{
+  "title": "फॉर्म बिल्डर",
+  "subtitle": "लीड्स कैप्चर करने के लिए कस्टम फॉर्म बनाएं",
+  "createForm": "फॉर्म बनाएं",
+  "editForm": "फॉर्म संपादित करें",
+  "formName": "फॉर्म का नाम",
+  "formDescription": "फॉर्म विवरण",
+  "fields": {
+    "title": "फॉर्म फ़ील्ड्स",
+    "addField": "फ़ील्ड जोड़ें",
+    "fieldName": "फ़ील्ड का नाम",
+    "fieldType": "फ़ील्ड प्रकार",
+    "placeholder": "प्लेसहोल्डर",
+    "required": "आवश्यक",
+    "options": "विकल्प"
+  },
+  "fieldTypes": {
+    "text": "टेक्स्ट",
+    "email": "ईमेल",
+    "phone": "फ़ोन",
+    "number": "संख्या",
+    "textarea": "टेक्स्ट एरिया",
+    "select": "ड्रॉपडाउन",
+    "checkbox": "चेकबॉक्स",
+    "radio": "रेडियो",
+    "date": "तारीख"
+  },
+  "settings": {
+    "title": "फॉर्म सेटिंग्स",
+    "submitButton": "सबमिट बटन टेक्स्ट",
+    "successMessage": "सफलता संदेश",
+    "redirectUrl": "रीडायरेक्ट URL",
+    "notifyEmail": "सूचना ईमेल"
+  },
+  "preview": {
+    "title": "पूर्वावलोकन",
+    "mobile": "मोबाइल",
+    "desktop": "डेस्कटॉप"
+  },
+  "actions": {
+    "save": "फॉर्म सहेजें",
+    "publish": "प्रकाशित करें",
+    "unpublish": "अप्रकाशित करें",
+    "duplicate": "डुप्लीकेट",
+    "delete": "हटाएं",
+    "embedCode": "एम्बेड कोड प्राप्त करें",
+    "shareLink": "लिंक शेयर करें"
+  },
+  "status": {
+    "draft": "ड्राफ्ट",
+    "published": "प्रकाशित"
+  },
+  "empty": {
+    "title": "अभी कोई फॉर्म नहीं",
+    "description": "लीड्स कैप्चर करने के लिए अपना पहला फॉर्म बनाएं"
+  }
+}

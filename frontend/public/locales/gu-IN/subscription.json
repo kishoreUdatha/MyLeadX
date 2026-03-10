@@ -1,0 +1,88 @@
+{
+  "title": "સબ્સ્ક્રિપ્શન",
+  "subtitle": "તમારી સબ્સ્ક્રિપ્શન અને બિલિંગ મેનેજ કરો",
+  "currentPlan": "વર્તમાન પ્લાન",
+  "changePlan": "પ્લાન બદલો",
+  "cancelSubscription": "સબ્સ્ક્રિપ્શન રદ કરો",
+  "billing": {
+    "title": "બિલિંગ",
+    "nextBillingDate": "આગામી બિલિંગ તારીખ",
+    "paymentMethod": "ચુકવણી પદ્ધતિ",
+    "updatePayment": "ચુકવણી પદ્ધતિ અપડેટ કરો",
+    "billingHistory": "બિલિંગ ઇતિહાસ",
+    "downloadInvoice": "ઇનવોઇસ ડાઉનલોડ કરો"
+  },
+  "plans": {
+    "title": "તમારો પ્લાન પસંદ કરો",
+    "subtitle": "તમારી જરૂરિયાતોને અનુકૂળ પ્લાન પસંદ કરો",
+    "monthly": "માસિક",
+    "yearly": "વાર્ષિક",
+    "savePercent": "{{percent}}% બચાવો",
+    "popular": "સૌથી લોકપ્રિય",
+    "currentPlan": "વર્તમાન પ્લાન",
+    "selectPlan": "પ્લાન પસંદ કરો",
+    "contactSales": "સેલ્સનો સંપર્ક કરો"
+  },
+  "starter": {
+    "name": "સ્ટાર્ટર",
+    "description": "શરૂઆત કરતી નાની ટીમો માટે સંપૂર્ણ",
+    "features": {
+      "leads": "1,000 લીડ્સ સુધી",
+      "users": "3 વપરાશકર્તાઓ સુધી",
+      "forms": "5 ફોર્મ્સ",
+      "campaigns": "બેઝિક કેમ્પેઇન્સ",
+      "support": "ઇમેઇલ સપોર્ટ"
+    }
+  },
+  "professional": {
+    "name": "પ્રોફેશનલ",
+    "description": "વિકસતા વ્યવસાયો માટે",
+    "features": {
+      "leads": "10,000 લીડ્સ સુધી",
+      "users": "10 વપરાશકર્તાઓ સુધી",
+      "forms": "અમર્યાદિત ફોર્મ્સ",
+      "campaigns": "એડવાન્સ્ડ કેમ્પેઇન્સ",
+      "voiceAi": "વૉઇસ AI (100 મિનિટ/મહિનો)",
+      "support": "પ્રાથમિકતા સપોર્ટ"
+    }
+  },
+  "enterprise": {
+    "name": "એન્ટરપ્રાઇઝ",
+    "description": "મોટી સંસ્થાઓ માટે",
+    "features": {
+      "leads": "અમર્યાદિત લીડ્સ",
+      "users": "અમર્યાદિત વપરાશકર્તાઓ",
+      "forms": "અમર્યાદિત ફોર્મ્સ",
+      "campaigns": "કસ્ટમ કેમ્પેઇન્સ",
+      "voiceAi": "વૉઇસ AI (અમર્યાદિત)",
+      "api": "API ઍક્સેસ",
+      "support": "24/7 સમર્પિત સપોર્ટ",
+      "sla": "કસ્ટમ SLA"
+    }
+  },
+  "checkout": {
+    "title": "ચેકઆઉટ",
+    "orderSummary": "ઓર્ડર સારાંશ",
+    "subtotal": "પેટાકુલ",
+    "tax": "ટેક્સ",
+    "total": "કુલ",
+    "payNow": "હમણાં ચૂકવો",
+    "processing": "પ્રોસેસ થઈ રહ્યું છે...",
+    "secure": "Stripe દ્વારા સુરક્ષિત ચુકવણી"
+  },
+  "success": {
+    "title": "ચુકવણી સફળ!",
+    "subtitle": "તમારી સબ્સ્ક્રિપ્શન માટે આભાર",
+    "goToDashboard": "ડેશબોર્ડ પર જાઓ"
+  },
+  "management": {
+    "title": "સબ્સ્ક્રિપ્શન મેનેજમેન્ટ",
+    "usage": "ઉપયોગ",
+    "leadsUsed": "વપરાયેલા લીડ્સ",
+    "usersUsed": "વપરાશકર્તાઓ",
+    "voiceMinutes": "વૉઇસ AI મિનિટ્સ",
+    "renewalDate": "રિન્યુઅલ તારીખ",
+    "upgrade": "પ્લાન અપગ્રેડ કરો",
+    "downgrade": "પ્લાન ડાઉનગ્રેડ કરો"
+  }
+}

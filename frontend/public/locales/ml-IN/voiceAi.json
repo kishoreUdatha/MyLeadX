@@ -1,0 +1,82 @@
+{
+  "title": "വോയ്‌സ് AI ഏജന്റുകൾ",
+  "subtitle": "AI-അധിഷ്ഠിത വോയ്‌സ് ഏജന്റുകൾ സൃഷ്ടിക്കുകയും മാനേജ് ചെയ്യുകയും ചെയ്യുക",
+  "createAgent": "ഏജന്റ് സൃഷ്ടിക്കുക",
+  "editAgent": "ഏജന്റ് തിരുത്തുക",
+  "agentName": "ഏജന്റിന്റെ പേര്",
+  "agentDescription": "ഏജന്റിന്റെ വിവരണം",
+  "voiceSettings": {
+    "title": "വോയ്‌സ് ക്രമീകരണങ്ങൾ",
+    "language": "ഭാഷ",
+    "voice": "ശബ്ദം",
+    "speed": "വേഗത",
+    "pitch": "പിച്ച്"
+  },
+  "industry": {
+    "title": "വ്യവസായം",
+    "education": "വിദ്യാഭ്യാസം",
+    "healthcare": "ആരോഗ്യ പരിരക്ഷ",
+    "realEstate": "റിയൽ എസ്റ്റേറ്റ്",
+    "finance": "ധനകാര്യം",
+    "insurance": "ഇൻഷുറൻസ്",
+    "ecommerce": "ഇ-കൊമേഴ്‌സ്",
+    "technology": "സാങ്കേതികവിദ്യ",
+    "hospitality": "ഹോസ്പിറ്റാലിറ്റി",
+    "automotive": "ഓട്ടോമൊബൈൽ",
+    "retail": "റീട്ടെയിൽ",
+    "other": "മറ്റുള്ളവ"
+  },
+  "script": {
+    "title": "സ്ക്രിപ്റ്റ്",
+    "greeting": "അഭിവാദനം",
+    "introduction": "ആമുഖം",
+    "questions": "ചോദ്യങ്ങൾ",
+    "objectionHandling": "എതിർപ്പ് കൈകാര്യം ചെയ്യൽ",
+    "closing": "അവസാനിപ്പിക്കൽ"
+  },
+  "settings": {
+    "title": "ക്രമീകരണങ്ങൾ",
+    "maxCallDuration": "പരമാവധി കോൾ ദൈർഘ്യം",
+    "retryAttempts": "വീണ്ടും ശ്രമിക്കൽ ശ്രമങ്ങൾ",
+    "callInterval": "കോൾ ഇടവേള",
+    "workingHours": "പ്രവൃത്തി സമയം"
+  },
+  "status": {
+    "active": "സജീവം",
+    "inactive": "നിഷ്ക്രിയം",
+    "training": "പരിശീലനം"
+  },
+  "actions": {
+    "activate": "സജീവമാക്കുക",
+    "deactivate": "നിഷ്ക്രിയമാക്കുക",
+    "test": "ഏജന്റ് പരീക്ഷിക്കുക",
+    "clone": "ക്ലോൺ ചെയ്യുക",
+    "delete": "ഇല്ലാതാക്കുക"
+  },
+  "calls": {
+    "title": "AI കോളിംഗ്",
+    "outbound": "ഔട്ട്ബൗണ്ട് കോളുകൾ",
+    "inbound": "ഇൻബൗണ്ട് കോളുകൾ",
+    "scheduled": "ഷെഡ്യൂൾ ചെയ്ത കോളുകൾ",
+    "makeCall": "കോൾ ചെയ്യുക",
+    "createCampaign": "കാമ്പെയ്‌ൻ സൃഷ്ടിക്കുക",
+    "callDetails": "കോൾ വിശദാംശങ്ങൾ",
+    "duration": "ദൈർഘ്യം",
+    "outcome": "ഫലം",
+    "recording": "റെക്കോർഡിംഗ്",
+    "transcript": "ട്രാൻസ്ക്രിപ്റ്റ്"
+  },
+  "campaign": {
+    "title": "കാമ്പെയ്‌ൻ",
+    "name": "കാമ്പെയ്‌ൻ പേര്",
+    "agent": "ഏജന്റ് തിരഞ്ഞെടുക്കുക",
+    "leads": "ലീഡുകൾ തിരഞ്ഞെടുക്കുക",
+    "schedule": "ഷെഡ്യൂൾ",
+    "startNow": "ഇപ്പോൾ ആരംഭിക്കുക",
+    "scheduleLater": "പിന്നീട് ഷെഡ്യൂൾ ചെയ്യുക"
+  },
+  "empty": {
+    "title": "ഏജന്റുകൾ ഇതുവരെ ഇല്ല",
+    "description": "കോളുകൾ ചെയ്യാൻ നിങ്ങളുടെ ആദ്യ AI വോയ്‌സ് ഏജന്റ് സൃഷ്ടിക്കുക"
+  }
+}

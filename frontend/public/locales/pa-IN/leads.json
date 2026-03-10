@@ -1,0 +1,89 @@
+{
+  "title": "ਲੀਡਾਂ",
+  "subtitle": "ਆਪਣੀਆਂ ਸਾਰੀਆਂ ਲੀਡਾਂ ਨੂੰ ਇੱਕ ਥਾਂ ਤੇ ਪ੍ਰਬੰਧਿਤ ਅਤੇ ਟਰੈਕ ਕਰੋ।",
+  "addLeads": "ਲੀਡਾਂ ਸ਼ਾਮਲ ਕਰੋ",
+  "addLead": "ਲੀਡ ਸ਼ਾਮਲ ਕਰੋ",
+  "editLead": "ਲੀਡ ਸੋਧੋ",
+  "deleteLead": "ਲੀਡ ਮਿਟਾਓ",
+  "viewDetails": "ਵੇਰਵੇ ਵੇਖੋ",
+  "call": "ਕਾਲ ਕਰੋ",
+  "search": {
+    "placeholder": "ਨਾਮ, ਈਮੇਲ, ਜਾਂ ਫ਼ੋਨ ਨਾਲ ਖੋਜੋ..."
+  },
+  "filters": {
+    "allStatuses": "ਸਾਰੀਆਂ ਸਥਿਤੀਆਂ",
+    "allSources": "ਸਾਰੇ ਸਰੋਤ",
+    "filter": "ਫਿਲਟਰ"
+  },
+  "table": {
+    "lead": "ਲੀਡ",
+    "contact": "ਸੰਪਰਕ",
+    "source": "ਸਰੋਤ",
+    "status": "ਸਥਿਤੀ",
+    "assignedTo": "ਨਿਯੁਕਤ",
+    "created": "ਬਣਾਈ ਗਈ",
+    "actions": "ਕਾਰਵਾਈਆਂ",
+    "unassigned": "ਨਿਯੁਕਤ ਨਹੀਂ",
+    "unknown": "ਅਣਜਾਣ"
+  },
+  "status": {
+    "NEW": "ਨਵੀਂ",
+    "CONTACTED": "ਸੰਪਰਕ ਕੀਤੀ",
+    "QUALIFIED": "ਯੋਗ",
+    "NEGOTIATION": "ਗੱਲਬਾਤ",
+    "WON": "ਜਿੱਤੀ",
+    "LOST": "ਹਾਰੀ",
+    "FOLLOW_UP": "ਫਾਲੋ ਅੱਪ"
+  },
+  "source": {
+    "MANUAL": "ਮੈਨੁਅਲ",
+    "BULK_UPLOAD": "ਬਲਕ ਅੱਪਲੋਡ",
+    "FORM": "ਫਾਰਮ",
+    "LANDING_PAGE": "ਲੈਂਡਿੰਗ ਪੇਜ",
+    "CHATBOT": "ਚੈਟਬੋਟ",
+    "AD_FACEBOOK": "Facebook ਇਸ਼ਤਿਹਾਰ",
+    "AD_INSTAGRAM": "Instagram ਇਸ਼ਤਿਹਾਰ",
+    "AD_LINKEDIN": "LinkedIn ਇਸ਼ਤਿਹਾਰ"
+  },
+  "empty": {
+    "title": "ਕੋਈ ਲੀਡਾਂ ਨਹੀਂ ਮਿਲੀਆਂ",
+    "description": "ਆਪਣੇ ਫਿਲਟਰ ਬਦਲੋ ਜਾਂ ਨਵੀਆਂ ਲੀਡਾਂ ਸ਼ਾਮਲ ਕਰੋ"
+  },
+  "loading": "ਲੀਡਾਂ ਲੋਡ ਹੋ ਰਹੀਆਂ ਹਨ...",
+  "pagination": {
+    "showing": "ਦਿਖਾ ਰਿਹਾ",
+    "to": "ਤੋਂ",
+    "of": "ਵਿੱਚੋਂ",
+    "leads": "ਲੀਡਾਂ"
+  },
+  "bulkUpload": {
+    "title": "ਬਲਕ ਅੱਪਲੋਡ ਲੀਡਾਂ",
+    "subtitle": "Excel ਜਾਂ CSV ਫਾਈਲਾਂ ਵਰਤ ਕੇ ਇੱਕ ਵਾਰ ਵਿੱਚ ਕਈ ਲੀਡਾਂ ਅੱਪਲੋਡ ਕਰੋ",
+    "dropzone": {
+      "title": "ਆਪਣੀ ਫਾਈਲ ਇੱਥੇ ਡ੍ਰੌਪ ਕਰੋ",
+      "subtitle": "ਜਾਂ ਬ੍ਰਾਊਜ਼ ਕਰਨ ਲਈ ਕਲਿੱਕ ਕਰੋ",
+      "formats": "CSV, XLS, XLSX ਫਾਈਲਾਂ ਸਹਾਇਕ ਹਨ"
+    },
+    "processing": "ਫਾਈਲ ਪ੍ਰੋਸੈਸ ਹੋ ਰਹੀ ਹੈ...",
+    "success": "{{count}} ਲੀਡਾਂ ਸਫਲਤਾਪੂਰਵਕ ਅੱਪਲੋਡ ਹੋਈਆਂ",
+    "error": "ਲੀਡਾਂ ਅੱਪਲੋਡ ਕਰਨ ਵਿੱਚ ਅਸਫਲ",
+    "downloadTemplate": "ਟੈਂਪਲੇਟ ਡਾਊਨਲੋਡ ਕਰੋ"
+  },
+  "detail": {
+    "title": "ਲੀਡ ਵੇਰਵੇ",
+    "basicInfo": "ਮੁੱਢਲੀ ਜਾਣਕਾਰੀ",
+    "contactInfo": "ਸੰਪਰਕ ਜਾਣਕਾਰੀ",
+    "additionalInfo": "ਵਾਧੂ ਜਾਣਕਾਰੀ",
+    "timeline": "ਸਮਾਂ-ਰੇਖਾ",
+    "notes": "ਨੋਟਸ",
+    "addNote": "ਨੋਟ ਸ਼ਾਮਲ ਕਰੋ",
+    "assignTo": "ਨਿਯੁਕਤ ਕਰੋ",
+    "changeStatus": "ਸਥਿਤੀ ਬਦਲੋ",
+    "makeCall": "ਕਾਲ ਕਰੋ",
+    "sendEmail": "ਈਮੇਲ ਭੇਜੋ",
+    "sendSms": "SMS ਭੇਜੋ"
+  },
+  "confirm": {
+    "delete": "ਕੀ ਤੁਸੀਂ ਸੱਚਮੁੱਚ ਇਸ ਲੀਡ ਨੂੰ ਮਿਟਾਉਣਾ ਚਾਹੁੰਦੇ ਹੋ?"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "title": "ਫਾਰਮ ਬਿਲਡਰ",
+  "subtitle": "ਲੀਡਾਂ ਹਾਸਲ ਕਰਨ ਲਈ ਕਸਟਮ ਫਾਰਮ ਬਣਾਓ",
+  "createForm": "ਫਾਰਮ ਬਣਾਓ",
+  "editForm": "ਫਾਰਮ ਸੋਧੋ",
+  "formName": "ਫਾਰਮ ਦਾ ਨਾਮ",
+  "formDescription": "ਫਾਰਮ ਦਾ ਵੇਰਵਾ",
+  "fields": {
+    "title": "ਫਾਰਮ ਫੀਲਡ",
+    "addField": "ਫੀਲਡ ਸ਼ਾਮਲ ਕਰੋ",
+    "fieldName": "ਫੀਲਡ ਦਾ ਨਾਮ",
+    "fieldType": "ਫੀਲਡ ਦੀ ਕਿਸਮ",
+    "placeholder": "ਪਲੇਸਹੋਲਡਰ",
+    "required": "ਲੋੜੀਂਦਾ",
+    "options": "ਵਿਕਲਪ"
+  },
+  "fieldTypes": {
+    "text": "ਟੈਕਸਟ",
+    "email": "ਈਮੇਲ",
+    "phone": "ਫ਼ੋਨ",
+    "number": "ਨੰਬਰ",
+    "textarea": "ਟੈਕਸਟ ਖੇਤਰ",
+    "select": "ਡ੍ਰੌਪਡਾਊਨ",
+    "checkbox": "ਚੈੱਕਬਾਕਸ",
+    "radio": "ਰੇਡੀਓ",
+    "date": "ਮਿਤੀ"
+  },
+  "settings": {
+    "title": "ਫਾਰਮ ਸੈਟਿੰਗਾਂ",
+    "submitButton": "ਸਬਮਿਟ ਬਟਨ ਟੈਕਸਟ",
+    "successMessage": "ਸਫਲਤਾ ਸੁਨੇਹਾ",
+    "redirectUrl": "ਰੀਡਾਇਰੈਕਟ URL",
+    "notifyEmail": "ਸੂਚਨਾ ਈਮੇਲ"
+  },
+  "preview": {
+    "title": "ਝਲਕ",
+    "mobile": "ਮੋਬਾਈਲ",
+    "desktop": "ਡੈਸਕਟੌਪ"
+  },
+  "actions": {
+    "save": "ਫਾਰਮ ਸੇਵ ਕਰੋ",
+    "publish": "ਪ੍ਰਕਾਸ਼ਿਤ ਕਰੋ",
+    "unpublish": "ਅਪ੍ਰਕਾਸ਼ਿਤ ਕਰੋ",
+    "duplicate": "ਡੁਪਲੀਕੇਟ",
+    "delete": "ਮਿਟਾਓ",
+    "embedCode": "ਐਂਬੈਡ ਕੋਡ ਲਓ",
+    "shareLink": "ਲਿੰਕ ਸਾਂਝਾ ਕਰੋ"
+  },
+  "status": {
+    "draft": "ਡਰਾਫਟ",
+    "published": "ਪ੍ਰਕਾਸ਼ਿਤ"
+  },
+  "empty": {
+    "title": "ਅਜੇ ਕੋਈ ਫਾਰਮ ਨਹੀਂ",
+    "description": "ਲੀਡਾਂ ਹਾਸਲ ਕਰਨਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਆਪਣਾ ਪਹਿਲਾ ਫਾਰਮ ਬਣਾਓ"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "title": "सदस्यता",
+  "subtitle": "अपनी सदस्यता और बिलिंग प्रबंधित करें",
+  "currentPlan": "वर्तमान योजना",
+  "changePlan": "योजना बदलें",
+  "cancelSubscription": "सदस्यता रद्द करें",
+  "billing": {
+    "title": "बिलिंग",
+    "nextBillingDate": "अगली बिलिंग तिथि",
+    "paymentMethod": "भुगतान विधि",
+    "updatePayment": "भुगतान विधि अपडेट करें",
+    "billingHistory": "बिलिंग इतिहास",
+    "downloadInvoice": "इनवॉइस डाउनलोड करें"
+  },
+  "plans": {
+    "title": "अपनी योजना चुनें",
+    "subtitle": "अपनी जरूरतों के अनुसार सबसे उपयुक्त योजना चुनें",
+    "monthly": "मासिक",
+    "yearly": "वार्षिक",
+    "savePercent": "{{percent}}% बचाएं",
+    "popular": "सबसे लोकप्रिय",
+    "currentPlan": "वर्तमान योजना",
+    "selectPlan": "योजना चुनें",
+    "contactSales": "बिक्री से संपर्क करें"
+  },
+  "starter": {
+    "name": "स्टार्टर",
+    "description": "शुरू करने वाली छोटी टीमों के लिए उपयुक्त",
+    "features": {
+      "leads": "1,000 लीड्स तक",
+      "users": "3 उपयोगकर्ता तक",
+      "forms": "5 फॉर्म",
+      "campaigns": "बुनियादी अभियान",
+      "support": "ईमेल सहायता"
+    }
+  },
+  "professional": {
+    "name": "प्रोफेशनल",
+    "description": "बढ़ते व्यवसायों के लिए",
+    "features": {
+      "leads": "10,000 लीड्स तक",
+      "users": "10 उपयोगकर्ता तक",
+      "forms": "असीमित फॉर्म",
+      "campaigns": "उन्नत अभियान",
+      "voiceAi": "Voice AI (100 मिनट/माह)",
+      "support": "प्राथमिकता सहायता"
+    }
+  },
+  "enterprise": {
+    "name": "एंटरप्राइज़",
+    "description": "बड़े संगठनों के लिए",
+    "features": {
+      "leads": "असीमित लीड्स",
+      "users": "असीमित उपयोगकर्ता",
+      "forms": "असीमित फॉर्म",
+      "campaigns": "कस्टम अभियान",
+      "voiceAi": "Voice AI (असीमित)",
+      "api": "API एक्सेस",
+      "support": "24/7 समर्पित सहायता",
+      "sla": "कस्टम SLA"
+    }
+  },
+  "checkout": {
+    "title": "चेकआउट",
+    "orderSummary": "ऑर्डर सारांश",
+    "subtotal": "उप-योग",
+    "tax": "कर",
+    "total": "कुल",
+    "payNow": "अभी भुगतान करें",
+    "processing": "प्रोसेस हो रहा है...",
+    "secure": "Stripe द्वारा सुरक्षित भुगतान"
+  },
+  "success": {
+    "title": "भुगतान सफल!",
+    "subtitle": "आपकी सदस्यता के लिए धन्यवाद",
+    "goToDashboard": "डैशबोर्ड पर जाएं"
+  },
+  "management": {
+    "title": "सदस्यता प्रबंधन",
+    "usage": "उपयोग",
+    "leadsUsed": "उपयोग किए गए लीड्स",
+    "usersUsed": "उपयोगकर्ता",
+    "voiceMinutes": "Voice AI मिनट्स",
+    "renewalDate": "नवीनीकरण तिथि",
+    "upgrade": "योजना अपग्रेड करें",
+    "downgrade": "योजना डाउनग्रेड करें"
+  }
+}

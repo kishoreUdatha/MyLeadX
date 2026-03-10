@@ -1,0 +1,36 @@
+{
+  "main": {
+    "dashboard": "ਡੈਸ਼ਬੋਰਡ",
+    "leads": "ਲੀਡਾਂ",
+    "users": "ਉਪਭੋਗਤਾ",
+    "forms": "ਫਾਰਮ",
+    "landingPages": "ਲੈਂਡਿੰਗ ਪੇਜ",
+    "campaigns": "ਮੁਹਿੰਮਾਂ"
+  },
+  "advanced": {
+    "title": "ਐਡਵਾਂਸਡ",
+    "voiceAi": "ਵੌਇਸ AI",
+    "aiCalling": "AI ਕਾਲਿੰਗ",
+    "hybridInbox": "ਹਾਈਬ੍ਰਿਡ ਇਨਬਾਕਸ",
+    "callHistory": "ਕਾਲ ਇਤਿਹਾਸ",
+    "transferConfig": "ਟ੍ਰਾਂਸਫਰ ਸੰਰਚਨਾ",
+    "myQueue": "ਮੇਰੀ ਕਤਾਰ",
+    "socialMediaAds": "ਸੋਸ਼ਲ ਮੀਡੀਆ ਇਸ਼ਤਿਹਾਰ",
+    "advanced": "ਐਡਵਾਂਸਡ",
+    "reports": "ਰਿਪੋਰਟਾਂ",
+    "autoAssignSettings": "ਆਟੋ-ਅਸਾਈਨ ਸੈਟਿੰਗਾਂ",
+    "subscription": "ਸਬਸਕ੍ਰਿਪਸ਼ਨ"
+  },
+  "header": {
+    "searchPlaceholder": "ਲੀਡਾਂ, ਮੁਹਿੰਮਾਂ ਖੋਜੋ...",
+    "bulkUpload": "ਬਲਕ ਅੱਪਲੋਡ",
+    "notifications": "ਸੂਚਨਾਵਾਂ",
+    "settings": "ਸੈਟਿੰਗਾਂ",
+    "logout": "ਲੌਗਆਊਟ"
+  },
+  "userMenu": {
+    "profile": "ਪ੍ਰੋਫਾਈਲ",
+    "settings": "ਸੈਟਿੰਗਾਂ",
+    "logout": "ਲੌਗਆਊਟ"
+  }
+}

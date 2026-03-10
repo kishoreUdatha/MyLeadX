@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice AI Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 { color: #333; margin-bottom: 10px; }
+    p { color: #666; margin-bottom: 30px; }
+    .status {
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+    .status.info { background: #e3f2fd; color: #1565c0; }
+    .status.success { background: #e8f5e9; color: #2e7d32; }
+    .status.error { background: #ffebee; color: #c62828; }
+    .btn {
+      width: 100%;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: all 0.3s;
+    }
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+    .btn-success:hover { background: #059669; }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .messages {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      background: #f9fafb;
+    }
+    .message {
+      padding: 10px 15px;
+      border-radius: 15px;
+      margin-bottom: 10px;
+      max-width: 85%;
+    }
+    .message.user {
+      background: #3b82f6;
+      color: white;
+      margin-left: auto;
+    }
+    .message.assistant {
+      background: white;
+      border: 1px solid #e5e7eb;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+    .controls .btn { flex: 1; }
+    .recording {
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎙️ Voice AI Test</h1>
+    <p>Test the Voice AI Agent with your microphone</p>
+
+    <div id="status" class="status info">Click "Start Session" to begin</div>
+
+    <div id="messages" class="messages" style="display: none;"></div>
+
+    <div id="start-section">
+      <button id="startBtn" class="btn btn-primary" onclick="startSession()">
+        🚀 Start Session
+      </button>
+    </div>
+
+    <div id="call-section" style="display: none;">
+      <div class="controls">
+        <button id="micBtn" class="btn btn-success" onclick="toggleMic()">
+          🎤 Hold to Speak
+        </button>
+        <button id="endBtn" class="btn btn-danger" onclick="endSession()">
+          📞 End Call
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000/api';
+    const AGENT_ID = '904b5571-a2df-401b-8aff-2ccaaaf444ee'; // Test Education Agent
+
+    let sessionId = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    function updateStatus(message, type = 'info') {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = `status ${type}`;
+    }
+
+    function addMessage(role, content) {
+      const messages = document.getElementById('messages');
+      messages.style.display = 'block';
+      const div = document.createElement('div');
+      div.className = `message ${role}`;
+      div.textContent = content;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function startSession() {
+      try {
+        updateStatus('Starting session...', 'info');
+
+        const response = await fetch(`${API_URL}/voice-ai/session/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: AGENT_ID }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          sessionId = data.data.sessionId;
+          updateStatus('Connected! Click and hold mic to speak', 'success');
+
+          // Show greeting
+          if (data.data.greeting) {
+            addMessage('assistant', data.data.greeting);
+            playTTS(data.data.greeting);
+          }
+
+          document.getElementById('start-section').style.display = 'none';
+          document.getElementById('call-section').style.display = 'block';
+        } else {
+          updateStatus('Failed to start: ' + data.message, 'error');
+        }
+      } catch (error) {
+        updateStatus('Error: ' + error.message, 'error');
+      }
+    }
+
+    async function toggleMic() {
+      const btn = document.getElementById('micBtn');
+
+      if (!isRecording) {
+        // Start recording
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            stream.getTracks().forEach(t => t.stop());
+            await sendAudio(audioBlob);
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          btn.textContent = '🔴 Recording... (Click to stop)';
+          btn.classList.add('recording');
+          updateStatus('Listening...', 'info');
+        } catch (error) {
+          updateStatus('Microphone error: ' + error.message, 'error');
+        }
+      } else {
+        // Stop recording
+        mediaRecorder.stop();
+        isRecording = false;
+        btn.textContent = '🎤 Hold to Speak';
+        btn.classList.remove('recording');
+        updateStatus('Processing...', 'info');
+      }
+    }
+
+    async function sendAudio(audioBlob) {
+      try {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'audio.webm');
+
+        const response = await fetch(`${API_URL}/voice-ai/session/${sessionId}/message`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          addMessage('user', data.data.userMessage);
+          addMessage('assistant', data.data.response);
+          updateStatus('AI responded!', 'success');
+
+          // Play audio response
+          if (data.data.audio) {
+            playAudioBase64(data.data.audio);
+          }
+        } else {
+          updateStatus('Error: ' + data.message, 'error');
+        }
+      } catch (error) {
+        updateStatus('Error: ' + error.message, 'error');
+      }
+    }
+
+    async function playTTS(text) {
+      try {
+        const response = await fetch(`${API_URL}/voice-ai/tts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, voice: 'alloy' }),
+        });
+
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new AudioContext();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.start();
+      } catch (error) {
+        console.error('TTS error:', error);
+      }
+    }
+
+    function playAudioBase64(base64) {
+      try {
+        const audioData = atob(base64);
+        const arrayBuffer = new ArrayBuffer(audioData.length);
+        const view = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < audioData.length; i++) {
+          view[i] = audioData.charCodeAt(i);
+        }
+
+        const audioContext = new AudioContext();
+        audioContext.decodeAudioData(arrayBuffer, (buffer) => {
+          const source = audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(audioContext.destination);
+          source.start();
+        });
+      } catch (error) {
+        console.error('Audio error:', error);
+      }
+    }
+
+    async function endSession() {
+      if (sessionId) {
+        try {
+          await fetch(`${API_URL}/voice-ai/session/${sessionId}/end`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'COMPLETED' }),
+          });
+        } catch (error) {
+          console.error('End session error:', error);
+        }
+      }
+
+      sessionId = null;
+      document.getElementById('start-section').style.display = 'block';
+      document.getElementById('call-section').style.display = 'none';
+      document.getElementById('messages').innerHTML = '';
+      document.getElementById('messages').style.display = 'none';
+      updateStatus('Session ended. Click "Start Session" to begin again.', 'info');
+    }
+  </script>
+</body>
+</html>

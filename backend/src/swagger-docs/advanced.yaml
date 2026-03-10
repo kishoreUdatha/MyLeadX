@@ -1,0 +1,419 @@
+paths:
+  # Lead Scoring
+  /api/advanced/lead-scores/{leadId}:
+    get:
+      summary: Get lead score
+      tags: [Advanced]
+      parameters:
+        - in: path
+          name: leadId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lead score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/LeadScore'
+
+  /api/advanced/lead-scores/{leadId}/recalculate:
+    post:
+      summary: Recalculate lead score
+      tags: [Advanced]
+      parameters:
+        - in: path
+          name: leadId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transcript:
+                  type: array
+                  items:
+                    type: object
+                duration:
+                  type: integer
+                sentiment:
+                  type: string
+                  enum: [positive, neutral, negative]
+                qualification:
+                  type: object
+                outcome:
+                  type: string
+      responses:
+        '200':
+          description: Score recalculated
+
+  # Score Decay
+  /api/advanced/score-decay/{leadId}/process:
+    post:
+      summary: Process score decay for a lead
+      tags: [Advanced]
+      parameters:
+        - in: path
+          name: leadId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Decay processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  originalScore:
+                    type: integer
+                  decayedScore:
+                    type: integer
+                  originalGrade:
+                    type: string
+                  newGrade:
+                    type: string
+                  updated:
+                    type: boolean
+
+  /api/advanced/score-decay/process-all:
+    post:
+      summary: Process decay for all leads in organization
+      tags: [Advanced]
+      responses:
+        '200':
+          description: Decay processed for organization
+
+  /api/advanced/score-decay/{leadId}/preview:
+    get:
+      summary: Preview score decay projection
+      tags: [Advanced]
+      parameters:
+        - in: path
+          name: leadId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Decay preview
+
+  /api/advanced/score-decay/{leadId}/boost:
+    post:
+      summary: Boost lead score on activity
+      tags: [Advanced]
+      parameters:
+        - in: path
+          name: leadId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                boostPercentage:
+                  type: integer
+                  default: 5
+      responses:
+        '200':
+          description: Score boosted
+
+  # Scheduled Calls
+  /api/advanced/scheduled-calls:
+    get:
+      summary: List scheduled calls
+      tags: [Advanced]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING, IN_PROGRESS, COMPLETED, FAILED, CANCELLED, RESCHEDULED]
+        - in: query
+          name: fromDate
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: toDate
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: agentId
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of scheduled calls
+
+    post:
+      summary: Schedule a new call
+      tags: [Advanced]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId, phoneNumber, scheduledAt]
+              properties:
+                agentId:
+                  type: string
+                  format: uuid
+                phoneNumber:
+                  type: string
+                contactName:
+                  type: string
+                scheduledAt:
+                  type: string
+                  format: date-time
+                leadId:
+                  type: string
+                  format: uuid
+                callType:
+                  type: string
+                  enum: [SCHEDULED, CALLBACK, FOLLOWUP, REMINDER]
+                priority:
+                  type: integer
+                notes:
+                  type: string
+      responses:
+        '201':
+          description: Call scheduled
+
+  # DNC List
+  /api/advanced/dnc-list:
+    get:
+      summary: Get Do Not Call list
+      tags: [Advanced]
+      responses:
+        '200':
+          description: DNC list
+
+    post:
+      summary: Add number to DNC list
+      tags: [Advanced]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumber, reason]
+              properties:
+                phoneNumber:
+                  type: string
+                reason:
+                  type: string
+                  enum: [CUSTOMER_REQUEST, LEGAL_REQUIREMENT, WRONG_NUMBER, DECEASED, COMPETITOR, SPAM_COMPLAINT, OTHER]
+                notes:
+                  type: string
+                expiresAt:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Added to DNC list
+
+  /api/advanced/dnc-list/check/{phoneNumber}:
+    get:
+      summary: Check if number is on DNC list
+      tags: [Advanced]
+      parameters:
+        - in: path
+          name: phoneNumber
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: DNC check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phoneNumber:
+                    type: string
+                  isDNC:
+                    type: boolean
+
+  # Job Queue
+  /api/advanced/jobs:
+    get:
+      summary: List jobs for organization
+      tags: [Advanced]
+      responses:
+        '200':
+          description: List of jobs
+
+    post:
+      summary: Add job to queue
+      tags: [Advanced]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, payload]
+              properties:
+                type:
+                  type: string
+                  enum: [BULK_EMAIL, BULK_SMS, SCORE_DECAY, CSV_IMPORT, REPORT_GENERATION, CLEANUP_FILES, WEBHOOK_DELIVERY, CAMPAIGN_PROCESSING]
+                payload:
+                  type: object
+                delay:
+                  type: integer
+                priority:
+                  type: integer
+      responses:
+        '201':
+          description: Job added
+
+  /api/advanced/jobs/{jobId}:
+    get:
+      summary: Get job status
+      tags: [Advanced]
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job status
+
+  /api/advanced/jobs/bulk-email:
+    post:
+      summary: Queue bulk email job
+      tags: [Advanced]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipients, subject, body]
+              properties:
+                recipients:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      email:
+                        type: string
+                      name:
+                        type: string
+                      leadId:
+                        type: string
+                subject:
+                  type: string
+                body:
+                  type: string
+                html:
+                  type: string
+      responses:
+        '201':
+          description: Bulk email job queued
+
+  /api/advanced/jobs/csv-import:
+    post:
+      summary: Queue CSV import job
+      tags: [Advanced]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [records, mappings]
+              properties:
+                records:
+                  type: array
+                  items:
+                    type: object
+                mappings:
+                  type: object
+                  description: Field mapping from CSV columns to lead fields
+      responses:
+        '201':
+          description: Import job queued
+
+  # File Cleanup
+  /api/advanced/cleanup/preview:
+    get:
+      summary: Preview what will be cleaned up
+      tags: [Advanced]
+      responses:
+        '200':
+          description: Cleanup preview
+
+  /api/advanced/cleanup/storage-stats:
+    get:
+      summary: Get storage statistics
+      tags: [Advanced]
+      responses:
+        '200':
+          description: Storage stats
+
+  /api/advanced/cleanup/run:
+    post:
+      summary: Run full cleanup
+      tags: [Advanced]
+      responses:
+        '200':
+          description: Cleanup completed
+
+  # Analytics
+  /api/advanced/analytics:
+    get:
+      summary: Get analytics
+      tags: [Advanced]
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Analytics data
+
+  /api/advanced/analytics/aggregate:
+    post:
+      summary: Trigger daily aggregation
+      tags: [Advanced]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Aggregation completed

@@ -1,0 +1,36 @@
+{
+  "main": {
+    "dashboard": "ડેશબોર્ડ",
+    "leads": "લીડ્સ",
+    "users": "વપરાશકર્તાઓ",
+    "forms": "ફોર્મ્સ",
+    "landingPages": "લેન્ડિંગ પેજીસ",
+    "campaigns": "કેમ્પેઇન્સ"
+  },
+  "advanced": {
+    "title": "એડવાન્સ્ડ",
+    "voiceAi": "વૉઇસ AI",
+    "aiCalling": "AI કૉલિંગ",
+    "hybridInbox": "હાઇબ્રિડ ઇનબોક્સ",
+    "callHistory": "કૉલ ઇતિહાસ",
+    "transferConfig": "ટ્રાન્સફર કોન્ફિગ",
+    "myQueue": "મારી કતાર",
+    "socialMediaAds": "સોશિયલ મીડિયા જાહેરાતો",
+    "advanced": "એડવાન્સ્ડ",
+    "reports": "રિપોર્ટ્સ",
+    "autoAssignSettings": "ઓટો-અસાઇન સેટિંગ્સ",
+    "subscription": "સબ્સ્ક્રિપ્શન"
+  },
+  "header": {
+    "searchPlaceholder": "લીડ્સ, કેમ્પેઇન્સ શોધો...",
+    "bulkUpload": "બલ્ક અપલોડ",
+    "notifications": "સૂચનાઓ",
+    "settings": "સેટિંગ્સ",
+    "logout": "લોગઆઉટ"
+  },
+  "userMenu": {
+    "profile": "પ્રોફાઇલ",
+    "settings": "સેટિંગ્સ",
+    "logout": "લોગઆઉટ"
+  }
+}

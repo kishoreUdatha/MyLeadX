@@ -1,0 +1,82 @@
+{
+  "title": "Voice AI முகவர்கள்",
+  "subtitle": "AI-இயக்கப்படும் குரல் முகவர்களை உருவாக்கி நிர்வகிக்கவும்",
+  "createAgent": "முகவர் உருவாக்கு",
+  "editAgent": "முகவர் திருத்து",
+  "agentName": "முகவர் பெயர்",
+  "agentDescription": "முகவர் விவரம்",
+  "voiceSettings": {
+    "title": "குரல் அமைப்புகள்",
+    "language": "மொழி",
+    "voice": "குரல்",
+    "speed": "வேகம்",
+    "pitch": "சுருதி"
+  },
+  "industry": {
+    "title": "தொழில்",
+    "education": "கல்வி",
+    "healthcare": "சுகாதாரம்",
+    "realEstate": "ரியல் எஸ்டேட்",
+    "finance": "நிதி",
+    "insurance": "காப்பீடு",
+    "ecommerce": "ஈ-காமர்ஸ்",
+    "technology": "தொழில்நுட்பம்",
+    "hospitality": "விருந்தோம்பல்",
+    "automotive": "வாகனம்",
+    "retail": "சில்லறை",
+    "other": "மற்றவை"
+  },
+  "script": {
+    "title": "ஸ்கிரிப்ட்",
+    "greeting": "வாழ்த்து",
+    "introduction": "அறிமுகம்",
+    "questions": "கேள்விகள்",
+    "objectionHandling": "ஆட்சேபனை கையாளுதல்",
+    "closing": "முடிவு"
+  },
+  "settings": {
+    "title": "அமைப்புகள்",
+    "maxCallDuration": "அதிகபட்ச அழைப்பு நேரம்",
+    "retryAttempts": "மறு முயற்சிகள்",
+    "callInterval": "அழைப்பு இடைவெளி",
+    "workingHours": "வேலை நேரங்கள்"
+  },
+  "status": {
+    "active": "செயலில்",
+    "inactive": "செயலற்ற",
+    "training": "பயிற்சி"
+  },
+  "actions": {
+    "activate": "செயல்படுத்து",
+    "deactivate": "செயலிழக்கச் செய்",
+    "test": "முகவரைச் சோதி",
+    "clone": "நகலெடு",
+    "delete": "நீக்கு"
+  },
+  "calls": {
+    "title": "AI அழைப்புகள்",
+    "outbound": "வெளிச்செல்லும் அழைப்புகள்",
+    "inbound": "உள்வரும் அழைப்புகள்",
+    "scheduled": "திட்டமிடப்பட்ட அழைப்புகள்",
+    "makeCall": "அழைப்பு செய்",
+    "createCampaign": "பிரச்சாரம் உருவாக்கு",
+    "callDetails": "அழைப்பு விவரங்கள்",
+    "duration": "காலம்",
+    "outcome": "விளைவு",
+    "recording": "பதிவு",
+    "transcript": "டிரான்ஸ்கிரிப்ட்"
+  },
+  "campaign": {
+    "title": "பிரச்சாரம்",
+    "name": "பிரச்சாரப் பெயர்",
+    "agent": "முகவரைத் தேர்ந்தெடு",
+    "leads": "லீட்களைத் தேர்ந்தெடு",
+    "schedule": "அட்டவணை",
+    "startNow": "இப்போது தொடங்கு",
+    "scheduleLater": "பின்னர் திட்டமிடு"
+  },
+  "empty": {
+    "title": "இன்னும் முகவர்கள் இல்லை",
+    "description": "அழைப்புகளைத் தொடங்க உங்கள் முதல் AI குரல் முகவரை உருவாக்குங்கள்"
+  }
+}

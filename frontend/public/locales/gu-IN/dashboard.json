@@ -1,0 +1,48 @@
+{
+  "welcome": "પુનઃ સ્વાગત છે, {{name}}!",
+  "subtitle": "આજે તમારા લીડ્સ સાથે શું થઈ રહ્યું છે તે અહીં છે.",
+  "addLead": "લીડ ઉમેરો",
+  "stats": {
+    "totalLeads": "કુલ લીડ્સ",
+    "today": "આજે",
+    "thisWeek": "આ અઠવાડિયે",
+    "thisMonth": "આ મહિને"
+  },
+  "leadsByStatus": {
+    "title": "સ્થિતિ દ્વારા લીડ્સ",
+    "noLeads": "હજુ સુધી કોઈ લીડ્સ નથી",
+    "startBy": "લીડ્સ અપલોડ અથવા બનાવવાનું શરૂ કરો"
+  },
+  "leadSources": {
+    "title": "લીડ સ્ત્રોતો",
+    "noData": "કોઈ સ્ત્રોત ડેટા ઉપલબ્ધ નથી"
+  },
+  "quickActions": {
+    "title": "ઝડપી ક્રિયાઓ",
+    "bulkUpload": {
+      "name": "બલ્ક અપલોડ",
+      "description": "Excel/CSV માંથી લીડ્સ અપલોડ કરો"
+    },
+    "newLeads": {
+      "name": "નવા લીડ્સ",
+      "description": "સંપર્ક ન કરેલા લીડ્સ જુઓ"
+    },
+    "createForm": {
+      "name": "ફોર્મ બનાવો",
+      "description": "કસ્ટમ લીડ ફોર્મ્સ બનાવો"
+    },
+    "campaigns": {
+      "name": "કેમ્પેઇન્સ",
+      "description": "બલ્ક સંદેશાઓ મોકલો"
+    }
+  },
+  "status": {
+    "NEW": "નવું",
+    "CONTACTED": "સંપર્ક થયો",
+    "QUALIFIED": "લાયક",
+    "NEGOTIATION": "વાટાઘાટ",
+    "WON": "જીત્યું",
+    "LOST": "હાર્યું",
+    "FOLLOW_UP": "ફોલો અપ"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "main": {
+    "dashboard": "ড্যাশবোর্ড",
+    "leads": "লিড",
+    "users": "ব্যবহারকারী",
+    "forms": "ফর্ম",
+    "landingPages": "ল্যান্ডিং পেজ",
+    "campaigns": "ক্যাম্পেইন"
+  },
+  "advanced": {
+    "title": "উন্নত",
+    "voiceAi": "ভয়েস AI",
+    "aiCalling": "AI কলিং",
+    "hybridInbox": "হাইব্রিড ইনবক্স",
+    "callHistory": "কল ইতিহাস",
+    "transferConfig": "ট্রান্সফার কনফিগ",
+    "myQueue": "আমার কিউ",
+    "socialMediaAds": "সোশ্যাল মিডিয়া বিজ্ঞাপন",
+    "advanced": "উন্নত",
+    "reports": "রিপোর্ট",
+    "autoAssignSettings": "অটো-অ্যাসাইন সেটিংস",
+    "subscription": "সাবস্ক্রিপশন"
+  },
+  "header": {
+    "searchPlaceholder": "লিড, ক্যাম্পেইন অনুসন্ধান করুন...",
+    "bulkUpload": "বাল্ক আপলোড",
+    "notifications": "নোটিফিকেশন",
+    "settings": "সেটিংস",
+    "logout": "লগআউট"
+  },
+  "userMenu": {
+    "profile": "প্রোফাইল",
+    "settings": "সেটিংস",
+    "logout": "লগআউট"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "welcome": "আবার স্বাগতম, {{name}}!",
+  "subtitle": "আজ আপনার লিডের সাথে কী হচ্ছে তা এখানে দেখুন।",
+  "addLead": "লিড যোগ করুন",
+  "stats": {
+    "totalLeads": "মোট লিড",
+    "today": "আজ",
+    "thisWeek": "এই সপ্তাহে",
+    "thisMonth": "এই মাসে"
+  },
+  "leadsByStatus": {
+    "title": "স্ট্যাটাস অনুযায়ী লিড",
+    "noLeads": "এখনও কোনো লিড নেই",
+    "startBy": "লিড আপলোড বা তৈরি করে শুরু করুন"
+  },
+  "leadSources": {
+    "title": "লিড সোর্স",
+    "noData": "কোনো সোর্স ডেটা উপলব্ধ নেই"
+  },
+  "quickActions": {
+    "title": "দ্রুত কার্যক্রম",
+    "bulkUpload": {
+      "name": "বাল্ক আপলোড",
+      "description": "এক্সেল/CSV থেকে লিড আপলোড করুন"
+    },
+    "newLeads": {
+      "name": "নতুন লিড",
+      "description": "অযোগাযোগকৃত লিড দেখুন"
+    },
+    "createForm": {
+      "name": "ফর্ম তৈরি করুন",
+      "description": "কাস্টম লিড ফর্ম তৈরি করুন"
+    },
+    "campaigns": {
+      "name": "ক্যাম্পেইন",
+      "description": "বাল্ক মেসেজ পাঠান"
+    }
+  },
+  "status": {
+    "NEW": "নতুন",
+    "CONTACTED": "যোগাযোগ হয়েছে",
+    "QUALIFIED": "যোগ্য",
+    "NEGOTIATION": "আলোচনা",
+    "WON": "জিতেছে",
+    "LOST": "হারিয়েছে",
+    "FOLLOW_UP": "ফলো আপ"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "title": "ফর্ম বিল্ডার",
+  "subtitle": "লিড ক্যাপচার করতে কাস্টম ফর্ম তৈরি করুন",
+  "createForm": "ফর্ম তৈরি করুন",
+  "editForm": "ফর্ম সম্পাদনা করুন",
+  "formName": "ফর্মের নাম",
+  "formDescription": "ফর্মের বিবরণ",
+  "fields": {
+    "title": "ফর্ম ফিল্ড",
+    "addField": "ফিল্ড যোগ করুন",
+    "fieldName": "ফিল্ডের নাম",
+    "fieldType": "ফিল্ডের ধরন",
+    "placeholder": "প্লেসহোল্ডার",
+    "required": "প্রয়োজনীয়",
+    "options": "অপশন"
+  },
+  "fieldTypes": {
+    "text": "টেক্সট",
+    "email": "ইমেইল",
+    "phone": "ফোন",
+    "number": "সংখ্যা",
+    "textarea": "টেক্সট এরিয়া",
+    "select": "ড্রপডাউন",
+    "checkbox": "চেকবক্স",
+    "radio": "রেডিও",
+    "date": "তারিখ"
+  },
+  "settings": {
+    "title": "ফর্ম সেটিংস",
+    "submitButton": "সাবমিট বাটনের টেক্সট",
+    "successMessage": "সফলতার বার্তা",
+    "redirectUrl": "রিডাইরেক্ট URL",
+    "notifyEmail": "নোটিফিকেশন ইমেইল"
+  },
+  "preview": {
+    "title": "প্রিভিউ",
+    "mobile": "মোবাইল",
+    "desktop": "ডেস্কটপ"
+  },
+  "actions": {
+    "save": "ফর্ম সংরক্ষণ করুন",
+    "publish": "প্রকাশ করুন",
+    "unpublish": "আনপাবলিশ করুন",
+    "duplicate": "ডুপ্লিকেট",
+    "delete": "মুছে ফেলুন",
+    "embedCode": "এম্বেড কোড পান",
+    "shareLink": "শেয়ার লিংক"
+  },
+  "status": {
+    "draft": "ড্রাফট",
+    "published": "প্রকাশিত"
+  },
+  "empty": {
+    "title": "এখনও কোনো ফর্ম নেই",
+    "description": "লিড ক্যাপচার শুরু করতে আপনার প্রথম ফর্ম তৈরি করুন"
+  }
+}

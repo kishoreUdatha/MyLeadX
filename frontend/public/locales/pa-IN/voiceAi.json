@@ -1,0 +1,82 @@
+{
+  "title": "ਵੌਇਸ AI ਏਜੰਟ",
+  "subtitle": "AI-ਸੰਚਾਲਿਤ ਵੌਇਸ ਏਜੰਟ ਬਣਾਓ ਅਤੇ ਪ੍ਰਬੰਧਿਤ ਕਰੋ",
+  "createAgent": "ਏਜੰਟ ਬਣਾਓ",
+  "editAgent": "ਏਜੰਟ ਸੋਧੋ",
+  "agentName": "ਏਜੰਟ ਦਾ ਨਾਮ",
+  "agentDescription": "ਏਜੰਟ ਦਾ ਵੇਰਵਾ",
+  "voiceSettings": {
+    "title": "ਵੌਇਸ ਸੈਟਿੰਗਾਂ",
+    "language": "ਭਾਸ਼ਾ",
+    "voice": "ਆਵਾਜ਼",
+    "speed": "ਗਤੀ",
+    "pitch": "ਪਿੱਚ"
+  },
+  "industry": {
+    "title": "ਉਦਯੋਗ",
+    "education": "ਸਿੱਖਿਆ",
+    "healthcare": "ਸਿਹਤ ਸੇਵਾ",
+    "realEstate": "ਰੀਅਲ ਅਸਟੇਟ",
+    "finance": "ਵਿੱਤ",
+    "insurance": "ਬੀਮਾ",
+    "ecommerce": "ਈ-ਕਾਮਰਸ",
+    "technology": "ਤਕਨਾਲੋਜੀ",
+    "hospitality": "ਮਹਿਮਾਨ-ਨਿਵਾਜ਼ੀ",
+    "automotive": "ਆਟੋਮੋਟਿਵ",
+    "retail": "ਰਿਟੇਲ",
+    "other": "ਹੋਰ"
+  },
+  "script": {
+    "title": "ਸਕ੍ਰਿਪਟ",
+    "greeting": "ਸ਼ੁਭਕਾਮਨਾ",
+    "introduction": "ਜਾਣ-ਪਛਾਣ",
+    "questions": "ਸਵਾਲ",
+    "objectionHandling": "ਇਤਰਾਜ਼ ਸੰਭਾਲਣਾ",
+    "closing": "ਸਮਾਪਤੀ"
+  },
+  "settings": {
+    "title": "ਸੈਟਿੰਗਾਂ",
+    "maxCallDuration": "ਵੱਧ ਤੋਂ ਵੱਧ ਕਾਲ ਸਮਾਂ",
+    "retryAttempts": "ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ਾਂ",
+    "callInterval": "ਕਾਲ ਅੰਤਰਾਲ",
+    "workingHours": "ਕੰਮ ਦੇ ਘੰਟੇ"
+  },
+  "status": {
+    "active": "ਸਰਗਰਮ",
+    "inactive": "ਗੈਰ-ਸਰਗਰਮ",
+    "training": "ਸਿਖਲਾਈ"
+  },
+  "actions": {
+    "activate": "ਸਰਗਰਮ ਕਰੋ",
+    "deactivate": "ਗੈਰ-ਸਰਗਰਮ ਕਰੋ",
+    "test": "ਏਜੰਟ ਟੈਸਟ ਕਰੋ",
+    "clone": "ਕਲੋਨ",
+    "delete": "ਮਿਟਾਓ"
+  },
+  "calls": {
+    "title": "AI ਕਾਲਿੰਗ",
+    "outbound": "ਆਊਟਬਾਊਂਡ ਕਾਲਾਂ",
+    "inbound": "ਇਨਬਾਊਂਡ ਕਾਲਾਂ",
+    "scheduled": "ਤਹਿ ਕੀਤੀਆਂ ਕਾਲਾਂ",
+    "makeCall": "ਕਾਲ ਕਰੋ",
+    "createCampaign": "ਮੁਹਿੰਮ ਬਣਾਓ",
+    "callDetails": "ਕਾਲ ਵੇਰਵੇ",
+    "duration": "ਸਮਾਂ",
+    "outcome": "ਨਤੀਜਾ",
+    "recording": "ਰਿਕਾਰਡਿੰਗ",
+    "transcript": "ਟ੍ਰਾਂਸਕ੍ਰਿਪਟ"
+  },
+  "campaign": {
+    "title": "ਮੁਹਿੰਮ",
+    "name": "ਮੁਹਿੰਮ ਦਾ ਨਾਮ",
+    "agent": "ਏਜੰਟ ਚੁਣੋ",
+    "leads": "ਲੀਡਾਂ ਚੁਣੋ",
+    "schedule": "ਸ਼ਡਿਊਲ",
+    "startNow": "ਹੁਣੇ ਸ਼ੁਰੂ ਕਰੋ",
+    "scheduleLater": "ਬਾਅਦ ਲਈ ਤਹਿ ਕਰੋ"
+  },
+  "empty": {
+    "title": "ਅਜੇ ਕੋਈ ਏਜੰਟ ਨਹੀਂ",
+    "description": "ਕਾਲਾਂ ਕਰਨਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਆਪਣਾ ਪਹਿਲਾ AI ਵੌਇਸ ਏਜੰਟ ਬਣਾਓ"
+  }
+}
