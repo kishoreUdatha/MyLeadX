@@ -19,3 +19,12 @@ export {
   TrendChart,
   ComparisonTable,
 } from './LeadSourcesComponents';
+export {
+  LoadingSkeleton as ConversionFunnelLoadingSkeleton,
+  Header as ConversionFunnelHeader,
+  SummaryCards as ConversionFunnelSummaryCards,
+  Insights as ConversionFunnelInsights,
+  FunnelVisual,
+  FunnelTable,
+  StageComparisonChart,
+} from './ConversionFunnelComponents';
