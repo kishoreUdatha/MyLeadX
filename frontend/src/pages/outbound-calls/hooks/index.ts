@@ -4,3 +4,4 @@
 
 export { useCampaignForm } from './useCampaignForm';
 export { useManualCallQueue } from './useManualCallQueue';
+export { useCampaignAnalytics } from './useCampaignAnalytics';
