@@ -7,131 +7,32 @@ import {
   X,
   Loader2,
   Play,
-  User,
   Sparkles,
-  Building2,
   Phone,
   Brain,
   Clock,
-  Camera,
   Plus,
-  GripVertical,
   FileText,
   Image,
   Upload,
   Trash2,
+  User,
+  Building2,
+  Camera,
+  GripVertical,
   MessageCircle,
 } from 'lucide-react';
 import api from '../../services/api';
 
-interface Template {
-  industry: string;
-  name: string;
-  description: string;
-}
+// Import constants, types, and components
+import { industryDetails, voiceOptions, languageOptions } from './constants/voiceAgent.constants';
+import type { Template, AgentDocument } from './types/voiceAgent.types';
+import { VoiceSelectorPanel, LanguageSelectorPanel } from './components';
 
-const industryDetails: Record<string, { icon: string; color: string; description: string; gradient: string }> = {
-  EDUCATION: {
-    icon: '🎓',
-    color: '#3B82F6',
-    gradient: 'from-blue-500 to-blue-600',
-    description: 'Universities, colleges, coaching centers',
-  },
-  IT_RECRUITMENT: {
-    icon: '💼',
-    color: '#8B5CF6',
-    gradient: 'from-purple-500 to-purple-600',
-    description: 'Tech hiring, candidate screening',
-  },
-  REAL_ESTATE: {
-    icon: '🏠',
-    color: '#10B981',
-    gradient: 'from-emerald-500 to-emerald-600',
-    description: 'Property listings, site visits',
-  },
-  CUSTOMER_CARE: {
-    icon: '📞',
-    color: '#F59E0B',
-    gradient: 'from-amber-500 to-amber-600',
-    description: 'Support tickets, complaint handling',
-  },
-  TECHNICAL_INTERVIEW: {
-    icon: '💻',
-    color: '#EF4444',
-    gradient: 'from-red-500 to-red-600',
-    description: 'Coding interviews, skill evaluation',
-  },
-  HEALTHCARE: {
-    icon: '🏥',
-    color: '#06B6D4',
-    gradient: 'from-cyan-500 to-cyan-600',
-    description: 'Appointment booking, health queries',
-  },
-  FINANCE: {
-    icon: '💰',
-    color: '#84CC16',
-    gradient: 'from-lime-500 to-lime-600',
-    description: 'Loans, insurance, investments',
-  },
-  ECOMMERCE: {
-    icon: '🛒',
-    color: '#EC4899',
-    gradient: 'from-pink-500 to-pink-600',
-    description: 'Product queries, order tracking',
-  },
-  CUSTOM: {
-    icon: '⚙️',
-    color: '#6B7280',
-    gradient: 'from-gray-500 to-gray-600',
-    description: 'Build from scratch',
-  },
-};
+// industryDetails imported from constants
 
 // Voice options organized by region
-const voiceOptions = [
-  // Custom Cloned Voices (ElevenLabs)
-  { id: 'elevenlabs_qf2cb4kpdw9Zfp2UNLcR', name: 'My Custom Voice', description: 'Custom Cloned Voice', region: 'custom', gender: 'male', recommended: true, provider: 'elevenlabs', language: 'te-IN', testText: 'Namaskaram! Nenu mee AI sahaayakudini.' },
-  // Sarvam AI Voices (Best for Indian Languages) - Native speakers
-  { id: 'sarvam-priya', name: 'Priya', description: 'Hindi - Female', region: 'sarvam', gender: 'female', recommended: true, provider: 'sarvam', language: 'hi-IN', testText: 'Namaste! Main aapki AI sahaayak hoon. Aaj main aapki kaise madad kar sakti hoon?' },
-  { id: 'sarvam-dev', name: 'Dev', description: 'Hindi - Male', region: 'sarvam', gender: 'male', recommended: true, provider: 'sarvam', language: 'hi-IN', testText: 'Namaste! Main aapka AI sahaayak hoon. Aaj main aapki kaise madad kar sakta hoon?' },
-  { id: 'sarvam-kavya', name: 'Kavya', description: 'Telugu - Female', region: 'sarvam', gender: 'female', provider: 'sarvam', language: 'te-IN', testText: 'Namaskaram! Nenu mee AI sahaayakuraalini. Ee roju mee ki ela sahaayam cheyagalanu?' },
-  { id: 'sarvam-ravi', name: 'Ravi', description: 'Telugu - Male', region: 'sarvam', gender: 'male', provider: 'sarvam', language: 'te-IN', testText: 'Namaskaram! Nenu mee AI sahaayakudini. Ee roju mee ki ela sahaayam cheyagalanu?' },
-  { id: 'sarvam-neha', name: 'Neha', description: 'Tamil - Female', region: 'sarvam', gender: 'female', provider: 'sarvam', language: 'ta-IN', testText: 'Vanakkam! Naan ungal AI udhaviyaalar. Inru ungalukku eppadi udhavi seiya mudiyum?' },
-  { id: 'sarvam-aditya', name: 'Aditya', description: 'Kannada - Male', region: 'sarvam', gender: 'male', provider: 'sarvam', language: 'kn-IN', testText: 'Namaskara! Naanu nimma AI sahaayaka. Ivattu nimge hege sahaaya maadaballe?' },
-  { id: 'sarvam-anjali', name: 'Anjali', description: 'Kannada - Female', region: 'sarvam', gender: 'female', provider: 'sarvam', language: 'kn-IN', testText: 'Namaskara! Naanu nimma AI sahaayaki. Ivattu nimge hege sahaaya maadaballe?' },
-  { id: 'sarvam-rahul', name: 'Rahul', description: 'Malayalam - Male', region: 'sarvam', gender: 'male', provider: 'sarvam', language: 'ml-IN', testText: 'Namaskkaram! Njan ningalude AI sahayi aanu. Innu ninakku njan engane sahaayikkum?' },
-  { id: 'sarvam-meera', name: 'Meera', description: 'Marathi - Female', region: 'sarvam', gender: 'female', provider: 'sarvam', language: 'mr-IN', testText: 'Namaskar! Mi tumchi AI sahaayak aahe. Aaj mi tumhala kashi madad karu?' },
-  { id: 'sarvam-arjun', name: 'Arjun', description: 'Bengali - Male', region: 'sarvam', gender: 'male', provider: 'sarvam', language: 'bn-IN', testText: 'Namaskar! Ami apnar AI sahayak. Aaj ami apnake kibhabe sahajya korte pari?' },
-  // OpenAI Voices (Indian-styled) - English with Indian style
-  { id: 'nova', name: 'Ananya', description: 'English - Friendly', region: 'india', gender: 'female', provider: 'openai', language: 'en-IN' },
-  { id: 'shimmer', name: 'Lakshmi', description: 'English - Warm', region: 'india', gender: 'female', provider: 'openai', language: 'en-IN' },
-  { id: 'alloy', name: 'Shreya', description: 'English - Clear', region: 'india', gender: 'female', provider: 'openai', language: 'en-IN' },
-  { id: 'echo', name: 'Raj', description: 'English - Conversational', region: 'india', gender: 'male', provider: 'openai', language: 'en-IN' },
-  { id: 'onyx', name: 'Vikram', description: 'English - Professional', region: 'india', gender: 'male', provider: 'openai', language: 'en-IN' },
-  { id: 'fable', name: 'Kiran', description: 'English - Engaging', region: 'india', gender: 'male', provider: 'openai', language: 'en-IN' },
-  // OpenAI Voices (International)
-  { id: 'nova', name: 'Nova', description: 'Friendly, upbeat', region: 'international', gender: 'female', provider: 'openai', language: 'en-US' },
-  { id: 'shimmer', name: 'Shimmer', description: 'Soft, gentle', region: 'international', gender: 'female', provider: 'openai', language: 'en-US' },
-  { id: 'alloy', name: 'Alloy', description: 'Neutral, balanced', region: 'international', gender: 'neutral', provider: 'openai', language: 'en-US' },
-  { id: 'echo', name: 'Echo', description: 'Warm, conversational', region: 'international', gender: 'male', provider: 'openai', language: 'en-US' },
-  { id: 'onyx', name: 'Onyx', description: 'Deep, authoritative', region: 'international', gender: 'male', provider: 'openai', language: 'en-US' },
-  { id: 'fable', name: 'Fable', description: 'Expressive, narrative', region: 'international', gender: 'male', provider: 'openai', language: 'en-US' },
-];
-
-const languageOptions = [
-  { id: 'en-IN', name: 'English (India)', flag: '🇮🇳', popular: true, greetingTemplate: 'Hello! How can I help you today?' },
-  { id: 'hi-IN', name: 'Hindi', flag: '🇮🇳', popular: true, greetingTemplate: 'Namaste! Main aapki kya madad kar sakta hoon?' },
-  { id: 'te-IN', name: 'Telugu', flag: '🇮🇳', greetingTemplate: 'Namaskaram! Nenu mee ki ela sahaayam cheyagalanu?' },
-  { id: 'ta-IN', name: 'Tamil', flag: '🇮🇳', greetingTemplate: 'Vanakkam! Ungalukku eppadi udhavi seiya mudiyum?' },
-  { id: 'kn-IN', name: 'Kannada', flag: '🇮🇳', greetingTemplate: 'Namaskara! Naanu nimge hege sahaaya maadaballe?' },
-  { id: 'ml-IN', name: 'Malayalam', flag: '🇮🇳', greetingTemplate: 'Namaskkaram! Ninakku njan engane sahaayikkum?' },
-  { id: 'mr-IN', name: 'Marathi', flag: '🇮🇳', greetingTemplate: 'Namaskar! Mi tumhala kashi madad karu shakto?' },
-  { id: 'bn-IN', name: 'Bengali', flag: '🇮🇳', greetingTemplate: 'Namaskar! Ami apnake ki bhabe sahajya korte pari?' },
-  { id: 'gu-IN', name: 'Gujarati', flag: '🇮🇳', greetingTemplate: 'Namaskar! Hu tamne kem madad kari saku?' },
-  { id: 'pa-IN', name: 'Punjabi', flag: '🇮🇳', greetingTemplate: 'Sat sri akaal! Main tuhadi ki madad kar sakda haan?' },
-  { id: 'en-US', name: 'English (US)', flag: '🇺🇸', greetingTemplate: 'Hello! How can I help you today?' },
-  { id: 'auto', name: 'Auto-detect', flag: '🌐', greetingTemplate: 'Hello! How can I help you today?' },
-];
+// voiceOptions and languageOptions imported from constants
 
 export const CreateAgentPage: React.FC = () => {
   const navigate = useNavigate();
@@ -142,15 +43,9 @@ export const CreateAgentPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'configure' | 'voice' | 'prompt' | 'documents' | 'settings'>('configure');
 
-  // Document interface for WhatsApp sharing
-  interface AgentDocument {
-    id: string;
-    name: string;
-    type: 'pdf' | 'image' | 'video' | 'document';
-    url: string;
-    description: string;
-    keywords: string[];
-  }
+  // Panel states for voice and language selectors
+  const [showVoicePanel, setShowVoicePanel] = useState(false);
+  const [showLanguagePanel, setShowLanguagePanel] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -733,6 +628,13 @@ export const CreateAgentPage: React.FC = () => {
                     <div className="w-48 flex-shrink-0">
                       <label className="text-sm font-medium text-gray-900">Select Voice</label>
                       <p className="text-xs text-gray-500 mt-0.5">Choose a voice for your agent. Click play to preview.</p>
+                      <button
+                        type="button"
+                        onClick={() => setShowVoicePanel(true)}
+                        className="mt-2 text-xs text-teal-600 hover:text-teal-700 font-medium"
+                      >
+                        Browse all voices →
+                      </button>
                     </div>
                     <div className="flex-1">
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -1658,6 +1560,38 @@ export const CreateAgentPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Voice Selector Panel */}
+      <VoiceSelectorPanel
+        isOpen={showVoicePanel}
+        onClose={() => setShowVoicePanel(false)}
+        selectedVoiceId={formData.voiceId}
+        onSelectVoice={(voice) => {
+          const langOption = languageOptions.find(l => l.id === voice.language);
+          setFormData({
+            ...formData,
+            voiceId: voice.id,
+            voiceName: voice.name,
+            language: voice.language || formData.language,
+            greeting: langOption?.greetingTemplate || formData.greeting,
+          });
+          setShowVoicePanel(false);
+        }}
+      />
+
+      {/* Language Selector Panel */}
+      <LanguageSelectorPanel
+        isOpen={showLanguagePanel}
+        onClose={() => setShowLanguagePanel(false)}
+        selectedLanguageId={formData.language}
+        onSelectLanguage={(language) => {
+          setFormData({
+            ...formData,
+            language: language.id,
+            greeting: language.greetingTemplate || formData.greeting,
+          });
+        }}
+      />
     </div>
   );
 };
