@@ -24,3 +24,17 @@ export {
   DailyTrendChart,
   StatisticsTable,
 } from './CampaignAnalyticsComponents';
+export {
+  LoadingState as CallDetailsLoading,
+  ErrorState as CallDetailsError,
+  Header as CallDetailsHeader,
+  QuickStats,
+  TabButtons,
+  TranscriptPanel,
+  InfoPanel,
+  ContactCard,
+  OutcomeCard,
+  QualificationCard,
+  NotesCard,
+  CampaignCard,
+} from './CallDetailsComponents';
