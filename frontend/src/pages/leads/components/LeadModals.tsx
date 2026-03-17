@@ -11,7 +11,7 @@ interface ModalWrapperProps {
   children: React.ReactNode;
 }
 
-export function ModalWrapper({ isOpen, onClose, title, children }: ModalWrapperProps) {
+export function ModalWrapper({ isOpen, title, children }: ModalWrapperProps) {
   if (!isOpen) return null;
 
   return (

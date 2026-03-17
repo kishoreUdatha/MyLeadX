@@ -3,7 +3,7 @@
  * Handles loading and state management for all lead detail tabs
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import leadDetailsService, {
   LeadNote,
@@ -47,7 +47,7 @@ export interface UseLeadDetailDataReturn {
   togglePinNote: (note: LeadNote) => Promise<void>;
 
   // Task handlers
-  addTask: (task: Omit<LeadTask, 'id' | 'createdAt' | 'updatedAt' | 'status'>) => Promise<void>;
+  addTask: (task: { title: string; description?: string; dueDate?: string; priority?: string; assigneeId?: string }) => Promise<void>;
   updateTaskStatus: (taskId: string, status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED') => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
 
@@ -329,7 +329,7 @@ export function useLeadDetailData(leadId: string | undefined): UseLeadDetailData
   const updateQuery = useCallback(async (queryId: string, data: { response?: string; status?: string }) => {
     if (!leadId) return;
     try {
-      const updated = await leadDetailsService.updateQuery(leadId, queryId, data);
+      const updated = await leadDetailsService.updateQuery(leadId, queryId, data as { response?: string; status?: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' });
       setQueries(prev => prev.map(q => q.id === queryId ? updated : q));
       toast.success('Query updated');
     } catch (error) {
@@ -411,7 +411,10 @@ export function useLeadDetailData(leadId: string | undefined): UseLeadDetailData
   const addCallLog = useCallback(async (callLogData: { phoneNumber: string; direction: string; status: string; duration: number; notes?: string }) => {
     if (!leadId || !callLogData.phoneNumber) return;
     try {
-      const call = await leadDetailsService.createCallLog(leadId, callLogData);
+      const call = await leadDetailsService.createCallLog(leadId, {
+        ...callLogData,
+        direction: callLogData.direction as 'INBOUND' | 'OUTBOUND',
+      });
       setCallLogs(prev => [call, ...prev]);
       toast.success('Call logged');
     } catch (error) {
