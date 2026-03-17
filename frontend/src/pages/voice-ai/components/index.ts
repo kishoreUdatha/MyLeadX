@@ -14,3 +14,7 @@ export { KnowledgeTabContent } from './KnowledgeTabContent';
 // Selector Panels
 export { VoiceSelectorPanel } from './VoiceSelectorPanel';
 export { LanguageSelectorPanel } from './LanguageSelectorPanel';
+
+// Voice Agents Page Components
+export { AgentsTable } from './AgentsTable';
+export { BrowseTemplatesModal } from './BrowseTemplatesModal';
