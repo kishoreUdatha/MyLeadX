@@ -19,3 +19,14 @@ export {
   AddChannelModal,
   AnimationStyles,
 } from './NotificationChannelsComponents';
+
+export {
+  CRMLoadingState,
+  CRMPageHeader,
+  IntegrationCard,
+  ActiveIntegrations,
+  CRMOption,
+  AddIntegrationSection,
+  InfoSection,
+  ConfigModal,
+} from './CRMIntegrationComponents';

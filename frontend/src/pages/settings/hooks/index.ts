@@ -4,3 +4,4 @@
 
 export { useIntegrationSettings } from './useIntegrationSettings';
 export { useNotificationChannels } from './useNotificationChannels';
+export { useCRMIntegration } from './useCRMIntegration';
