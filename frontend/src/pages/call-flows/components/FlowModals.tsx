@@ -19,7 +19,7 @@ import {
   MicOff,
 } from 'lucide-react';
 import { FlowTemplate } from '../call-flow-builder.types';
-import { flowTemplates, initialNodes } from '../call-flow-builder.constants';
+import { flowTemplates } from '../call-flow-builder.constants';
 
 // Templates Modal Props
 interface TemplatesModalProps {

@@ -18,7 +18,6 @@ import {
   CheckSquare,
   Square,
   Phone,
-  PhoneCall,
   Zap,
   MousePointer,
   Cpu,

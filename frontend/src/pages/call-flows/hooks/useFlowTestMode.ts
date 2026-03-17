@@ -5,7 +5,6 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Node, Edge } from 'reactflow';
-import { ToastState } from '../call-flow-builder.types';
 
 interface UseFlowTestModeReturn {
   // State
