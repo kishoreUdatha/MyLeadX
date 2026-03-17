@@ -248,7 +248,7 @@ router.post('/:id/execute', async (req: AuthenticatedRequest, res: Response) => 
     const { simulatedInputs = [], initialVariables = {} } = req.body;
 
     // Execute the flow test
-    const result = await (callFlowService as any).executeFlowTest(
+    const result = await callFlowService.executeFlowTest(
       req.params.id,
       simulatedInputs,
       initialVariables
@@ -294,14 +294,14 @@ router.post('/:id/init-session', async (req: AuthenticatedRequest, res: Response
     }
 
     // Initialize execution context
-    const context = await (callFlowService as any).initializeExecution(
+    const context = await callFlowService.initializeExecution(
       req.params.id,
       sessionId,
       initialVariables
     );
 
     // Process first node to get initial response
-    const result = await (callFlowService as any).processNode(context);
+    const result = await callFlowService.processNode(context);
 
     res.json({
       success: true,
@@ -347,7 +347,7 @@ router.post('/:id/process-input', async (req: AuthenticatedRequest, res: Respons
     }
 
     // Process the user input
-    const result = await (callFlowService as any).processNode(context, userInput);
+    const result = await callFlowService.processNode(context, userInput);
 
     // Update context based on result
     const updatedContext = {
@@ -365,7 +365,7 @@ router.post('/:id/process-input', async (req: AuthenticatedRequest, res: Respons
     let shouldWaitForInput = result.shouldWaitForInput;
 
     if (result.nextNodeId && !result.shouldWaitForInput && !result.shouldEnd && !result.shouldTransfer) {
-      const nextResult = await (callFlowService as any).processNode(updatedContext);
+      const nextResult = await callFlowService.processNode(updatedContext);
       response = nextResult.response || response;
       shouldWaitForInput = nextResult.shouldWaitForInput;
 
