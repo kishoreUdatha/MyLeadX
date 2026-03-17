@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { config } from '../config';
 import { prisma } from '../config/database';
 import { AdPlatform, LeadSource, LeadPriority } from '@prisma/client';
+import { externalLeadImportService } from '../services/external-lead-import.service';
 
 const FB_API_VERSION = 'v18.0';
 const FB_GRAPH_URL = `https://graph.facebook.com/${FB_API_VERSION}`;
@@ -157,40 +158,40 @@ export class InstagramService {
       }
     }
 
-    // Create lead
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId,
-        firstName: fields.first_name || fields.full_name?.split(' ')[0] || 'Unknown',
-        lastName: fields.last_name || fields.full_name?.split(' ').slice(1).join(' '),
-        email: fields.email,
-        phone: fields.phone_number || 'N/A',
-        source: LeadSource.AD_INSTAGRAM,
-        sourceDetails: `Instagram Campaign: ${adCampaign?.name || 'Unknown'}`,
-        priority: LeadPriority.MEDIUM,
-        customFields: fields,
+    // Route to RawImportRecord instead of creating Lead directly
+    // This prevents voice agent loop and gives admin control
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: fields.first_name || fields.full_name?.split(' ')[0] || 'Unknown',
+      lastName: fields.last_name || fields.full_name?.split(' ').slice(1).join(' '),
+      email: fields.email,
+      phone: fields.phone_number || 'N/A',
+      source: 'AD_INSTAGRAM',
+      sourceDetails: `Instagram Campaign: ${adCampaign?.name || 'Unknown'}`,
+      campaignName: adCampaign?.name,
+      customFields: {
+        ...fields,
+        leadgenId,
+        campaignId: leadData.campaign_id,
+        adId: leadData.ad_id,
+        formId: leadData.form_id,
       },
     });
 
-    // Create ad lead record
-    if (adCampaign) {
-      await prisma.adLead.create({
-        data: {
-          adCampaignId: adCampaign.id,
-          leadId: lead.id,
-          externalId: leadgenId,
-          rawData: leadData as any,
-        },
-      });
+    if (result.isDuplicate) {
+      console.log(`[Instagram] Duplicate lead skipped: ${fields.phone_number}`);
+      return result.rawImportRecord;
+    }
 
-      // Update campaign conversions
+    // Update campaign conversions count
+    if (adCampaign) {
       await prisma.adCampaign.update({
         where: { id: adCampaign.id },
         data: { conversions: { increment: 1 } },
       });
     }
 
-    return lead;
+    console.log(`[Instagram] Lead imported to RawImportRecord: ${result.rawImportRecord.id}`);
+    return result.rawImportRecord;
   }
 
   /**
@@ -570,39 +571,36 @@ export class InstagramService {
       }
     }
 
-    // Create lead
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId,
-        firstName: fields.first_name || fields.firstName || fields.full_name?.split(' ')[0] || 'Unknown',
-        lastName: fields.last_name || fields.lastName || fields.full_name?.split(' ').slice(1).join(' '),
-        email: fields.email,
-        phone: fields.phone_number || fields.phone || 'N/A',
-        source: LeadSource.AD_INSTAGRAM,
-        sourceDetails: `Instagram Campaign: ${adCampaign?.name || 'Unknown'}`,
-        priority: LeadPriority.MEDIUM,
-        customFields: fields,
+    // Route to RawImportRecord instead of creating Lead directly
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: fields.first_name || fields.firstName || fields.full_name?.split(' ')[0] || 'Unknown',
+      lastName: fields.last_name || fields.lastName || fields.full_name?.split(' ').slice(1).join(' '),
+      email: fields.email,
+      phone: fields.phone_number || fields.phone || 'N/A',
+      source: 'AD_INSTAGRAM',
+      sourceDetails: `Instagram Campaign: ${adCampaign?.name || 'Unknown'}`,
+      campaignName: adCampaign?.name,
+      customFields: {
+        ...fields,
+        leadId: leadData.id,
+        campaignId: leadData.campaign_id,
+        adId: leadData.ad_id,
+        formId: leadData.form_id,
       },
     });
 
-    // Create ad lead record
-    if (adCampaign) {
-      await prisma.adLead.create({
-        data: {
-          adCampaignId: adCampaign.id,
-          leadId: lead.id,
-          externalId: leadData.id,
-          rawData: leadData as any,
-        },
-      });
+    if (result.isDuplicate) {
+      return null;
+    }
 
+    if (adCampaign) {
       await prisma.adCampaign.update({
         where: { id: adCampaign.id },
         data: { conversions: { increment: 1 } },
       });
     }
 
-    return lead;
+    return result.rawImportRecord;
   }
 
   /**

@@ -1719,8 +1719,9 @@ Be concise and helpful. Use quick replies where possible. Guide users to relevan
     },
   ];
 
+  const createdAgents = [];
   for (const agent of voiceAgents) {
-    await prisma.voiceAgent.create({
+    const created = await prisma.voiceAgent.create({
       data: {
         organizationId: organization.id,
         name: agent.name,
@@ -1741,6 +1742,7 @@ Be concise and helpful. Use quick replies where possible. Guide users to relevan
         isActive: true,
       },
     });
+    createdAgents.push(created);
   }
   console.log('✅ AI Agents: 24 agents created (9 Industry + 3 SMS + 3 WhatsApp + 9 Specialized)');
 
@@ -2048,6 +2050,175 @@ Be concise and helpful. Use quick replies where possible. Guide users to relevan
   });
 
   console.log('✅ Plans created: Starter, Pro, Business, Enterprise');
+
+  // ==================== OUTBOUND CAMPAIGNS & CALLS ====================
+  // Get first few voice agents for campaigns
+  const educationAgent = createdAgents.find(a => a.name.includes('Education'));
+  const recruitmentAgent = createdAgents.find(a => a.name.includes('Recruiter'));
+  const healthcareAgent = createdAgents.find(a => a.name.includes('Healthcare'));
+
+  if (educationAgent && recruitmentAgent && healthcareAgent) {
+    // Campaign 1: Education - Running
+    const educationCampaign = await prisma.outboundCallCampaign.create({
+      data: {
+        organizationId: organization.id,
+        agentId: educationAgent.id,
+        name: 'Summer Admission Drive 2024',
+        description: 'Outreach campaign for prospective students interested in summer intake',
+        status: 'RUNNING',
+        callingMode: 'AUTOMATIC',
+        maxConcurrentCalls: 3,
+        callsBetweenHours: { start: 9, end: 18 },
+        retryAttempts: 2,
+        retryDelayMinutes: 60,
+        totalContacts: 150,
+        completedCalls: 87,
+        successfulCalls: 72,
+        failedCalls: 15,
+        leadsGenerated: 34,
+        startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+      },
+    });
+
+    // Campaign 2: Recruitment - Paused
+    const recruitmentCampaign = await prisma.outboundCallCampaign.create({
+      data: {
+        organizationId: organization.id,
+        agentId: recruitmentAgent.id,
+        name: 'Tech Talent Outreach Q1',
+        description: 'Reaching out to potential candidates for tech positions',
+        status: 'PAUSED',
+        callingMode: 'AUTOMATIC',
+        maxConcurrentCalls: 2,
+        callsBetweenHours: { start: 10, end: 19 },
+        retryAttempts: 3,
+        retryDelayMinutes: 120,
+        totalContacts: 200,
+        completedCalls: 45,
+        successfulCalls: 38,
+        failedCalls: 7,
+        leadsGenerated: 12,
+        startedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+      },
+    });
+
+    // Campaign 3: Healthcare - Draft
+    const healthcareCampaign = await prisma.outboundCallCampaign.create({
+      data: {
+        organizationId: organization.id,
+        agentId: healthcareAgent.id,
+        name: 'Health Checkup Reminder',
+        description: 'Reminder calls for annual health checkup appointments',
+        status: 'DRAFT',
+        callingMode: 'MANUAL',
+        maxConcurrentCalls: 1,
+        callsBetweenHours: { start: 9, end: 17 },
+        retryAttempts: 2,
+        retryDelayMinutes: 30,
+        totalContacts: 75,
+        completedCalls: 0,
+        successfulCalls: 0,
+        failedCalls: 0,
+        leadsGenerated: 0,
+      },
+    });
+
+    // Campaign 4: Completed Campaign
+    const completedCampaign = await prisma.outboundCallCampaign.create({
+      data: {
+        organizationId: organization.id,
+        agentId: educationAgent.id,
+        name: 'Alumni Feedback Survey',
+        description: 'Collecting feedback from recent graduates',
+        status: 'COMPLETED',
+        callingMode: 'AUTOMATIC',
+        maxConcurrentCalls: 2,
+        callsBetweenHours: { start: 11, end: 20 },
+        retryAttempts: 1,
+        retryDelayMinutes: 30,
+        totalContacts: 50,
+        completedCalls: 50,
+        successfulCalls: 43,
+        failedCalls: 7,
+        leadsGenerated: 28,
+        startedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+        completedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    // Create contacts for the running campaign
+    const contactNames = [
+      'Amit Sharma', 'Priya Patel', 'Rahul Singh', 'Neha Gupta', 'Vikram Reddy',
+      'Anjali Nair', 'Suresh Kumar', 'Deepika Menon', 'Arjun Verma', 'Kavita Joshi',
+      'Ravi Iyer', 'Pooja Saxena', 'Manish Agarwal', 'Shreya Kapoor', 'Nikhil Desai'
+    ];
+
+    const contacts = [];
+    for (let i = 0; i < contactNames.length; i++) {
+      const contact = await prisma.outboundCallContact.create({
+        data: {
+          campaignId: educationCampaign.id,
+          phone: `+91-98765${(43210 + i).toString().slice(-5)}`,
+          name: contactNames[i],
+          email: `${contactNames[i].toLowerCase().replace(' ', '.')}@example.com`,
+          status: i < 10 ? 'COMPLETED' : 'PENDING',
+          attempts: i < 10 ? 1 : 0,
+          lastAttemptAt: i < 10 ? new Date(Date.now() - (i * 3600000)) : null,
+        },
+      });
+      contacts.push(contact);
+    }
+
+    // Create sample calls
+    type CallStatus = 'COMPLETED' | 'FAILED' | 'NO_ANSWER' | 'BUSY' | 'IN_PROGRESS';
+    type Outcome = 'INTERESTED' | 'NOT_INTERESTED' | 'CALLBACK_REQUESTED' | 'CONVERTED' | null;
+
+    const callStatuses: CallStatus[] = ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'FAILED', 'COMPLETED', 'COMPLETED', 'NO_ANSWER', 'COMPLETED', 'BUSY'];
+    const outcomes: Outcome[] = ['INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'CONVERTED', null, 'INTERESTED', 'CALLBACK_REQUESTED', null, 'NOT_INTERESTED', null];
+    const sentiments = ['POSITIVE', 'NEUTRAL', 'POSITIVE', 'POSITIVE', null, 'POSITIVE', 'NEUTRAL', null, 'NEGATIVE', null];
+    const durations = [245, 180, 320, 410, 0, 275, 195, 0, 165, 0];
+
+    for (let i = 0; i < 10; i++) {
+      await prisma.outboundCall.create({
+        data: {
+          campaignId: educationCampaign.id,
+          contactId: contacts[i].id,
+          agentId: educationAgent.id,
+          phoneNumber: contacts[i].phone,
+          status: callStatuses[i] as any,
+          outcome: outcomes[i] as any,
+          sentiment: sentiments[i] as any,
+          duration: durations[i],
+          startedAt: new Date(Date.now() - ((10 - i) * 3600000)),
+          answeredAt: durations[i] > 0 ? new Date(Date.now() - ((10 - i) * 3600000) + 5000) : null,
+          endedAt: new Date(Date.now() - ((10 - i) * 3600000) + (durations[i] * 1000)),
+          summary: durations[i] > 0 ? `Call with ${contacts[i].name}. ${outcomes[i] === 'INTERESTED' ? 'Lead showed interest in summer programs.' : outcomes[i] === 'CONVERTED' ? 'Lead enrolled in the course.' : 'General inquiry about courses.'}` : null,
+        },
+      });
+    }
+
+    // Add more calls from recruitment campaign
+    for (let i = 0; i < 5; i++) {
+      await prisma.outboundCall.create({
+        data: {
+          campaignId: recruitmentCampaign.id,
+          agentId: recruitmentAgent.id,
+          phoneNumber: `+91-87654${(32109 + i).toString().slice(-5)}`,
+          status: (i < 4 ? 'COMPLETED' : 'IN_PROGRESS') as any,
+          outcome: (i === 0 ? 'INTERESTED' : i === 1 ? 'CALLBACK_REQUESTED' : i === 2 ? 'NOT_INTERESTED' : null) as any,
+          sentiment: (i < 3 ? (i === 0 ? 'POSITIVE' : 'NEUTRAL') : null) as any,
+          duration: i < 4 ? 150 + (i * 30) : null,
+          startedAt: new Date(Date.now() - (i * 7200000)),
+          answeredAt: i < 4 ? new Date(Date.now() - (i * 7200000) + 8000) : null,
+          endedAt: i < 4 ? new Date(Date.now() - (i * 7200000) + 180000) : null,
+        },
+      });
+    }
+
+    console.log('✅ Outbound Campaigns: 4 campaigns created');
+    console.log('✅ Outbound Contacts: 15 contacts created');
+    console.log('✅ Outbound Calls: 15 calls created');
+  }
 
   console.log('🤖 AI AGENTS CREATED (24 Total):');
   console.log('');

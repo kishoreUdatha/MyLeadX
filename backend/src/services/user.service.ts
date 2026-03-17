@@ -185,6 +185,37 @@ export class UserService {
     }));
   }
 
+  async getTelecallers(organizationId: string) {
+    const users = await prisma.user.findMany({
+      where: {
+        organizationId,
+        role: { slug: 'telecaller' },
+        isActive: true,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        _count: {
+          select: {
+            rawImportsAssignedTo: {
+              where: { status: { in: ['ASSIGNED', 'CALLING'] } },
+            },
+          },
+        },
+      },
+    });
+
+    return users.map((user) => ({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      activeRecordCount: user._count.rawImportsAssignedTo,
+    }));
+  }
+
   async getRoles(organizationId: string) {
     return prisma.role.findMany({
       where: {

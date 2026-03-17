@@ -2,6 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Voice AI Sound Wave Animation */
+@keyframes soundWave {
+  0%, 100% {
+    height: 8px;
+  }
+  50% {
+    height: 40px;
+  }
+}
+
+@keyframes soundWaveAlt {
+  0%, 100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* Pulsing glow effect for voice AI */
+@keyframes voicePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 30px 10px rgba(255, 255, 255, 0.2);
+  }
+}
+
+.voice-pulse {
+  animation: voicePulse 1.5s ease-in-out infinite;
+}
+
 /* ========================================
    BASE STYLES
    ======================================== */
@@ -377,7 +419,7 @@
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+    @apply flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-medium
            text-slate-300 transition-all duration-200
            hover:bg-slate-800 hover:text-white;
   }
@@ -387,7 +429,7 @@
   }
 
   .sidebar-link-icon {
-    @apply w-5 h-5 flex-shrink-0;
+    @apply w-4 h-4 flex-shrink-0;
   }
 
   .sidebar-section {

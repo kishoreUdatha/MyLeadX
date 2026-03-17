@@ -23,7 +23,8 @@ import FormBuilderPage from './pages/forms/FormBuilderPage';
 import LandingPagesPage from './pages/landing/LandingPagesPage';
 import LandingPageBuilderPage from './pages/landing/LandingPageBuilderPage';
 import CampaignsPage from './pages/campaigns/CampaignsPage';
-import { VoiceAgentsPage, CreateAgentPage } from './pages/voice-ai';
+import { VoiceAgentsPage, CreateAgentPage, CreateAgentFromTemplatePage, NewAgentSelectionPage } from './pages/voice-ai';
+import { VoiceTemplatesPage, EditTemplatePage } from './pages/voice-templates';
 import {
   OutboundCallsPage,
   CallDetailsPage,
@@ -55,7 +56,8 @@ import {
   InboundCallsPage,
   AgentSettingsPage,
 } from './pages/hybrid-agent';
-import { AutoAssignSettingsPage, SmsSettingsPage, InstitutionSettingsPage, WhatsAppSettingsPage, VoiceMinutesPage, NotificationChannelsPage, CalendarSettingsPage, EmailSequencesPage, CRMIntegrationPage } from './pages/settings';
+import { AutoAssignSettingsPage, SmsSettingsPage, InstitutionSettingsPage, WhatsAppSettingsPage, VoiceMinutesPage, NotificationChannelsPage, CalendarSettingsPage, EmailSequencesPage, CRMIntegrationPage, PostCallMessagingPage } from './pages/settings';
+import IntegrationSettingsPage from './pages/settings/IntegrationSettingsPage';
 import { ReportsPage } from './pages/reports';
 import { SocialMediaAdsPage, InstagramLeadSetupPage, AdIntegrationsPage, FacebookSetupPage, LinkedInSetupPage, GoogleAdsSetupPage } from './pages/ads';
 import { PricingPage } from './pages/pricing';
@@ -80,6 +82,15 @@ import ApiWebhooksPage from './pages/api-keys/WebhooksPage';
 import { TemplatesPage } from './pages/templates';
 import { ScheduledMessagesPage } from './pages/scheduled-messages';
 import AnalyticsDashboardPage from './pages/analytics/AnalyticsDashboardPage';
+import ConversionFunnelPage from './pages/analytics/ConversionFunnelPage';
+import AgentPerformancePage from './pages/analytics/AgentPerformancePage';
+import LeadSourcesPage from './pages/analytics/LeadSourcesPage';
+import {
+  ComplianceDashboardPage,
+  ConsentManagementPage,
+  RecordingDisclosurePage,
+  ComplianceAuditLogsPage,
+} from './pages/compliance';
 import ContactListsPage from './pages/contact-lists/ContactListsPage';
 import ConversationsPage from './pages/conversations/ConversationsPage';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
@@ -93,6 +104,7 @@ import { VoicemailPage } from './pages/voicemail';
 import { CallbacksPage } from './pages/callbacks';
 import { InboundAnalyticsDashboard } from './pages/inbound-analytics';
 import { CallMonitoringPage } from './pages/call-monitoring';
+import { CallFlowsPage, CallFlowBuilderPage } from './pages/call-flows';
 
 // Super Admin Pages
 import SuperAdminLayout from './layouts/SuperAdminLayout';
@@ -225,8 +237,16 @@ function App() {
         <Route path="landing-pages/:id/edit" element={<LandingPageBuilderPage />} />
         <Route path="campaigns" element={<CampaignsPage />} />
         <Route path="voice-ai" element={<VoiceAgentsPage />} />
+        <Route path="voice-ai/new" element={<NewAgentSelectionPage />} />
         <Route path="voice-ai/create" element={<CreateAgentPage />} />
-        <Route path="voice-ai/agents/:id" element={<AgentSettingsPage />} />
+        <Route path="voice-ai/create-from-template/:templateId" element={<CreateAgentFromTemplatePage />} />
+        <Route path="voice-ai/agents/:id" element={<CreateAgentPage />} />
+
+        {/* Voice Templates */}
+        <Route path="voice-templates" element={<VoiceTemplatesPage />} />
+        <Route path="voice-templates/create" element={<EditTemplatePage />} />
+        <Route path="voice-templates/:id/edit" element={<EditTemplatePage />} />
+
         <Route path="outbound-calls" element={<OutboundCallsPage />} />
         <Route path="outbound-calls/calls/:id" element={<CallDetailsPage />} />
         <Route path="outbound-calls/single" element={<MakeSingleCallPage />} />
@@ -258,6 +278,8 @@ function App() {
         <Route path="/settings/calendar" element={<CalendarSettingsPage />} />
         <Route path="/settings/email-sequences" element={<EmailSequencesPage />} />
         <Route path="/settings/crm-integration" element={<CRMIntegrationPage />} />
+        <Route path="/settings/integrations" element={<IntegrationSettingsPage />} />
+        <Route path="/settings/post-call-messaging" element={<PostCallMessagingPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="social-media-ads" element={<SocialMediaAdsPage />} />
         <Route path="ad-integrations" element={<AdIntegrationsPage />} />
@@ -294,6 +316,15 @@ function App() {
 
         {/* Analytics */}
         <Route path="analytics" element={<AnalyticsDashboardPage />} />
+        <Route path="analytics/lead-sources" element={<LeadSourcesPage />} />
+        <Route path="analytics/funnel" element={<ConversionFunnelPage />} />
+        <Route path="analytics/agents" element={<AgentPerformancePage />} />
+
+        {/* Compliance */}
+        <Route path="compliance" element={<ComplianceDashboardPage />} />
+        <Route path="compliance/consent" element={<ConsentManagementPage />} />
+        <Route path="compliance/recording-disclosure" element={<RecordingDisclosurePage />} />
+        <Route path="compliance/audit-logs" element={<ComplianceAuditLogsPage />} />
 
         {/* Contact Lists */}
         <Route path="contact-lists" element={<ContactListsPage />} />
@@ -317,6 +348,11 @@ function App() {
         <Route path="ivr" element={<IvrListPage />} />
         <Route path="ivr/builder" element={<IvrBuilderPage />} />
         <Route path="ivr/builder/:id" element={<IvrBuilderPage />} />
+
+        {/* Call Flow Builder */}
+        <Route path="call-flows" element={<CallFlowsPage />} />
+        <Route path="call-flows/builder" element={<CallFlowBuilderPage />} />
+        <Route path="call-flows/builder/:id" element={<CallFlowBuilderPage />} />
 
         {/* Queue Management */}
         <Route path="queues" element={<QueueManagementPage />} />

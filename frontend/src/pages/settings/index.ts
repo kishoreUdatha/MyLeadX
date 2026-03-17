@@ -7,3 +7,4 @@ export { default as NotificationChannelsPage } from './NotificationChannelsPage'
 export { default as CalendarSettingsPage } from './CalendarSettingsPage';
 export { default as EmailSequencesPage } from './EmailSequencesPage';
 export { default as CRMIntegrationPage } from './CRMIntegrationPage';
+export { default as PostCallMessagingPage } from './PostCallMessagingPage';

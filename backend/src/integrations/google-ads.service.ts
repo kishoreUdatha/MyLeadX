@@ -2,6 +2,7 @@ import { GoogleAdsApi, Customer, enums } from 'google-ads-api';
 import { config } from '../config';
 import { prisma } from '../config/database';
 import { AdPlatform, LeadSource, LeadPriority } from '@prisma/client';
+import { externalLeadImportService } from '../services/external-lead-import.service';
 
 interface SyncResult {
   created: number;
@@ -239,30 +240,29 @@ export class GoogleAdsService {
       });
     }
 
-    // Create lead
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId,
-        firstName: fields.firstName || fields.fullName?.split(' ')[0] || 'Unknown',
-        lastName: fields.lastName || fields.fullName?.split(' ').slice(1).join(' '),
-        email: fields.email,
-        phone: fields.phone || 'N/A',
-        source: LeadSource.AD_GOOGLE,
-        sourceDetails: `Google Ads Campaign: ${adCampaign.name}`,
-        priority: LeadPriority.MEDIUM,
-        customFields: fields,
+    // Route to RawImportRecord instead of creating Lead directly
+    // This prevents voice agent loop and gives admin control
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: fields.firstName || fields.fullName?.split(' ')[0] || 'Unknown',
+      lastName: fields.lastName || fields.fullName?.split(' ').slice(1).join(' '),
+      email: fields.email,
+      phone: fields.phone || 'N/A',
+      source: 'AD_GOOGLE',
+      sourceDetails: `Google Ads Campaign: ${adCampaign.name}`,
+      campaignName: adCampaign.name,
+      customFields: {
+        ...fields,
+        leadId: submission.lead_id,
+        campaignId: submission.campaign_id,
+        adGroupId: submission.ad_group_id,
+        formId: submission.form_id,
       },
     });
 
-    // Create ad lead record
-    await prisma.adLead.create({
-      data: {
-        adCampaignId: adCampaign.id,
-        leadId: lead.id,
-        externalId: submission.lead_id,
-        rawData: submission as any,
-      },
-    });
+    if (result.isDuplicate) {
+      console.log(`[GoogleAds] Duplicate lead skipped: ${fields.phone}`);
+      return null;
+    }
 
     // Update campaign conversions
     await prisma.adCampaign.update({
@@ -270,7 +270,8 @@ export class GoogleAdsService {
       data: { conversions: { increment: 1 } },
     });
 
-    return lead;
+    console.log(`[GoogleAds] Lead imported to RawImportRecord: ${result.rawImportRecord.id}`);
+    return result.rawImportRecord;
   }
 
   /**

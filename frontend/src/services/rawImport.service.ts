@@ -200,4 +200,13 @@ export const rawImportService = {
     });
     return response.data.data;
   },
+
+  // Bulk Status Update
+  async bulkUpdateStatus(recordIds: string[], status: RawImportRecordStatus) {
+    const response = await api.post('/raw-imports/records/bulk-status', {
+      recordIds,
+      status,
+    });
+    return response.data.data;
+  },
 };

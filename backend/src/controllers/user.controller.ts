@@ -77,6 +77,16 @@ export class UserController {
     }
   }
 
+  async getTelecallers(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const telecallers = await userService.getTelecallers(req.organizationId!);
+
+      ApiResponse.success(res, 'Telecallers retrieved successfully', telecallers);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getRoles(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const roles = await userService.getRoles(req.organizationId!);

@@ -48,6 +48,7 @@ const listUsersValidation = [
 
 // Routes
 router.get('/counselors', userController.getCounselors.bind(userController));
+router.get('/telecallers', userController.getTelecallers.bind(userController));
 router.get('/roles', userController.getRoles.bind(userController));
 
 router.post(

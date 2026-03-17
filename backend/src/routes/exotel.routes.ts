@@ -4,6 +4,10 @@ import { exotelService } from '../integrations/exotel.service';
 import { voiceAIService } from '../integrations/voice-ai.service';
 import { sarvamService } from '../integrations/sarvam.service';
 import { createWhatsAppService } from '../integrations/whatsapp.service';
+import { emailService } from '../integrations/email.service';
+import { communicationService } from '../services/communication.service';
+import { intentDetector } from '../services/intent-detector.service';
+import { agentOrchestrator } from '../services/specialized-agents.service';
 import { authenticate } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { ApiResponse } from '../utils/apiResponse';
@@ -47,6 +51,110 @@ function escapeXml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+/**
+ * Send post-call messages (Email, SMS, WhatsApp) based on agent settings
+ * Triggers automatically after a voice call ends
+ */
+async function sendPostCallMessages(params: {
+  organizationId: string;
+  leadId: string;
+  phoneNumber: string;
+  email?: string | null;
+  firstName: string;
+  lastName?: string;
+  agentName: string;
+  callSummary: string;
+  sentiment: string;
+  outcome?: string;
+}) {
+  try {
+    const { organizationId, leadId, phoneNumber, email, firstName, lastName, agentName, callSummary, sentiment, outcome } = params;
+
+    // Get organization settings for post-call messaging
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+
+    const settings = (organization?.settings as any) || {};
+    const postCallSettings = settings.postCallMessaging || {};
+
+    const fullName = `${firstName} ${lastName || ''}`.trim();
+
+    // 1. Send Email if enabled
+    if (postCallSettings.email?.enabled && email) {
+      try {
+        const emailTemplate = postCallSettings.email.template ||
+          `Hi ${firstName},\n\nThank you for speaking with us today!\n\n${callSummary}\n\nIf you have any questions, please reply to this email.\n\nBest regards,\n${settings.institution?.name || 'Our Team'}`;
+
+        await emailService.sendEmail({
+          to: email,
+          subject: postCallSettings.email.subject || `Thank you for your call - ${settings.institution?.name || 'VoiceBridge'}`,
+          body: emailTemplate.replace(/\{firstName\}/g, firstName).replace(/\{lastName\}/g, lastName || '').replace(/\{summary\}/g, callSummary),
+          leadId,
+          userId: 'system',
+        });
+
+        console.log(`[PostCall] Email sent to ${email} for lead ${leadId}`);
+      } catch (emailError) {
+        console.error('[PostCall] Failed to send email:', emailError);
+      }
+    }
+
+    // 2. Send SMS if enabled
+    if (postCallSettings.sms?.enabled && phoneNumber) {
+      try {
+        const smsTemplate = postCallSettings.sms.template ||
+          `Hi ${firstName}! Thanks for speaking with ${settings.institution?.name || 'us'}. We'll follow up soon. Questions? Reply to this message.`;
+
+        await communicationService.sendSms({
+          to: phoneNumber,
+          message: smsTemplate.replace(/\{firstName\}/g, firstName).replace(/\{lastName\}/g, lastName || ''),
+          leadId,
+          userId: 'system',
+        });
+
+        console.log(`[PostCall] SMS sent to ${phoneNumber} for lead ${leadId}`);
+      } catch (smsError) {
+        console.error('[PostCall] Failed to send SMS:', smsError);
+      }
+    }
+
+    // 3. Send WhatsApp if enabled
+    if (postCallSettings.whatsapp?.enabled && phoneNumber) {
+      try {
+        const whatsappService = createWhatsAppService(organizationId);
+        const isConfigured = await whatsappService.isConfigured();
+
+        if (isConfigured) {
+          const whatsappTemplate = postCallSettings.whatsapp.template ||
+            `Hi ${firstName}! Thank you for speaking with ${settings.institution?.name || 'us'} today. If you have any questions, feel free to message us here!`;
+
+          await whatsappService.sendMessage({
+            to: phoneNumber,
+            message: whatsappTemplate.replace(/\{firstName\}/g, firstName).replace(/\{lastName\}/g, lastName || ''),
+          });
+
+          console.log(`[PostCall] WhatsApp sent to ${phoneNumber} for lead ${leadId}`);
+        }
+      } catch (whatsappError) {
+        console.error('[PostCall] Failed to send WhatsApp:', whatsappError);
+      }
+    }
+
+    // Log the post-call messaging attempt
+    await prisma.callLog.updateMany({
+      where: { leadId },
+      data: {
+        notes: `AI Call completed. Post-call messages sent. Sentiment: ${sentiment}`,
+      },
+    });
+
+  } catch (error) {
+    console.error('[PostCall] Error sending post-call messages:', error);
+  }
 }
 
 // Finalize Exotel call - generate summary, create lead
@@ -161,6 +269,19 @@ async function finalizeExotelCall(callId: string) {
         });
 
         console.log(`Updated existing lead ${existingLead.id} from Exotel call ${callId}`);
+
+        // Send post-call messages (Email, SMS, WhatsApp)
+        await sendPostCallMessages({
+          organizationId: call.agent.organizationId,
+          leadId: existingLead.id,
+          phoneNumber: call.phoneNumber,
+          email: existingLead.email,
+          firstName: existingLead.firstName,
+          lastName: existingLead.lastName || undefined,
+          agentName: call.agent.name,
+          callSummary: summary,
+          sentiment,
+        });
       } else {
         // Create new lead
         const newLead = await prisma.lead.create({
@@ -214,6 +335,19 @@ async function finalizeExotelCall(callId: string) {
         }
 
         console.log(`Created new lead ${newLead.id} from Exotel call ${callId}`);
+
+        // Send post-call messages (Email, SMS, WhatsApp)
+        await sendPostCallMessages({
+          organizationId: call.agent.organizationId,
+          leadId: newLead.id,
+          phoneNumber: call.phoneNumber,
+          email: qualification.email || null,
+          firstName: qualification.name?.split(' ')[0] || 'Customer',
+          lastName: qualification.name?.split(' ').slice(1).join(' ') || undefined,
+          agentName: call.agent.name,
+          callSummary: summary,
+          sentiment,
+        });
       }
     }
 
@@ -989,6 +1123,79 @@ router.post('/ai-response/:callId', upload.none(), async (req: Request, res: Res
 </Response>`);
     }
 
+    // ==================== INTENT DETECTION & AGENT HANDOFF ====================
+    // Detect if user needs a specialized agent (Sales, Appointment, Payment, Support, Survey)
+    const detectedIntent = intentDetector.quickDetect(userText);
+    const currentAgentType = (agent as any).agentType || 'VOICE';
+
+    // Check if we should handoff to a specialized agent
+    if (intentDetector.shouldHandoff(detectedIntent, currentAgentType)) {
+      console.log(`[Intent] Detected ${detectedIntent.intent} intent (${detectedIntent.confidence}) - ${detectedIntent.reason}`);
+
+      // Get specialized agent response
+      try {
+        const specializedResponse = await agentOrchestrator.handleConversation(
+          detectedIntent.intent as any,
+          {
+            agentId: agent.id,
+            organizationId: agent.organizationId,
+            leadId: call.leadId || undefined,
+            phone: call.phoneNumber,
+            firstName: qualification.name?.split(' ')[0] || qualification.firstName,
+            conversationHistory: transcript.map((t: any) => ({ role: t.role, content: t.content })),
+          },
+          userText
+        );
+
+        // Use specialized agent's response
+        const aiResponse = specializedResponse.message;
+
+        // Add response to transcript
+        transcript.push({
+          role: 'assistant',
+          content: aiResponse,
+          timestamp: new Date().toISOString(),
+          agentType: detectedIntent.intent, // Track which agent responded
+        });
+
+        // Update call with new transcript
+        await prisma.outboundCall.update({
+          where: { id: callId },
+          data: {
+            transcript: JSON.stringify(transcript),
+            qualification: JSON.stringify(qualification),
+          },
+        });
+
+        // Check if specialized agent wants to end the call
+        if (specializedResponse.shouldEnd) {
+          await finalizeExotelCall(callId);
+
+          res.set('Content-Type', 'application/xml');
+          return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voiceGender}" language="${language}">${escapeXml(aiResponse)}</Say>
+  <Hangup/>
+</Response>`);
+        }
+
+        // Continue conversation with specialized agent response
+        res.set('Content-Type', 'application/xml');
+        return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="${voiceGender}" language="${language}">${escapeXml(aiResponse)}</Say>
+  <Record maxLength="30" timeout="5" playBeep="false" action="${baseUrl}/api/exotel/ai-response/${callId}" method="POST"/>
+  <Say voice="${voiceGender}" language="${language}">Please go ahead, I'm listening.</Say>
+  <Record maxLength="30" timeout="5" playBeep="false" action="${baseUrl}/api/exotel/ai-response/${callId}" method="POST"/>
+  <Hangup/>
+</Response>`);
+      } catch (specializedError) {
+        console.error('[Intent] Specialized agent error, falling back to main agent:', specializedError);
+        // Fall through to main agent response
+      }
+    }
+
+    // ==================== MAIN VOICE AGENT RESPONSE ====================
     // Generate AI response
     let aiResponse = '';
     try {

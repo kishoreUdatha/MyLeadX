@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 import { NotFoundError } from '../utils/errors';
 import { LeadSource, LeadStatus, LeadPriority } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+import { externalLeadImportService } from './external-lead-import.service';
 
 interface FormField {
   id: string;
@@ -113,34 +114,37 @@ export class FormService {
     const fields = form.fields as FormField[];
     const leadData = this.extractLeadData(fields, data);
 
-    // Create lead
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId: form.organizationId,
-        firstName: leadData.firstName || 'Unknown',
-        lastName: leadData.lastName,
-        email: leadData.email,
-        phone: leadData.phone || 'N/A',
-        source: LeadSource.FORM,
-        sourceDetails: form.name,
-        status: LeadStatus.NEW,
-        priority: LeadPriority.MEDIUM,
-        customFields: data,
+    // Route to RawImportRecord instead of creating Lead directly
+    // This prevents voice agent loop and gives admin control
+    const result = await externalLeadImportService.importExternalLead(form.organizationId, {
+      firstName: leadData.firstName || 'Unknown',
+      lastName: leadData.lastName,
+      email: leadData.email,
+      phone: leadData.phone || 'N/A',
+      source: 'FORM',
+      sourceDetails: form.name,
+      customFields: {
+        ...data,
+        formId,
+        formName: form.name,
+        ipAddress: metadata.ipAddress,
+        userAgent: metadata.userAgent,
       },
     });
 
-    // Create form submission
+    // Create form submission record (for tracking)
     const submission = await prisma.formSubmission.create({
       data: {
         formId,
-        leadId: lead.id,
+        leadId: null, // No lead created directly, goes through RawImportRecord
         data,
         ipAddress: metadata.ipAddress,
         userAgent: metadata.userAgent,
       },
     });
 
-    return { submission, lead };
+    console.log(`[Form] Submission imported to RawImportRecord: ${result.rawImportRecord?.id}`);
+    return { submission, rawImportRecord: result.rawImportRecord, isDuplicate: result.isDuplicate };
   }
 
   private extractLeadData(fields: FormField[], data: Record<string, unknown>) {

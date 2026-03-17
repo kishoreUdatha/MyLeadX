@@ -8,6 +8,7 @@ import { webhookService, WEBHOOK_EVENTS } from '../services/webhook.service';
 import { notificationChannelService, NOTIFICATION_EVENTS } from '../services/notification-channel.service';
 import { calendarService } from '../services/calendar.service';
 import { dripCampaignService } from '../services/drip-campaign.service';
+import { parseVariables, extractInstitutionContext, extractLeadContext, VariableContext } from '../utils/variableParser';
 
 const prisma = new PrismaClient();
 
@@ -236,6 +237,7 @@ class VoiceAIService {
     industry: VoiceAgentIndustry;
     customPrompt?: string;
     customQuestions?: any[];
+    createdById?: string;
   }) {
     const template = industryTemplates[data.industry];
 
@@ -251,6 +253,7 @@ class VoiceAIService {
         fallbackMessage: "I'm sorry, I didn't quite understand that. Could you please rephrase?",
         transferMessage: "Let me connect you with a human agent who can better assist you.",
         endMessage: "Thank you for your time. Have a great day!",
+        createdById: data.createdById,
       },
     });
   }
@@ -272,6 +275,13 @@ class VoiceAIService {
     return await prisma.voiceAgent.findMany({
       where: { organizationId },
       include: {
+        createdBy: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
         _count: {
           select: { sessions: true },
         },
@@ -317,19 +327,40 @@ class VoiceAIService {
         status: 'ACTIVE',
       },
       include: {
-        agent: true,
+        agent: {
+          include: {
+            organization: {
+              select: { settings: true },
+            },
+          },
+        },
       },
     });
 
+    // Build variable context for greeting
+    const variableContext: VariableContext = {
+      lead: {
+        firstName: visitorInfo?.name?.split(' ')[0],
+        phone: visitorInfo?.phone,
+        email: visitorInfo?.email,
+      },
+      institution: extractInstitutionContext((session.agent as any).organization?.settings),
+    };
+
+    // Parse variables in greeting
+    const parsedGreeting = session.agent.greeting
+      ? parseVariables(session.agent.greeting, variableContext)
+      : session.agent.greeting;
+
     // Add greeting as first transcript
-    if (session.agent.greeting) {
-      await this.addTranscript(session.id, 'assistant', session.agent.greeting);
+    if (parsedGreeting) {
+      await this.addTranscript(session.id, 'assistant', parsedGreeting);
     }
 
     return {
       sessionId: session.id,
       sessionToken: session.sessionToken,
-      greeting: session.agent.greeting,
+      greeting: parsedGreeting,
       agentName: session.agent.name,
     };
   }
@@ -395,15 +426,22 @@ class VoiceAIService {
     qualification?: any;
     shouldEnd?: boolean;
   }> {
-    // Get session with agent and previous transcripts
+    // Get session with agent, organization settings, and previous transcripts
     const session = await prisma.voiceSession.findUnique({
       where: { id: sessionId },
       include: {
-        agent: true,
+        agent: {
+          include: {
+            organization: {
+              select: { settings: true },
+            },
+          },
+        },
         transcripts: {
           orderBy: { timestamp: 'asc' },
           take: 20, // Last 20 messages for context
         },
+        lead: true,
       },
     });
 
@@ -414,11 +452,21 @@ class VoiceAIService {
     // Save user message to transcript
     await this.addTranscript(sessionId, 'user', userMessage);
 
+    // Build variable context from session data
+    const variableContext: VariableContext = {
+      lead: session.lead ? extractLeadContext(session.lead) : {
+        firstName: session.visitorName?.split(' ')[0],
+        phone: session.visitorPhone,
+        email: session.visitorEmail,
+      },
+      institution: extractInstitutionContext((session.agent as any).organization?.settings),
+    };
+
     // Build conversation history
     const messages: any[] = [
       {
         role: 'system',
-        content: this.buildSystemPrompt(session.agent),
+        content: this.buildSystemPrompt(session.agent, variableContext),
       },
     ];
 
@@ -482,15 +530,24 @@ class VoiceAIService {
     };
   }
 
-  // Build system prompt with context
-  private buildSystemPrompt(agent: any): string {
+  // Build system prompt with context and variable parsing
+  private buildSystemPrompt(agent: any, variableContext?: VariableContext): string {
     let prompt = agent.systemPrompt;
+
+    // Parse variables in the system prompt
+    if (variableContext) {
+      prompt = parseVariables(prompt, variableContext);
+    }
 
     // Add questions to collect
     if (agent.questions && (agent.questions as any[]).length > 0) {
       prompt += '\n\nYou should collect the following information during the conversation:\n';
       for (const q of agent.questions as any[]) {
-        prompt += `- ${q.question} (${q.required ? 'required' : 'optional'})\n`;
+        let questionText = q.question;
+        if (variableContext) {
+          questionText = parseVariables(questionText, variableContext);
+        }
+        prompt += `- ${questionText} (${q.required ? 'required' : 'optional'})\n`;
       }
     }
 
@@ -498,13 +555,23 @@ class VoiceAIService {
     if (agent.faqs && (agent.faqs as any[]).length > 0) {
       prompt += '\n\nCommon FAQs:\n';
       for (const faq of agent.faqs as any[]) {
-        prompt += `Q: ${faq.question}\nA: ${faq.answer}\n\n`;
+        let question = faq.question;
+        let answer = faq.answer;
+        if (variableContext) {
+          question = parseVariables(question, variableContext);
+          answer = parseVariables(answer, variableContext);
+        }
+        prompt += `Q: ${question}\nA: ${answer}\n\n`;
       }
     }
 
     // Add knowledge base
     if (agent.knowledgeBase) {
-      prompt += `\n\nAdditional Knowledge:\n${agent.knowledgeBase}`;
+      let knowledge = agent.knowledgeBase;
+      if (variableContext) {
+        knowledge = parseVariables(knowledge, variableContext);
+      }
+      prompt += `\n\nAdditional Knowledge:\n${knowledge}`;
     }
 
     return prompt;

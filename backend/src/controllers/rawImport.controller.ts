@@ -177,6 +177,22 @@ export class RawImportController {
       next(error);
     }
   }
+
+  async bulkUpdateStatus(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { recordIds, status } = req.body;
+
+      const result = await rawImportService.bulkUpdateStatus(
+        recordIds,
+        req.organizationId!,
+        status as RawImportRecordStatus
+      );
+
+      ApiResponse.success(res, 'Record statuses updated successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const rawImportController = new RawImportController();

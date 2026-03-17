@@ -61,6 +61,11 @@ export const userService = {
     return response.data.data;
   },
 
+  async getTelecallers(): Promise<User[]> {
+    const response = await api.get('/users/telecallers');
+    return response.data.data;
+  },
+
   async getRoles(): Promise<Role[]> {
     const response = await api.get('/users/roles');
     return response.data.data;

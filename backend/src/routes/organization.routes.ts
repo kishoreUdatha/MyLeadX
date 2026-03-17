@@ -290,6 +290,116 @@ router.post('/preview-prompt', async (req: TenantRequest, res: Response) => {
 
 /**
  * @swagger
+ * /api/organization:
+ *   get:
+ *     summary: Get all organization settings
+ *     tags: [Organization]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Organization settings retrieved successfully
+ */
+router.get('/', async (req: TenantRequest, res: Response) => {
+  try {
+    const organizationId = req.organizationId;
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        id: true,
+        name: true,
+        settings: true,
+      },
+    });
+
+    if (!organization) {
+      return ApiResponse.error(res, 'Organization not found', 404);
+    }
+
+    return ApiResponse.success(res, 'Organization settings retrieved', {
+      organizationId: organization.id,
+      organizationName: organization.name,
+      settings: organization.settings || {},
+    });
+  } catch (error) {
+    console.error('Error fetching organization settings:', error);
+    return ApiResponse.error(res, 'Failed to fetch organization settings', 500);
+  }
+});
+
+/**
+ * @swagger
+ * /api/organization:
+ *   put:
+ *     summary: Update organization settings (partial update)
+ *     tags: [Organization]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Settings to update (merged with existing)
+ *     responses:
+ *       200:
+ *         description: Organization settings updated successfully
+ */
+router.put('/', async (req: TenantRequest, res: Response) => {
+  try {
+    const organizationId = req.organizationId;
+    const newSettings = req.body;
+
+    // Get current organization
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+    });
+
+    if (!organization) {
+      return ApiResponse.error(res, 'Organization not found', 404);
+    }
+
+    // Merge with existing settings (deep merge for nested objects)
+    const currentSettings = (organization.settings as any) || {};
+    const updatedSettings = deepMerge(currentSettings, newSettings);
+
+    // Update organization
+    const updated = await prisma.organization.update({
+      where: { id: organizationId },
+      data: { settings: updatedSettings },
+      select: {
+        id: true,
+        name: true,
+        settings: true,
+      },
+    });
+
+    return ApiResponse.success(res, 'Organization settings updated successfully', {
+      settings: updated.settings,
+    });
+  } catch (error) {
+    console.error('Error updating organization settings:', error);
+    return ApiResponse.error(res, 'Failed to update organization settings', 500);
+  }
+});
+
+// Helper function for deep merging objects
+function deepMerge(target: any, source: any): any {
+  const result = { ...target };
+  for (const key in source) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deepMerge(result[key] || {}, source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
+/**
+ * @swagger
  * /api/organization/settings/whatsapp:
  *   get:
  *     summary: Get WhatsApp settings for organization

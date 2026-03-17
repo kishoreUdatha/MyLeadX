@@ -5,6 +5,7 @@ import {
   RawImportRecord,
   RawImportStats,
   RecordFilter,
+  RawImportRecordStatus,
 } from '../../services/rawImport.service';
 
 interface RawImportState {
@@ -140,6 +141,21 @@ export const bulkConvertToLeads = createAsyncThunk(
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
       return rejectWithValue(err.response?.data?.message || 'Failed to bulk convert to leads');
+    }
+  }
+);
+
+export const bulkUpdateStatus = createAsyncThunk(
+  'rawImports/bulkUpdateStatus',
+  async (
+    { recordIds, status }: { recordIds: string[]; status: RawImportRecordStatus },
+    { rejectWithValue }
+  ) => {
+    try {
+      return await rawImportService.bulkUpdateStatus(recordIds, status);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      return rejectWithValue(err.response?.data?.message || 'Failed to update status');
     }
   }
 );
@@ -291,6 +307,21 @@ const rawImportSlice = createSlice({
         state.selectedRecords = [];
       })
       .addCase(bulkConvertToLeads.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
+      });
+
+    // Bulk Update Status
+    builder
+      .addCase(bulkUpdateStatus.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(bulkUpdateStatus.fulfilled, (state) => {
+        state.isLoading = false;
+        state.selectedRecords = [];
+      })
+      .addCase(bulkUpdateStatus.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
       });

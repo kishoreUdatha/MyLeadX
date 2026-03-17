@@ -49,6 +49,7 @@ model Organization {
   channels          Channel[]
   customFields      CustomField[]
   voiceAgents       VoiceAgent[]
+  voiceTemplates    OrganizationVoiceTemplate[]
   subscriptions     Subscription[]
 
   // B2B Partner Relations
@@ -65,11 +66,19 @@ model Organization {
   // Inbound Call Features
   ivrFlows          IvrFlow[]
   ivrNodes          IvrNode[]
+  callFlows         CallFlow[]
   callQueues        CallQueue[]
   voicemails        Voicemail[]
   callbackRequests  CallbackRequest[]
   inboundCallLogs   InboundCallLog[]
   agentSkills       AgentSkill[]
+
+  // Compliance & Analytics
+  consentRecords            ConsentRecord[]
+  complianceAuditLogs       ComplianceAuditLog[]
+  recordingDisclosureConfig RecordingDisclosureConfig?
+  funnelEvents              FunnelEvent[]
+  agentPerformanceDaily     AgentPerformanceDaily[]
 
   @@map("organizations")
 }
@@ -122,6 +131,10 @@ model User {
   rawImportsAssignedTo   RawImportRecord[]  @relation("RawImportAssignedTo")
   rawImportsAssignedBy   RawImportRecord[]  @relation("RawImportAssignedBy")
   rawImportsConvertedBy  RawImportRecord[]  @relation("RawImportConvertedBy")
+
+  // Voice Agents
+  voiceAgentsCreated     VoiceAgent[]       @relation("VoiceAgentCreator")
+  callFlowsCreated       CallFlow[]         @relation("CallFlowCreator")
 
   @@unique([organizationId, email])
   @@map("users")
@@ -332,6 +345,11 @@ model Lead {
   telecallerCalls  TelecallerCall[] @relation("LeadTelecallerCalls")
   rawImportRecordsConverted RawImportRecord[] @relation("RawImportConvertedLead")
   sequenceEnrollments LeadSequenceEnrollment[]
+  callFlowLogs        CallFlowLog[]
+  leadScore           LeadScore?
+  consentRecords      ConsentRecord[]
+  funnelEvents        FunnelEvent[]
+  otpVerifications    OtpVerification[]
 
   @@index([organizationId, phone])
   @@index([organizationId, email])
@@ -975,6 +993,9 @@ enum LeadSource {
   AD_INSTAGRAM
   AD_LINKEDIN
   AD_GOOGLE
+  AI_VOICE_AGENT
+  AI_VOICE_INBOUND
+  AI_VOICE_OUTBOUND
   REFERRAL
   WEBSITE
   SHIKSHA
@@ -1250,6 +1271,106 @@ model PhoneNumber {
   @@map("phone_numbers")
 }
 
+// ==================== VOICE AI TEMPLATES (Organization-specific) ====================
+
+model OrganizationVoiceTemplate {
+  id              String   @id @default(uuid())
+  organizationId  String
+
+  // Template Info
+  name            String
+  slug            String
+  description     String?  @db.Text
+  industry        VoiceAgentIndustry
+  category        String?  // Admissions, Support, Sales, etc.
+  icon            String?  // Icon name or emoji
+  color           String   @default("#3B82F6")
+
+  // AI Configuration
+  systemPrompt    String   @db.Text
+  voiceId         String   @default("alloy")
+  language        String   @default("en")
+  temperature     Float    @default(0.7)
+
+  // Qualification Questions
+  questions       Json     @default("[]")
+
+  // Knowledge Base
+  knowledgeBase   String?  @db.Text
+
+  // FAQs
+  faqs            Json     @default("[]")
+
+  // Documents
+  documents       Json     @default("[]")
+
+  // Multi-language Greetings
+  greetings       Json     @default("{}")
+
+  // Default Messages
+  greeting        String?
+  fallbackMessage String?
+  transferMessage String?
+  endMessage      String?
+  afterHoursMessage String? @db.Text
+
+  // Behavior Settings
+  personality        String   @default("professional")
+  responseSpeed      String   @default("normal")
+  interruptHandling  String   @default("polite")
+  maxDuration        Int      @default(300)
+  silenceTimeout     Int      @default(30)
+
+  // Working Hours
+  workingHoursEnabled Boolean  @default(false)
+  workingHoursStart   String   @default("09:00")
+  workingHoursEnd     String   @default("18:00")
+  workingDays         Json     @default("[\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\"]")
+
+  // Widget Settings
+  widgetTitle     String?
+  widgetSubtitle  String?
+  widgetColor     String   @default("#3B82F6")
+  widgetPosition  String   @default("bottom-right")
+
+  // Lead Settings
+  autoCreateLeads      Boolean  @default(true)
+  deduplicateByPhone   Boolean  @default(true)
+  autoAdvanceStage     Boolean  @default(false)
+
+  // Appointment Settings
+  appointmentEnabled   Boolean  @default(false)
+  appointmentType      String?
+  appointmentDuration  Int      @default(30)
+
+  // CRM Settings
+  crmIntegration       String?
+  triggerWebhookOnLead Boolean  @default(true)
+
+  // Template Status
+  isActive        Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+
+  // Version Control
+  version         String   @default("1.0.0")
+  changelog       Json     @default("[]")
+
+  // Usage Stats
+  agentsCreated   Int      @default(0)
+  lastUsedAt      DateTime?
+
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, industry])
+  @@index([organizationId, isActive])
+  @@map("organization_voice_templates")
+}
+
 // ==================== VOICE AI AGENT ====================
 
 model VoiceAgent {
@@ -1258,6 +1379,7 @@ model VoiceAgent {
   name            String
   description     String?
   industry        VoiceAgentIndustry
+  agentType       AgentType @default(VOICE)  // Type of agent
   isActive        Boolean  @default(true)
 
   // AI Configuration
@@ -1325,10 +1447,57 @@ model VoiceAgent {
   crmWebhookUrl        String?  // Custom webhook URL for external CRM
   triggerWebhookOnLead Boolean  @default(true)  // Trigger webhooks when lead is created
 
+  // ==================== AGENT TYPE SPECIFIC SETTINGS ====================
+
+  // Sales Agent Settings
+  salesPitch           String?  @db.Text  // Product/service pitch script
+  objectionHandling    Json     @default("[]")  // Array of {objection, response}
+  discountAuthority    Float    @default(0)  // Max discount % agent can offer
+  pricingInfo          Json     @default("{}")  // Product pricing details
+  competitorInfo       Json     @default("[]")  // Competitor comparison data
+  closingTechniques    Json     @default("[]")  // Closing strategies
+
+  // Appointment Agent Settings
+  calendarIntegration  String?  // "google", "outlook", "calendly"
+  calendarId           String?  // Connected calendar ID
+  slotDuration         Int      @default(30)  // Default slot duration in minutes
+  bufferTime           Int      @default(10)  // Buffer between appointments
+  maxAdvanceBooking    Int      @default(30)  // Max days in advance to book
+  reminderSchedule     Json     @default("[24, 1]")  // Hours before to send reminders
+
+  // Payment Agent Settings
+  paymentGateway       String?  // "razorpay", "stripe", "payu"
+  paymentTypes         Json     @default("[\"full\", \"emi\", \"partial\"]")
+  emiOptions           Json     @default("[]")  // EMI plans available
+  paymentReminders     Json     @default("[7, 3, 1, 0]")  // Days before due to remind
+  overdueEscalation    Int      @default(7)  // Days overdue before escalation
+
+  // Support Agent Settings
+  ticketSystem         String?  // "internal", "freshdesk", "zendesk"
+  ticketCategories     Json     @default("[]")  // Support categories
+  escalationRules      Json     @default("[]")  // When to escalate
+  slaConfig            Json     @default("{}")  // SLA settings
+  knowledgeBaseId      String?  // Link to knowledge base
+
+  // Follow-up Agent Settings
+  followupSequence     Json     @default("[]")  // Array of {dayOffset, channel, template}
+  reengagementTrigger  Int      @default(7)  // Days of inactivity to trigger
+  maxFollowups         Int      @default(5)  // Max follow-up attempts
+  winbackEnabled       Boolean  @default(true)  // Enable win-back campaigns
+
+  // Survey Agent Settings
+  surveyType           String?  @default("NPS")  // "NPS", "CSAT", "CES", "custom"
+  surveyQuestions      Json     @default("[]")  // Survey questions
+  surveyTrigger        String?  @default("post_purchase")  // When to trigger
+  surveyDelay          Int      @default(7)  // Days after trigger to send
+  reviewPlatforms      Json     @default("[]")  // Google, G2, etc.
+
+  createdById     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       User?           @relation("VoiceAgentCreator", fields: [createdById], references: [id], onDelete: SetNull)
   sessions        VoiceSession[]
   outboundCampaigns OutboundCallCampaign[]
   outboundCalls   OutboundCall[]
@@ -1336,7 +1505,145 @@ model VoiceAgent {
   rawImportRecords RawImportRecord[] @relation("RawImportAIAgent")
   phoneNumbers    PhoneNumber[]   // Phone numbers assigned to this agent
 
+  // Integration Relations
+  agentIntegrations  AgentIntegration[]
+  customApiEndpoints CustomApiEndpoint[]
+
+  // Call Flow Reference
+  callFlowId      String?
+  callFlow        CallFlow?  @relation(fields: [callFlowId], references: [id], onDelete: SetNull)
+
   @@map("voice_agents")
+}
+
+// ==================== CALL FLOW BUILDER ====================
+
+enum CallFlowNodeType {
+  START
+  GREETING
+  QUESTION
+  CONDITION
+  AI_RESPONSE
+  ACTION
+  TRANSFER
+  END
+}
+
+enum CallFlowActionType {
+  BOOK_APPOINTMENT
+  SEND_SMS
+  SEND_WHATSAPP
+  SEND_EMAIL
+  CREATE_LEAD
+  UPDATE_LEAD
+  TRIGGER_WEBHOOK
+  COLLECT_PAYMENT
+  PLAY_AUDIO
+}
+
+enum CallOutcome {
+  INTERESTED
+  NOT_INTERESTED
+  CALLBACK_REQUESTED
+  APPOINTMENT_BOOKED
+  PAYMENT_COLLECTED
+  TRANSFERRED
+  VOICEMAIL
+  NO_ANSWER
+  WRONG_NUMBER
+  DNC_REQUESTED
+  COMPLETED
+  DROPPED
+  BUSY
+  DO_NOT_CALL
+  CONVERTED
+  NEEDS_FOLLOWUP
+}
+
+model CallFlow {
+  id              String   @id @default(uuid())
+  organizationId  String
+  name            String
+  description     String?
+  industry        String?  // Target industry for this flow
+  isActive        Boolean  @default(true)
+  isTemplate      Boolean  @default(false)  // Can be used as template
+  version         Int      @default(1)
+
+  // Flow Configuration
+  nodes           Json     @default("[]")  // Array of CallFlowNode data
+  edges           Json     @default("[]")  // Array of {source, target, condition}
+  variables       Json     @default("[]")  // Flow variables to collect
+
+  // Default Messages
+  defaultGreeting     String?  @db.Text
+  defaultFallback     String?  @db.Text
+  defaultTransfer     String?  @db.Text
+  defaultEnd          String?  @db.Text
+
+  // Outcome Configuration
+  successOutcomes     Json     @default("[\"INTERESTED\", \"APPOINTMENT_BOOKED\", \"PAYMENT_COLLECTED\"]")
+  failureOutcomes     Json     @default("[\"NOT_INTERESTED\", \"WRONG_NUMBER\", \"DNC_REQUESTED\"]")
+
+  // Analytics
+  totalCalls          Int      @default(0)
+  successfulCalls     Int      @default(0)
+  avgDuration         Float    @default(0)
+  conversionRate      Float    @default(0)
+
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       User?        @relation("CallFlowCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  voiceAgents     VoiceAgent[]
+  callLogs        CallFlowLog[]
+
+  @@index([organizationId, isActive])
+  @@index([organizationId, createdAt])
+  @@map("call_flows")
+}
+
+model CallFlowLog {
+  id              String   @id @default(uuid())
+  callFlowId      String
+  sessionId       String?  // VoiceSession ID or OutboundCall ID
+  leadId          String?
+
+  // Call Details
+  phoneNumber     String
+  direction       String   @default("outbound")  // inbound, outbound
+  startedAt       DateTime @default(now())
+  endedAt         DateTime?
+  duration        Int?     // seconds
+
+  // Flow Execution
+  nodesVisited    Json     @default("[]")  // Array of node IDs visited
+  variablesCollected Json  @default("{}")  // Collected variable values
+  currentNodeId   String?  // Current/last node
+
+  // Outcome
+  outcome         CallOutcome?
+  outcomeReason   String?
+  sentiment       String?  // positive, neutral, negative
+  qualityScore    Float?   // 1-10 AI quality score
+
+  // Transcript
+  transcript      Json     @default("[]")  // Full conversation transcript
+  summary         String?  @db.Text  // AI-generated summary
+
+  // Actions Taken
+  actionsTaken    Json     @default("[]")  // Actions executed during call
+
+  createdAt       DateTime @default(now())
+
+  callFlow        CallFlow @relation(fields: [callFlowId], references: [id], onDelete: Cascade)
+  lead            Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([callFlowId, startedAt])
+  @@index([sessionId])
+  @@map("call_flow_logs")
 }
 
 model VoiceSession {
@@ -1421,6 +1728,17 @@ enum VoiceAgentIndustry {
   CUSTOM
 }
 
+// Agent Types for different purposes
+enum AgentType {
+  VOICE           // Voice calling agent (default)
+  SALES           // Sales/closing agent
+  APPOINTMENT     // Appointment booking agent
+  PAYMENT         // Payment collection agent
+  SUPPORT         // Customer support agent
+  FOLLOWUP        // Follow-up/nurturing agent
+  SURVEY          // Survey/feedback agent
+}
+
 enum VoiceSessionStatus {
   ACTIVE
   COMPLETED
@@ -1488,6 +1806,7 @@ model OutboundCallContact {
   attempts        Int      @default(0)
   lastAttemptAt   DateTime?
   nextAttemptAt   DateTime?
+  notes           String?  // P0 Compliance: Notes for DNC blocks, compliance skips, etc.
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -1577,6 +1896,7 @@ enum OutboundContactStatus {
   FAILED
   DO_NOT_CALL
   SCHEDULED
+  SKIPPED         // P0 Compliance: Contact skipped due to DNC or other compliance reason
 }
 
 enum OutboundCallStatus {
@@ -1589,19 +1909,6 @@ enum OutboundCallStatus {
   NO_ANSWER
   FAILED
   CANCELLED
-}
-
-enum CallOutcome {
-  INTERESTED
-  NOT_INTERESTED
-  CALLBACK_REQUESTED
-  WRONG_NUMBER
-  VOICEMAIL
-  NO_ANSWER
-  BUSY
-  DO_NOT_CALL
-  CONVERTED
-  NEEDS_FOLLOWUP
 }
 
 // ==================== ADVANCED FEATURES ====================
@@ -1633,12 +1940,20 @@ model LeadScore {
   grade           LeadGrade @default(C)
   priority        Int       @default(5)
 
+  // AI Classification (Enterprise Feature)
+  aiClassification         String?   // hot_lead, warm_lead, cold_lead, not_qualified
+  classificationConfidence Float     @default(0)
+  demographicScore         Int       @default(0)
+  behaviorScore            Int       @default(0)
+
   // Decay tracking
   lastCalculatedAt DateTime?
   metadata        Json?
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@map("lead_scores")
 }
@@ -4411,6 +4726,9 @@ model CalendarIntegration {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Relations
+  agentIntegrations AgentIntegration[]
+
   @@unique([organizationId, userId, provider])
   @@index([organizationId])
   @@map("calendar_integrations")
@@ -4608,6 +4926,9 @@ model CrmIntegration {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Relations
+  agentIntegrations AgentIntegration[]
+
   @@index([organizationId])
   @@map("crm_integrations")
 }
@@ -4617,4 +4938,336 @@ enum CrmIntegrationType {
   HUBSPOT
   ZOHO
   CUSTOM
+}
+
+// ==================== PAYMENT INTEGRATION ====================
+
+model PaymentIntegration {
+  id              String   @id @default(uuid())
+  organizationId  String
+
+  // Provider
+  provider        PaymentProvider
+  isActive        Boolean  @default(true)
+
+  // API Credentials (encrypted)
+  apiKey          String?  @db.Text
+  apiSecret       String?  @db.Text
+  webhookSecret   String?  @db.Text
+  merchantId      String?
+
+  // Settings
+  currency        String   @default("INR")
+  testMode        Boolean  @default(false)
+
+  // Connection Status
+  isConnected     Boolean  @default(false)
+  lastVerifiedAt  DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  agentIntegrations AgentIntegration[]
+
+  @@unique([organizationId, provider])
+  @@index([organizationId])
+  @@map("payment_integrations")
+}
+
+enum PaymentProvider {
+  RAZORPAY
+  STRIPE
+  PAYPAL
+}
+
+// ==================== AGENT INTEGRATION (Links agents to integrations) ====================
+
+model AgentIntegration {
+  id              String   @id @default(uuid())
+  voiceAgentId    String
+  organizationId  String
+
+  // Integration Type
+  integrationType AgentIntegrationType
+  isEnabled       Boolean  @default(true)
+
+  // Foreign Keys (one will be set based on type)
+  calendarIntegrationId String?
+  crmIntegrationId      String?
+  paymentIntegrationId  String?
+
+  // Configuration specific to this agent
+  config          Json     @default("{}")
+
+  // For Calendar: bufferTime, workingHours, etc.
+  // For CRM: autoCreateLead, fieldMappings, etc.
+  // For Payment: collectDuringCall, defaultAmount, etc.
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  voiceAgent      VoiceAgent @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
+  calendarIntegration CalendarIntegration? @relation(fields: [calendarIntegrationId], references: [id])
+  crmIntegration  CrmIntegration? @relation(fields: [crmIntegrationId], references: [id])
+  paymentIntegration PaymentIntegration? @relation(fields: [paymentIntegrationId], references: [id])
+
+  @@unique([voiceAgentId, integrationType])
+  @@index([voiceAgentId])
+  @@index([organizationId])
+  @@map("agent_integrations")
+}
+
+enum AgentIntegrationType {
+  CALENDAR
+  CRM
+  PAYMENT
+  CUSTOM_API
+}
+
+// ==================== CUSTOM API ENDPOINTS ====================
+
+model CustomApiEndpoint {
+  id              String   @id @default(uuid())
+  organizationId  String
+  voiceAgentId    String?  // If null, applies to all agents in org
+
+  name            String
+  url             String
+  method          String   @default("POST") // GET, POST, PUT, DELETE
+  headers         Json     @default("{}")   // Custom headers
+  authType        String?  // none, bearer, api_key, basic
+  authValue       String?  @db.Text         // Encrypted auth value
+
+  // Trigger Configuration
+  trigger         String   // on_call_start, on_call_end, on_appointment, on_keyword, manual
+  triggerKeywords String[] @default([])     // For keyword-based triggers
+
+  // Response Handling
+  parseResponse   Boolean  @default(false)  // Parse response into agent context
+  responseMapping Json     @default("{}")   // Map response fields to agent context
+
+  isActive        Boolean  @default(true)
+  lastCalledAt    DateTime?
+  callCount       Int      @default(0)
+  lastError       String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  voiceAgent      VoiceAgent? @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([voiceAgentId])
+  @@map("custom_api_endpoints")
+}
+
+// ==================== COMPLIANCE MODULE ====================
+
+enum ConsentType {
+  CALL_RECORDING
+  MARKETING_CALLS
+  DATA_PROCESSING
+  PAYMENT_COLLECTION
+}
+
+model ConsentRecord {
+  id              String        @id @default(uuid())
+  organizationId  String
+  leadId          String?
+  phoneNumber     String
+  consentType     ConsentType
+  consentGiven    Boolean
+  consentMethod   String        // VERBAL, WRITTEN, DIGITAL, IVR_KEYPRESS
+  callId          String?
+  recordingUrl    String?
+  consentPhrase   String?       @db.Text
+  validFrom       DateTime      @default(now())
+  validUntil      DateTime?
+  revokedAt       DateTime?
+  revokedBy       String?
+  revokeReason    String?
+  createdAt       DateTime      @default(now())
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead            Lead?         @relation(fields: [leadId], references: [id])
+
+  @@index([organizationId, phoneNumber])
+  @@index([organizationId, consentType])
+  @@map("consent_records")
+}
+
+model ComplianceAuditLog {
+  id              String   @id @default(uuid())
+  organizationId  String
+  eventType       String   // CONSENT_OBTAINED, DNC_ADDED, RECORDING_DISCLOSURE, DATA_ACCESS, DATA_DELETION
+  actorType       String   // user, system, voice_agent
+  actorId         String?
+  targetType      String   // lead, phone_number, call, consent
+  targetId        String?
+  action          String   // created, updated, deleted, accessed, revoked
+  description     String?
+  metadata        Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, eventType, createdAt])
+  @@index([organizationId, targetType, targetId])
+  @@map("compliance_audit_logs")
+}
+
+model RecordingDisclosureConfig {
+  id                    String   @id @default(uuid())
+  organizationId        String   @unique
+  disclosureEnabled     Boolean  @default(true)
+  disclosureText        String?  @db.Text  // Default disclosure message
+  disclosureMessages    Json     @default("{}")  // Language-specific messages
+  requireAcknowledgment Boolean  @default(false)
+  acknowledgmentPhrase  String?  // e.g., "Press 1 to acknowledge"
+  autoPlayDelay         Int      @default(0)  // Seconds before auto-playing disclosure
+  recordingConsent      Boolean  @default(true)  // Whether to ask for recording consent
+  consentRequired       Boolean  @default(true)  // Whether consent is required to continue
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("recording_disclosure_configs")
+}
+
+// ==================== ANALYTICS & FUNNEL TRACKING ====================
+
+model FunnelEvent {
+  id              String   @id @default(uuid())
+  organizationId  String
+  leadId          String?
+  funnelName      String   @default("sales")  // sales, support, onboarding
+  stageName       String   // lead, contacted, qualified, appointment, payment, converted
+  stageOrder      Int
+  sourceCallId    String?
+  sourceAgentId   String?
+  previousStage   String?
+  metadata        Json?    @default("{}")
+  enteredAt       DateTime @default(now())
+  exitedAt        DateTime?
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead            Lead?        @relation(fields: [leadId], references: [id])
+
+  @@index([organizationId, funnelName, stageName])
+  @@index([organizationId, enteredAt])
+  @@map("funnel_events")
+}
+
+model AgentPerformanceDaily {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  agentId             String   // VoiceAgent ID
+  agentName           String?
+  date                DateTime @db.Date
+
+  // Call Metrics
+  totalCalls          Int      @default(0)
+  answeredCalls       Int      @default(0)
+  avgCallDuration     Int      @default(0)  // seconds
+  totalTalkTime       Int      @default(0)  // seconds
+
+  // Outcome Metrics
+  interestedCount     Int      @default(0)
+  appointmentsBooked  Int      @default(0)
+  paymentsCollected   Int      @default(0)
+  paymentsAmount      Float    @default(0)
+  leadsGenerated      Int      @default(0)
+  callbacksRequested  Int      @default(0)
+
+  // Quality Metrics
+  avgSentimentScore   Float    @default(0)  // -1 to 1
+  avgQualityScore     Float    @default(0)  // 1 to 10
+  positiveCallsCount  Int      @default(0)
+  negativeCallsCount  Int      @default(0)
+
+  // Performance Metrics
+  conversionRate      Float    @default(0)
+  answerRate          Float    @default(0)
+  avgLeadScore        Float    @default(0)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, agentId, date])
+  @@index([organizationId, date])
+  @@index([agentId, date])
+  @@map("agent_performance_daily")
+}
+
+// ==================== OTP VERIFICATION ====================
+
+model OtpVerification {
+  id              String   @id @default(uuid())
+  organizationId  String?
+
+  // Target
+  identifier      String   // Phone number or email
+  identifierType  OtpIdentifierType
+
+  // OTP Details
+  otp             String   // Hashed OTP
+  purpose         OtpPurpose
+
+  // Status
+  isVerified      Boolean  @default(false)
+  attempts        Int      @default(0)
+  maxAttempts     Int      @default(3)
+
+  // Channel used to send OTP
+  channel         OtpChannel @default(SMS)
+
+  // Related entities (optional)
+  leadId          String?
+  applicationId   String?
+  userId          String?
+
+  // Timing
+  expiresAt       DateTime
+  verifiedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  lead            Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([identifier, purpose])
+  @@index([organizationId])
+  @@index([leadId])
+  @@map("otp_verifications")
+}
+
+enum OtpIdentifierType {
+  PHONE
+  EMAIL
+}
+
+enum OtpPurpose {
+  PHONE_VERIFICATION
+  EMAIL_VERIFICATION
+  APPLICATION_SUBMISSION
+  DOCUMENT_UPLOAD
+  PAYMENT_CONFIRMATION
+  ACCOUNT_LOGIN
+  PASSWORD_RESET
+  ADMISSION_CONFIRMATION
+}
+
+enum OtpChannel {
+  SMS
+  EMAIL
+  WHATSAPP
+  VOICE_CALL
 }

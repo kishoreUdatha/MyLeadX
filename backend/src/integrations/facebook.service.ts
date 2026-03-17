@@ -6,6 +6,7 @@ import { AdPlatform, LeadSource, LeadPriority } from '@prisma/client';
 import { leadAutoAssignService } from '../services/leadAutoAssign.service';
 import { circuitBreakers, CircuitBreakerError } from '../utils/circuitBreaker';
 import { API_VERSIONS, API_ENDPOINTS } from '../utils/constants';
+import { externalLeadImportService } from '../services/external-lead-import.service';
 
 const FB_GRAPH_URL = API_ENDPOINTS.FACEBOOK_GRAPH;
 
@@ -145,49 +146,40 @@ export class FacebookService {
       }
     }
 
-    // Create lead
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId,
-        firstName: fields.first_name || fields.full_name?.split(' ')[0] || 'Unknown',
-        lastName: fields.last_name || fields.full_name?.split(' ').slice(1).join(' '),
-        email: fields.email,
-        phone: fields.phone_number || 'N/A',
-        source: LeadSource.AD_FACEBOOK,
-        sourceDetails: `Campaign: ${adCampaign?.name || 'Unknown'}`,
-        priority: LeadPriority.MEDIUM,
-        customFields: fields,
+    // Route to RawImportRecord instead of creating Lead directly
+    // This prevents voice agent loop and gives admin control
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: fields.first_name || fields.full_name?.split(' ')[0] || 'Unknown',
+      lastName: fields.last_name || fields.full_name?.split(' ').slice(1).join(' '),
+      email: fields.email,
+      phone: fields.phone_number || 'N/A',
+      source: 'AD_FACEBOOK',
+      sourceDetails: `Campaign: ${adCampaign?.name || 'Unknown'}`,
+      campaignName: adCampaign?.name,
+      customFields: {
+        ...fields,
+        leadgenId,
+        campaignId: leadData.campaign_id,
+        adId: leadData.ad_id,
+        formId: leadData.form_id,
       },
     });
 
-    // Create ad lead record
-    if (adCampaign) {
-      await prisma.adLead.create({
-        data: {
-          adCampaignId: adCampaign.id,
-          leadId: lead.id,
-          externalId: leadgenId,
-          rawData: leadData as any,
-        },
-      });
+    if (result.isDuplicate) {
+      console.log(`[Facebook] Duplicate lead skipped: ${fields.phone_number}`);
+      return result.rawImportRecord;
+    }
 
-      // Update campaign conversions count
+    // Update campaign conversions count (tracking only, not creating lead)
+    if (adCampaign) {
       await prisma.adCampaign.update({
         where: { id: adCampaign.id },
         data: { conversions: { increment: 1 } },
       });
     }
 
-    // Auto-assign to AI agent for calling
-    try {
-      await leadAutoAssignService.processNewLead(lead.id);
-      console.log(`Lead ${lead.id} auto-assigned to AI agent`);
-    } catch (error) {
-      console.error(`Failed to auto-assign lead ${lead.id}:`, error);
-      // Don't throw - lead is already created
-    }
-
-    return lead;
+    console.log(`[Facebook] Lead imported to RawImportRecord: ${result.rawImportRecord.id}`);
+    return result.rawImportRecord;
   }
 
   private parseFieldData(fieldData: Array<{ name: string; values: string[] }>): Record<string, string> {
@@ -471,37 +463,36 @@ export class FacebookService {
       }
     }
 
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId,
-        firstName: fields.first_name || fields.firstName || fields.full_name?.split(' ')[0] || 'Unknown',
-        lastName: fields.last_name || fields.lastName || fields.full_name?.split(' ').slice(1).join(' '),
-        email: fields.email,
-        phone: fields.phone_number || fields.phone || 'N/A',
-        source: LeadSource.AD_FACEBOOK,
-        sourceDetails: `Facebook Campaign: ${adCampaign?.name || 'Unknown'}`,
-        priority: LeadPriority.MEDIUM,
-        customFields: fields,
+    // Route to RawImportRecord instead of creating Lead directly
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: fields.first_name || fields.firstName || fields.full_name?.split(' ')[0] || 'Unknown',
+      lastName: fields.last_name || fields.lastName || fields.full_name?.split(' ').slice(1).join(' '),
+      email: fields.email,
+      phone: fields.phone_number || fields.phone || 'N/A',
+      source: 'AD_FACEBOOK',
+      sourceDetails: `Facebook Campaign: ${adCampaign?.name || 'Unknown'}`,
+      campaignName: adCampaign?.name,
+      customFields: {
+        ...fields,
+        leadId: leadData.id,
+        campaignId: leadData.campaign_id,
+        adId: leadData.ad_id,
+        formId: leadData.form_id,
       },
     });
 
-    if (adCampaign) {
-      await prisma.adLead.create({
-        data: {
-          adCampaignId: adCampaign.id,
-          leadId: lead.id,
-          externalId: leadData.id,
-          rawData: leadData as any,
-        },
-      });
+    if (result.isDuplicate) {
+      return null;
+    }
 
+    if (adCampaign) {
       await prisma.adCampaign.update({
         where: { id: adCampaign.id },
         data: { conversions: { increment: 1 } },
       });
     }
 
-    return lead;
+    return result.rawImportRecord;
   }
 }
 

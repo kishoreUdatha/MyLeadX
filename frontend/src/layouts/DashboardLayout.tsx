@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { AppDispatch, RootState } from '../store';
@@ -29,6 +29,10 @@ import {
   DocumentArrowUpIcon,
   EyeIcon,
   ChevronDownIcon,
+  DocumentDuplicateIcon,
+  ShieldCheckIcon,
+  FunnelIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -62,6 +66,7 @@ const callsNavigation: NavItem[] = [
   { name: 'AI Calling', href: '/outbound-calls', icon: PhoneIcon, roles: ['admin', 'manager', 'telecaller'] },
   { name: 'My Queue', href: '/telecaller-queue', icon: QueueListIcon, roles: ['admin', 'manager', 'telecaller'] },
   { name: 'Voice Agents', href: '/voice-ai', icon: SparklesIcon, roles: ['admin', 'manager'] },
+  { name: 'Call Flows', href: '/call-flows', icon: ArrowPathRoundedSquareIcon, roles: ['admin', 'manager'] },
   { name: 'Call Monitoring', href: '/call-monitoring', icon: EyeIcon, roles: ['admin', 'manager'] },
 ];
 
@@ -76,24 +81,40 @@ const marketingNavigation: NavItem[] = [
 // Analytics - Reports & insights
 const analyticsNavigation: NavItem[] = [
   { name: 'Analytics', href: '/analytics', icon: PresentationChartLineIcon, roles: ['admin', 'manager'] },
+  { name: 'Lead Sources', href: '/analytics/lead-sources', icon: UserGroupIcon, roles: ['admin', 'manager'] },
+  { name: 'Funnel', href: '/analytics/funnel', icon: FunnelIcon, roles: ['admin', 'manager'] },
+  { name: 'Agent Perf.', href: '/analytics/agents', icon: TrophyIcon, roles: ['admin', 'manager'] },
   { name: 'Reports', href: '/reports', icon: ChartBarIcon, roles: ['admin', 'manager'] },
+];
+
+// Compliance - Consent & regulatory
+const complianceNavigation: NavItem[] = [
+  { name: 'Compliance', href: '/compliance', icon: ShieldCheckIcon, roles: ['admin', 'manager'] },
 ];
 
 // Settings - Configuration (Admin focused)
 const settingsNavigation: NavItem[] = [
   { name: 'Users', href: '/users', icon: UsersIcon, roles: ['admin'] },
   { name: 'Integrations', href: '/settings/crm-integration', icon: ArrowPathRoundedSquareIcon, roles: ['admin', 'manager'] },
+  { name: 'Post-Call Messages', href: '/settings/post-call-messaging', icon: BellIcon, roles: ['admin', 'manager'] },
   { name: 'Subscription', href: '/subscription', icon: CreditCardIcon, roles: ['admin', 'manager'] },
   { name: 'API Keys', href: '/api-keys', icon: KeyIcon, roles: ['admin'] },
 ];
+
+// Routes where top header should be hidden
+const headerHiddenRoutes = ['/voice-ai/create', '/voice-ai/create-from-template', '/call-flows/builder'];
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useSelector((state: RootState) => state.auth);
   const { t } = useTranslation(['navigation', 'common']);
+
+  // Check if current route should hide header
+  const hideHeader = headerHiddenRoutes.some(route => location.pathname.startsWith(route));
 
   // Get user's role slug (lowercase)
   const rawRole = user?.role || '';
@@ -112,6 +133,7 @@ export default function DashboardLayout() {
   const filteredCalls = useMemo(() => filterByRole(callsNavigation), [userRole]);
   const filteredMarketing = useMemo(() => filterByRole(marketingNavigation), [userRole]);
   const filteredAnalytics = useMemo(() => filterByRole(analyticsNavigation), [userRole]);
+  const filteredCompliance = useMemo(() => filterByRole(complianceNavigation), [userRole]);
   const filteredSettings = useMemo(() => filterByRole(settingsNavigation), [userRole]);
 
   const handleLogout = async () => {
@@ -144,13 +166,13 @@ export default function DashboardLayout() {
 
       {/* Mobile sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-slate-900 transition-transform duration-300 ease-in-out lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-56 transform bg-slate-900 transition-transform duration-300 ease-in-out lg:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between px-6 border-b border-slate-800">
+          <div className="flex h-14 items-center justify-between px-4 border-b border-slate-800">
             <span className="text-xl font-bold bg-gradient-to-r from-primary-400 to-primary-300 bg-clip-text text-transparent">
               CRM Pro
             </span>
@@ -174,7 +196,7 @@ export default function DashboardLayout() {
             {/* Calls Section */}
             {filteredCalls.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
                   Calls
                 </div>
                 <div className="mt-1 space-y-1">
@@ -188,7 +210,7 @@ export default function DashboardLayout() {
             {/* Marketing Section */}
             {showAdvancedSections && filteredMarketing.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-sky-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-sky-400 uppercase tracking-wider">
                   Marketing
                 </div>
                 <div className="mt-1 space-y-1">
@@ -202,7 +224,7 @@ export default function DashboardLayout() {
             {/* Analytics Section */}
             {showAdvancedSections && filteredAnalytics.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
                   Analytics
                 </div>
                 <div className="mt-1 space-y-1">
@@ -213,10 +235,24 @@ export default function DashboardLayout() {
               </div>
             )}
 
+            {/* Compliance Section */}
+            {showAdvancedSections && filteredCompliance.length > 0 && (
+              <div>
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-teal-400 uppercase tracking-wider">
+                  Compliance
+                </div>
+                <div className="mt-1 space-y-1">
+                  {filteredCompliance.map((item) => (
+                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Settings Section */}
             {showAdvancedSections && filteredSettings.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                   Settings
                 </div>
                 <div className="mt-1 space-y-1">
@@ -231,20 +267,20 @@ export default function DashboardLayout() {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-52 lg:flex-col">
         <div className="flex min-h-0 flex-1 flex-col bg-slate-900">
           {/* Logo */}
-          <div className="flex h-16 items-center px-6 border-b border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-                <SparklesIcon className="w-5 h-5 text-white" />
+          <div className="flex h-14 items-center px-4 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+                <SparklesIcon className="w-4 h-4 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">CRM Pro</span>
+              <span className="text-lg font-bold text-white">CRM Pro</span>
             </div>
           </div>
 
           {/* Navigation - Simplified */}
-          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-hide">
+          <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto scrollbar-hide">
             {/* Main Navigation */}
             <div className="space-y-1">
               {filteredMain.map((item) => (
@@ -255,7 +291,7 @@ export default function DashboardLayout() {
             {/* Calls Section */}
             {filteredCalls.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
                   Calls
                 </div>
                 <div className="mt-1 space-y-1">
@@ -269,7 +305,7 @@ export default function DashboardLayout() {
             {/* Marketing Section */}
             {showAdvancedSections && filteredMarketing.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-sky-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-sky-400 uppercase tracking-wider">
                   Marketing
                 </div>
                 <div className="mt-1 space-y-1">
@@ -283,7 +319,7 @@ export default function DashboardLayout() {
             {/* Analytics Section */}
             {showAdvancedSections && filteredAnalytics.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
                   Analytics
                 </div>
                 <div className="mt-1 space-y-1">
@@ -294,10 +330,24 @@ export default function DashboardLayout() {
               </div>
             )}
 
+            {/* Compliance Section */}
+            {showAdvancedSections && filteredCompliance.length > 0 && (
+              <div>
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-teal-400 uppercase tracking-wider">
+                  Compliance
+                </div>
+                <div className="mt-1 space-y-1">
+                  {filteredCompliance.map((item) => (
+                    <NavItem key={item.name} item={item} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Settings Section */}
             {showAdvancedSections && filteredSettings.length > 0 && (
               <div>
-                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                   Settings
                 </div>
                 <div className="mt-1 space-y-1">
@@ -312,8 +362,9 @@ export default function DashboardLayout() {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64">
-        {/* Top bar - Compact */}
+      <div className="lg:pl-52">
+        {/* Top bar - Compact (hidden on certain routes) */}
+        {!hideHeader && (
         <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-slate-200/60">
           <div className="flex h-11 items-center justify-between px-3 sm:px-4 lg:px-6">
             {/* Mobile menu button */}
@@ -389,10 +440,11 @@ export default function DashboardLayout() {
             </div>
           </div>
         </header>
+        )}
 
         {/* Page content */}
-        <main className="py-4 px-4 sm:px-5 lg:px-6">
-          <div className="animate-fade-in">
+        <main className={hideHeader ? "p-0" : "py-4 px-4 sm:px-5 lg:px-6"}>
+          <div className={hideHeader ? "" : "animate-fade-in"}>
             <Outlet />
           </div>
         </main>

@@ -4,6 +4,7 @@ import { userService, User, Role } from '../../services/user.service';
 interface UserState {
   users: User[];
   counselors: User[];
+  telecallers: User[];
   roles: Role[];
   currentUser: User | null;
   total: number;
@@ -14,6 +15,7 @@ interface UserState {
 const initialState: UserState = {
   users: [],
   counselors: [],
+  telecallers: [],
   roles: [],
   currentUser: null,
   total: 0,
@@ -43,6 +45,19 @@ export const fetchCounselors = createAsyncThunk(
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
       return rejectWithValue(err.response?.data?.message || 'Failed to fetch counselors');
+    }
+  }
+);
+
+export const fetchTelecallers = createAsyncThunk(
+  'users/fetchTelecallers',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await userService.getTelecallers();
+      return response;
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      return rejectWithValue(err.response?.data?.message || 'Failed to fetch telecallers');
     }
   }
 );
@@ -126,6 +141,11 @@ const userSlice = createSlice({
     // Fetch counselors
     builder.addCase(fetchCounselors.fulfilled, (state, action) => {
       state.counselors = action.payload;
+    });
+
+    // Fetch telecallers
+    builder.addCase(fetchTelecallers.fulfilled, (state, action) => {
+      state.telecallers = action.payload;
     });
 
     // Fetch roles

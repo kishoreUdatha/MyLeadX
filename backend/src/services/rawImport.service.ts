@@ -499,6 +499,27 @@ export class RawImportService {
     };
   }
 
+  async bulkUpdateStatus(
+    recordIds: string[],
+    organizationId: string,
+    status: RawImportRecordStatus
+  ) {
+    const result = await prisma.rawImportRecord.updateMany({
+      where: {
+        id: { in: recordIds },
+        organizationId,
+      },
+      data: {
+        status,
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      updatedCount: result.count,
+    };
+  }
+
   // ==================== STATS ====================
 
   async getStats(organizationId: string): Promise<BulkImportStats> {

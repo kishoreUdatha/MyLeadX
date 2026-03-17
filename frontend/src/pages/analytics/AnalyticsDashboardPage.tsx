@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   AreaChart,
   Area,
@@ -13,8 +13,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  LineChart,
-  Line,
 } from 'recharts';
 import {
   ChartBarIcon,
@@ -23,11 +21,18 @@ import {
   ChatBubbleLeftRightIcon,
   KeyIcon,
   ArrowPathIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  CalendarDaysIcon,
+  BoltIcon,
+  GlobeAltIcon,
+  DevicePhoneMobileIcon,
+  InboxIcon,
   PhoneIcon,
-  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
+import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 import api from '../../services/api';
 
 interface DashboardSummary {
@@ -79,15 +84,15 @@ interface UsageTrendData {
   user: number;
 }
 
-const COLORS = {
-  primary: '#6366F1',
-  success: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  purple: '#8B5CF6',
-  pink: '#EC4899',
-  cyan: '#06B6D4',
-  orange: '#F97316',
+const GRADIENT_COLORS = {
+  primary: ['#6366F1', '#4F46E5'],
+  success: ['#10B981', '#059669'],
+  warning: ['#F59E0B', '#D97706'],
+  danger: ['#EF4444', '#DC2626'],
+  purple: ['#8B5CF6', '#7C3AED'],
+  pink: ['#EC4899', '#DB2777'],
+  cyan: ['#06B6D4', '#0891B2'],
+  orange: ['#F97316', '#EA580C'],
 };
 
 const PIE_COLORS = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#8B5CF6', '#06B6D4', '#EF4444', '#84CC16'];
@@ -99,15 +104,11 @@ const AnalyticsDashboardPage = () => {
   const [dateRange, setDateRange] = useState('30');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshCountdown, setRefreshCountdown] = useState(30);
+  const [activeTab, setActiveTab] = useState<'overview' | 'messaging' | 'api'>('overview');
 
   useEffect(() => {
     fetchDashboardData();
-
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchDashboardData();
-    }, 30000);
-
+    const interval = setInterval(() => fetchDashboardData(), 30000);
     return () => clearInterval(interval);
   }, [dateRange]);
 
@@ -126,7 +127,6 @@ const AnalyticsDashboardPage = () => {
       setUsageTrend(trendRes.data.data);
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
-      // Set mock data for demo
       setSummary(getMockData());
       setUsageTrend(getMockTrendData());
     } finally {
@@ -136,7 +136,6 @@ const AnalyticsDashboardPage = () => {
     }
   };
 
-  // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
       setRefreshCountdown((prev) => (prev > 0 ? prev - 1 : 30));
@@ -147,386 +146,664 @@ const AnalyticsDashboardPage = () => {
   const formatNumber = (num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
+    return num.toLocaleString();
   };
 
-  // Prepare chart data
-  const leadSourceData = summary?.leads.bySource
-    ? Object.entries(summary.leads.bySource).map(([name, value], index) => ({
-        name: name.replace(/_/g, ' '),
-        value,
-        color: PIE_COLORS[index % PIE_COLORS.length],
-      }))
-    : [];
+  const leadSourceData = useMemo(() =>
+    summary?.leads.bySource
+      ? Object.entries(summary.leads.bySource).map(([name, value], index) => ({
+          name: name.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()),
+          value,
+          color: PIE_COLORS[index % PIE_COLORS.length],
+        }))
+      : [],
+    [summary]
+  );
 
-  const messagingData = summary
-    ? [
-        { name: 'SMS', sent: summary.messaging.sms.sent, delivered: summary.messaging.sms.delivered, failed: summary.messaging.sms.failed },
-        { name: 'Email', sent: summary.messaging.email.sent, delivered: summary.messaging.email.delivered, failed: summary.messaging.email.failed },
-        { name: 'WhatsApp', sent: summary.messaging.whatsapp.sent, delivered: summary.messaging.whatsapp.delivered, failed: summary.messaging.whatsapp.failed },
-      ]
-    : [];
+  const messagingData = useMemo(() =>
+    summary
+      ? [
+          { name: 'SMS', sent: summary.messaging.sms.sent, delivered: summary.messaging.sms.delivered, failed: summary.messaging.sms.failed, rate: summary.messaging.sms.deliveryRate },
+          { name: 'Email', sent: summary.messaging.email.sent, delivered: summary.messaging.email.delivered, failed: summary.messaging.email.failed, rate: summary.messaging.email.deliveryRate },
+          { name: 'WhatsApp', sent: summary.messaging.whatsapp.sent, delivered: summary.messaging.whatsapp.delivered, failed: summary.messaging.whatsapp.failed, rate: summary.messaging.whatsapp.deliveryRate },
+        ]
+      : [],
+    [summary]
+  );
 
-  const conversationChannelData = summary?.conversations.byChannel
-    ? Object.entries(summary.conversations.byChannel).map(([name, value], index) => ({
-        name,
-        value,
-        color: PIE_COLORS[index % PIE_COLORS.length],
-      }))
-    : [];
+  const conversationChannelData = useMemo(() =>
+    summary?.conversations.byChannel
+      ? Object.entries(summary.conversations.byChannel).map(([name, value], index) => ({
+          name,
+          value,
+          color: PIE_COLORS[index % PIE_COLORS.length],
+        }))
+      : [],
+    [summary]
+  );
 
-  const apiMethodData = summary?.apiUsage.byMethod
-    ? Object.entries(summary.apiUsage.byMethod).map(([name, value]) => ({
-        name,
-        requests: value,
-      }))
-    : [];
+  const apiMethodData = useMemo(() =>
+    summary?.apiUsage.byMethod
+      ? Object.entries(summary.apiUsage.byMethod).map(([name, value]) => ({
+          name,
+          requests: value,
+        }))
+      : [],
+    [summary]
+  );
 
-  if (loading) {
+  // Skeleton loader
+  if (loading && !summary) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading analytics...</p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-slate-100">
+        <div className="max-w-[1600px] mx-auto px-6 lg:px-8 py-8">
+          <div className="animate-pulse space-y-8">
+            <div className="flex justify-between items-center">
+              <div className="h-10 bg-gray-200 rounded-xl w-64"></div>
+              <div className="h-10 bg-gray-200 rounded-xl w-48"></div>
+            </div>
+            <div className="grid grid-cols-4 gap-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-36 bg-gray-200 rounded-2xl"></div>
+              ))}
+            </div>
+            <div className="h-80 bg-gray-200 rounded-2xl"></div>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="h-72 bg-gray-200 rounded-2xl"></div>
+              <div className="h-72 bg-gray-200 rounded-2xl"></div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Compact Header with Inline Stats */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          {/* Title & Controls */}
-          <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-slate-100">
+      <div className="max-w-[1600px] mx-auto px-6 lg:px-8 py-8">
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Analytics</h1>
-              <p className="text-xs text-gray-500">Performance overview</p>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
+                    <ChartBarIcon className="h-7 w-7 text-white" />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center">
+                    <BoltIcon className="w-3 h-3 text-white" />
+                  </div>
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Analytics Dashboard</h1>
+                  <p className="text-gray-500 text-sm mt-0.5">Real-time insights and performance metrics</p>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              {lastUpdated && (
-                <span className="text-xs text-gray-400">
-                  Updated {lastUpdated.toLocaleTimeString()} • {refreshCountdown}s
-                </span>
-              )}
+
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Live indicator */}
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <div className="relative flex items-center justify-center">
+                  <span className="absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </div>
+                <div className="text-sm">
+                  <span className="text-gray-500">Updated </span>
+                  <span className="font-medium text-gray-700">{lastUpdated?.toLocaleTimeString()}</span>
+                  <span className="text-gray-400 ml-2">({refreshCountdown}s)</span>
+                </div>
+              </div>
+
+              {/* Date Range */}
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
+                <select
+                  value={dateRange}
+                  onChange={(e) => setDateRange(e.target.value)}
+                  className="bg-transparent border-0 text-sm font-medium text-gray-700 focus:ring-0 cursor-pointer pr-8"
+                >
+                  <option value="7">Last 7 days</option>
+                  <option value="30">Last 30 days</option>
+                  <option value="90">Last 90 days</option>
+                </select>
+              </div>
+
+              {/* Refresh button */}
               <button
                 onClick={fetchDashboardData}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Refresh now"
+                disabled={loading}
+                className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 shadow-sm transition-all disabled:opacity-50"
               >
-                <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
               </button>
-              <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
-                className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="7">7 days</option>
-                <option value="30">30 days</option>
-                <option value="90">90 days</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Inline KPI Stats */}
-          <div className="flex flex-wrap items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-                <UserGroupIcon className="w-4 h-4 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-gray-900">{formatNumber(summary?.leads.totalLeads || 0)}</p>
-                <p className="text-xs text-gray-500">Leads</p>
-              </div>
-            </div>
-
-            <div className="w-px h-8 bg-gray-200 hidden sm:block"></div>
-
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <KeyIcon className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-gray-900">{formatNumber(summary?.apiUsage.totalRequests || 0)}</p>
-                <p className="text-xs text-gray-500">API Calls</p>
-              </div>
-            </div>
-
-            <div className="w-px h-8 bg-gray-200 hidden sm:block"></div>
-
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-                <EnvelopeIcon className="w-4 h-4 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-gray-900">{formatNumber(summary?.messaging.total.sent || 0)}</p>
-                <p className="text-xs text-gray-500">Messages</p>
-              </div>
-            </div>
-
-            <div className="w-px h-8 bg-gray-200 hidden sm:block"></div>
-
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-                <ChatBubbleLeftRightIcon className="w-4 h-4 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-gray-900">{formatNumber(summary?.conversations.totalConversations || 0)}</p>
-                <p className="text-xs text-gray-500">Chats</p>
-              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Usage Trend Chart */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Usage Trend</h2>
-            <p className="text-sm text-gray-500">Daily activity over time</p>
-          </div>
-        </div>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={usageTrend} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorApi" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={COLORS.success} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-              <XAxis
-                dataKey="date"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: '#6B7280', fontSize: 12 }}
-                tickFormatter={(value) => {
-                  const date = new Date(value);
-                  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                }}
-              />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #E5E7EB',
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                }}
-              />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="total"
-                stroke={COLORS.primary}
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorTotal)"
-                name="Total"
-              />
-              <Area
-                type="monotone"
-                dataKey="api"
-                stroke={COLORS.success}
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorApi)"
-                name="API"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Lead Sources Pie Chart */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Lead Sources</h3>
-          <p className="text-sm text-gray-500 mb-4">Distribution by acquisition channel</p>
-          <div className="h-72">
-            {leadSourceData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={leadSourceData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={90}
-                    paddingAngle={3}
-                    dataKey="value"
-                    stroke="#fff"
-                    strokeWidth={2}
-                  >
-                    {leadSourceData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState message="No lead source data" />
-            )}
-          </div>
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+          <KPICard
+            title="Total Leads"
+            value={formatNumber(summary?.leads.totalLeads || 0)}
+            subtitle={`+${summary?.leads.newLeads || 0} new this period`}
+            icon={<UserGroupIcon className="w-6 h-6" />}
+            trend={{ value: 12.5, isPositive: true }}
+            gradient="from-blue-600 to-indigo-600"
+            shadowColor="shadow-blue-500/20"
+          />
+          <KPICard
+            title="API Requests"
+            value={formatNumber(summary?.apiUsage.totalRequests || 0)}
+            subtitle={`${summary?.apiUsage.successRate}% success rate`}
+            icon={<KeyIcon className="w-6 h-6" />}
+            trend={{ value: 8.3, isPositive: true }}
+            gradient="from-emerald-600 to-teal-600"
+            shadowColor="shadow-emerald-500/20"
+          />
+          <KPICard
+            title="Messages Sent"
+            value={formatNumber(summary?.messaging.total.sent || 0)}
+            subtitle={`${formatNumber(summary?.messaging.total.delivered || 0)} delivered`}
+            icon={<EnvelopeIcon className="w-6 h-6" />}
+            trend={{ value: 5.2, isPositive: true }}
+            gradient="from-violet-600 to-purple-600"
+            shadowColor="shadow-violet-500/20"
+          />
+          <KPICard
+            title="Conversations"
+            value={formatNumber(summary?.conversations.totalConversations || 0)}
+            subtitle={`${summary?.conversations.openConversations || 0} currently open`}
+            icon={<ChatBubbleLeftRightIcon className="w-6 h-6" />}
+            trend={{ value: 3.1, isPositive: false }}
+            gradient="from-amber-600 to-orange-600"
+            shadowColor="shadow-amber-500/20"
+          />
         </div>
 
-        {/* Messaging Performance */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Messaging Performance</h3>
-          <p className="text-sm text-gray-500 mb-4">Messages by channel and status</p>
-          <div className="h-72">
-            {messagingData.some(d => d.sent > 0) ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={messagingData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#374151', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '12px',
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="sent" fill={COLORS.primary} radius={[4, 4, 0, 0]} name="Sent" />
-                  <Bar dataKey="delivered" fill={COLORS.success} radius={[4, 4, 0, 0]} name="Delivered" />
-                  <Bar dataKey="failed" fill={COLORS.danger} radius={[4, 4, 0, 0]} name="Failed" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState message="No messaging data" />
-            )}
-          </div>
-        </div>
-
-        {/* Conversations by Channel */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Conversations by Channel</h3>
-          <p className="text-sm text-gray-500 mb-4">Communication channel distribution</p>
-          <div className="h-72">
-            {conversationChannelData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={conversationChannelData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    dataKey="value"
-                    stroke="#fff"
-                    strokeWidth={2}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {conversationChannelData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState message="No conversation data" />
-            )}
-          </div>
-        </div>
-
-        {/* API Methods */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">API Usage by Method</h3>
-          <p className="text-sm text-gray-500 mb-4">Request distribution by HTTP method</p>
-          <div className="h-72">
-            {apiMethodData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={apiMethodData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" horizontal={true} vertical={false} />
-                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
-                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#374151', fontSize: 12, fontWeight: 500 }} width={60} />
-                  <Tooltip />
-                  <Bar dataKey="requests" radius={[0, 6, 6, 0]} barSize={24}>
-                    {apiMethodData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState message="No API usage data" />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Contact List Health */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Contact List Health</h3>
-            <p className="text-sm text-gray-500">Overall list quality and engagement</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-          <div className="col-span-2 md:col-span-1 flex items-center justify-center">
-            <div
-              className={`w-32 h-32 rounded-full flex items-center justify-center text-3xl font-bold border-8 ${
-                (summary?.contactLists.healthScore || 0) >= 80
-                  ? 'border-emerald-500 text-emerald-600 bg-emerald-50'
-                  : (summary?.contactLists.healthScore || 0) >= 60
-                  ? 'border-amber-500 text-amber-600 bg-amber-50'
-                  : 'border-red-500 text-red-600 bg-red-50'
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-2 mb-6 bg-white p-1.5 rounded-xl border border-gray-200 shadow-sm w-fit">
+          {[
+            { id: 'overview', label: 'Overview', icon: ChartBarIcon },
+            { id: 'messaging', label: 'Messaging', icon: EnvelopeIcon },
+            { id: 'api', label: 'API Usage', icon: KeyIcon },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === tab.id
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
-              {summary?.contactLists.healthScore || 0}%
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Main Content Area */}
+        {activeTab === 'overview' && (
+          <>
+            {/* Usage Trend Chart */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Usage Trend</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">Daily platform activity over time</p>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"></div>
+                    <span className="text-sm text-gray-600 font-medium">Total Activity</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                    <span className="text-sm text-gray-600 font-medium">API Calls</span>
+                  </div>
+                </div>
+              </div>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={usageTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6366F1" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#6366F1" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorApi" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10B981" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#6B7280', fontSize: 11 }}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area type="monotone" dataKey="total" stroke="#6366F1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorTotal)" name="Total" />
+                    <Area type="monotone" dataKey="api" stroke="#10B981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorApi)" name="API" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Charts Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              {/* Lead Sources */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900">Lead Sources</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">Distribution by acquisition channel</p>
+                </div>
+                <div className="h-72">
+                  {leadSourceData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={leadSourceData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={70}
+                          outerRadius={100}
+                          paddingAngle={4}
+                          dataKey="value"
+                          stroke="#fff"
+                          strokeWidth={3}
+                        >
+                          {leadSourceData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomPieTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <EmptyState message="No lead source data" />
+                  )}
+                </div>
+                {/* Legend */}
+                <div className="flex flex-wrap justify-center gap-4 mt-4 pt-4 border-t border-gray-100">
+                  {leadSourceData.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
+                      <span className="text-sm text-gray-600">{item.name}</span>
+                      <span className="text-sm font-semibold text-gray-900">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Conversations by Channel */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900">Channel Distribution</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">Conversations by communication channel</p>
+                </div>
+                <div className="space-y-4">
+                  {conversationChannelData.map((channel, index) => {
+                    const total = conversationChannelData.reduce((sum, c) => sum + c.value, 0);
+                    const percentage = total > 0 ? ((channel.value / total) * 100).toFixed(1) : 0;
+                    const icons: Record<string, any> = {
+                      SMS: DevicePhoneMobileIcon,
+                      WhatsApp: ChatBubbleLeftRightIcon,
+                      Email: InboxIcon,
+                      Voice: PhoneIcon,
+                    };
+                    const Icon = icons[channel.name] || GlobeAltIcon;
+
+                    return (
+                      <div key={index} className="group">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${channel.color}15` }}>
+                              <Icon className="w-5 h-5" style={{ color: channel.color }} />
+                            </div>
+                            <span className="font-medium text-gray-900">{channel.name}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-lg font-bold text-gray-900">{channel.value.toLocaleString()}</span>
+                            <span className="text-sm text-gray-500 ml-2">({percentage}%)</span>
+                          </div>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${percentage}%`, backgroundColor: channel.color }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Contact List Health */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Contact List Health</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">Overall list quality and engagement metrics</p>
+                </div>
+                <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                  (summary?.contactLists.healthScore || 0) >= 80
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : (summary?.contactLists.healthScore || 0) >= 60
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-red-100 text-red-700'
+                }`}>
+                  {(summary?.contactLists.healthScore || 0) >= 80 ? 'Excellent' : (summary?.contactLists.healthScore || 0) >= 60 ? 'Good' : 'Needs Attention'}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                {/* Health Score */}
+                <div className="col-span-2 md:col-span-1 flex items-center justify-center">
+                  <HealthScoreGauge score={summary?.contactLists.healthScore || 0} />
+                </div>
+
+                <HealthStatCard
+                  label="Total Contacts"
+                  value={summary?.contactLists.totalContacts || 0}
+                  icon={<UserGroupIcon className="w-5 h-5" />}
+                  color="slate"
+                />
+                <HealthStatCard
+                  label="Active"
+                  value={summary?.contactLists.activeContacts || 0}
+                  icon={<CheckCircleIcon className="w-5 h-5" />}
+                  color="emerald"
+                  percentage={summary?.contactLists.totalContacts ? Math.round((summary.contactLists.activeContacts / summary.contactLists.totalContacts) * 100) : 0}
+                />
+                <HealthStatCard
+                  label="Unsubscribed"
+                  value={summary?.contactLists.unsubscribed || 0}
+                  icon={<ExclamationCircleIcon className="w-5 h-5" />}
+                  color="amber"
+                  percentage={summary?.contactLists.totalContacts ? Math.round((summary.contactLists.unsubscribed / summary.contactLists.totalContacts) * 100) : 0}
+                />
+                <HealthStatCard
+                  label="Bounced"
+                  value={summary?.contactLists.bounced || 0}
+                  icon={<ExclamationCircleIcon className="w-5 h-5" />}
+                  color="red"
+                  percentage={summary?.contactLists.totalContacts ? Math.round((summary.contactLists.bounced / summary.contactLists.totalContacts) * 100) : 0}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'messaging' && (
+          <div className="space-y-6">
+            {/* Messaging Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {messagingData.map((channel, index) => (
+                <div key={index} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">{channel.name}</h3>
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-sm font-medium">
+                      {channel.rate}% delivered
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-600">Sent</span>
+                      <span className="text-lg font-bold text-gray-900">{channel.sent.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-xl">
+                      <span className="text-emerald-700">Delivered</span>
+                      <span className="text-lg font-bold text-emerald-700">{channel.delivered.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-red-50 rounded-xl">
+                      <span className="text-red-700">Failed</span>
+                      <span className="text-lg font-bold text-red-700">{channel.failed.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Messaging Performance Chart */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Messaging Performance</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Compare performance across channels</p>
+              </div>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={messagingData} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#374151', fontSize: 12, fontWeight: 500 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="sent" fill="#6366F1" radius={[6, 6, 0, 0]} name="Sent" />
+                    <Bar dataKey="delivered" fill="#10B981" radius={[6, 6, 0, 0]} name="Delivered" />
+                    <Bar dataKey="failed" fill="#EF4444" radius={[6, 6, 0, 0]} name="Failed" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
-          <HealthStatCard label="Total Contacts" value={summary?.contactLists.totalContacts || 0} color="gray" />
-          <HealthStatCard label="Active" value={summary?.contactLists.activeContacts || 0} color="emerald" />
-          <HealthStatCard label="Unsubscribed" value={summary?.contactLists.unsubscribed || 0} color="amber" />
-          <HealthStatCard label="Bounced" value={summary?.contactLists.bounced || 0} color="red" />
+        )}
+
+        {activeTab === 'api' && (
+          <div className="space-y-6">
+            {/* API Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+                    <KeyIcon className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Total Requests</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatNumber(summary?.apiUsage.totalRequests || 0)}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                    <CheckCircleSolid className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Successful</p>
+                    <p className="text-2xl font-bold text-emerald-600">{formatNumber(summary?.apiUsage.successfulRequests || 0)}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center">
+                    <ExclamationCircleIcon className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Failed</p>
+                    <p className="text-2xl font-bold text-red-600">{formatNumber(summary?.apiUsage.failedRequests || 0)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* API Methods Chart */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">API Usage by Method</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Request distribution by HTTP method</p>
+              </div>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={apiMethodData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" horizontal={true} vertical={false} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 11 }} />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#374151', fontSize: 12, fontWeight: 600 }} width={60} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="requests" radius={[0, 8, 8, 0]} barSize={32}>
+                      {apiMethodData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// KPI Card Component
+const KPICard = ({ title, value, subtitle, icon, trend, gradient, shadowColor }: {
+  title: string;
+  value: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  trend: { value: number; isPositive: boolean };
+  gradient: string;
+  shadowColor: string;
+}) => (
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group">
+    <div className="flex items-start justify-between">
+      <div className="flex-1">
+        <p className="text-sm font-medium text-gray-500">{title}</p>
+        <p className="text-3xl font-bold text-gray-900 mt-2 tracking-tight">{value}</p>
+        <div className="flex items-center gap-3 mt-3">
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+            trend.isPositive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+          }`}>
+            {trend.isPositive ? <ArrowUpIcon className="w-3 h-3" /> : <ArrowDownIcon className="w-3 h-3" />}
+            {trend.value}%
+          </div>
+          <span className="text-xs text-gray-500">{subtitle}</span>
         </div>
+      </div>
+      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg ${shadowColor} group-hover:scale-110 transition-transform`}>
+        <div className="text-white">{icon}</div>
+      </div>
+    </div>
+  </div>
+);
+
+// Health Score Gauge
+const HealthScoreGauge = ({ score }: { score: number }) => {
+  const radius = 50;
+  const circumference = 2 * Math.PI * radius;
+  const progress = (score / 100) * circumference;
+  const color = score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444';
+
+  return (
+    <div className="relative w-36 h-36">
+      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r={radius} fill="none" stroke="#E5E7EB" strokeWidth="10" />
+        <circle
+          cx="60"
+          cy="60"
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference - progress}
+          className="transition-all duration-1000 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-3xl font-bold" style={{ color }}>{score}</span>
+        <span className="text-xs text-gray-500 font-medium">Health Score</span>
       </div>
     </div>
   );
 };
 
 // Health Stat Card
-const HealthStatCard = ({ label, value, color }: { label: string; value: number; color: string }) => {
-  const colorStyles: Record<string, string> = {
-    gray: 'bg-gray-50 border-gray-200 text-gray-700',
-    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
-    amber: 'bg-amber-50 border-amber-200 text-amber-700',
-    red: 'bg-red-50 border-red-200 text-red-700',
+const HealthStatCard = ({ label, value, icon, color, percentage }: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  color: string;
+  percentage?: number;
+}) => {
+  const colorStyles: Record<string, { bg: string; border: string; text: string; icon: string }> = {
+    slate: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', icon: 'text-slate-500' },
+    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', icon: 'text-emerald-500' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', icon: 'text-amber-500' },
+    red: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', icon: 'text-red-500' },
   };
+  const styles = colorStyles[color];
 
   return (
-    <div className={`rounded-xl border p-4 text-center ${colorStyles[color]}`}>
-      <p className="text-2xl font-bold">{value.toLocaleString()}</p>
-      <p className="text-sm mt-1 opacity-80">{label}</p>
+    <div className={`rounded-2xl border ${styles.bg} ${styles.border} p-5 transition-all hover:shadow-md`}>
+      <div className={`${styles.icon} mb-3`}>{icon}</div>
+      <p className={`text-2xl font-bold ${styles.text}`}>{value.toLocaleString()}</p>
+      <p className="text-sm text-gray-500 mt-1">{label}</p>
+      {percentage !== undefined && (
+        <p className="text-xs text-gray-400 mt-2">{percentage}% of total</p>
+      )}
     </div>
   );
 };
 
-// Empty State Component
+// Custom Tooltip
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 min-w-[150px]">
+        <p className="text-sm font-medium text-gray-900 mb-2">{label}</p>
+        {payload.map((entry: any, index: number) => (
+          <div key={index} className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }}></div>
+              <span className="text-sm text-gray-600">{entry.name}</span>
+            </div>
+            <span className="text-sm font-semibold text-gray-900">{entry.value?.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
+// Custom Pie Tooltip
+const CustomPieTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: data.color }}></div>
+          <span className="text-sm font-semibold text-gray-900">{data.name}</span>
+        </div>
+        <p className="text-lg font-bold text-gray-900">{data.value.toLocaleString()}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+// Empty State
 const EmptyState = ({ message }: { message: string }) => (
   <div className="h-full flex items-center justify-center">
     <div className="text-center">
-      <ChartBarIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-      <p className="text-gray-500">{message}</p>
+      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+        <ChartBarIcon className="w-8 h-8 text-gray-400" />
+      </div>
+      <p className="text-gray-500 font-medium">{message}</p>
     </div>
   </div>
 );
 
-// Mock data for demo
+// Mock data
 const getMockData = (): DashboardSummary => ({
   period: '30 days',
   apiUsage: {
@@ -574,11 +851,12 @@ const getMockTrendData = (): UsageTrendData[] => {
   for (let i = 30; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
+    const baseTotal = 300 + Math.sin(i * 0.3) * 100;
     data.push({
       date: date.toISOString().split('T')[0],
-      total: Math.floor(Math.random() * 500) + 200,
-      api: Math.floor(Math.random() * 300) + 100,
-      user: Math.floor(Math.random() * 200) + 50,
+      total: Math.floor(baseTotal + Math.random() * 100),
+      api: Math.floor(baseTotal * 0.6 + Math.random() * 60),
+      user: Math.floor(baseTotal * 0.4 + Math.random() * 40),
     });
   }
   return data;

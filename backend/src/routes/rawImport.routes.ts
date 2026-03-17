@@ -4,6 +4,7 @@ import { rawImportController } from '../controllers/rawImport.controller';
 import { validate } from '../middlewares/validate';
 import { authenticate, authorize } from '../middlewares/auth';
 import { tenantMiddleware } from '../middlewares/tenant';
+import { externalLeadImportService } from '../services/external-lead-import.service';
 
 const router = Router();
 
@@ -45,6 +46,15 @@ const convertToLeadValidation = [
 const bulkConvertValidation = [
   body('recordIds').isArray({ min: 1 }).withMessage('At least one record ID is required'),
   body('recordIds.*').isUUID().withMessage('Invalid record ID'),
+];
+
+const bulkStatusUpdateValidation = [
+  body('recordIds').isArray({ min: 1 }).withMessage('At least one record ID is required'),
+  body('recordIds.*').isUUID().withMessage('Invalid record ID'),
+  body('status').isIn([
+    'PENDING', 'ASSIGNED', 'CALLING', 'INTERESTED', 'NOT_INTERESTED',
+    'NO_ANSWER', 'CALLBACK_REQUESTED', 'CONVERTED', 'REJECTED'
+  ]).withMessage('Invalid status'),
 ];
 
 const listRecordsValidation = [
@@ -129,6 +139,62 @@ router.post(
   '/records/bulk-convert',
   validate(bulkConvertValidation),
   rawImportController.bulkConvertToLeads.bind(rawImportController)
+);
+
+// Bulk Status Update
+router.post(
+  '/records/bulk-status',
+  validate(bulkStatusUpdateValidation),
+  rawImportController.bulkUpdateStatus.bind(rawImportController)
+);
+
+// Test endpoint to simulate external leads (for testing purposes)
+const simulateLeadValidation = [
+  body('source').isIn([
+    'AD_FACEBOOK', 'AD_INSTAGRAM', 'AD_GOOGLE', 'AD_LINKEDIN',
+    'FORM', 'LANDING_PAGE', 'WEBSITE', 'WHATSAPP', 'API'
+  ]).withMessage('Invalid source'),
+  body('firstName').notEmpty().withMessage('First name is required'),
+  body('phone').notEmpty().withMessage('Phone is required'),
+  body('lastName').optional().isString(),
+  body('email').optional().isEmail(),
+  body('sourceDetails').optional().isString(),
+  body('campaignName').optional().isString(),
+];
+
+router.post(
+  '/simulate-lead',
+  authorize('admin'),
+  validate(simulateLeadValidation),
+  async (req, res) => {
+    try {
+      const organizationId = req.user!.organizationId;
+      const { source, firstName, lastName, email, phone, sourceDetails, campaignName, customFields } = req.body;
+
+      const result = await externalLeadImportService.importExternalLead(organizationId, {
+        source,
+        firstName,
+        lastName,
+        email,
+        phone,
+        sourceDetails,
+        campaignName,
+        customFields,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: result.isDuplicate ? 'Lead already exists (duplicate)' : 'Lead imported successfully',
+      });
+    } catch (error: any) {
+      console.error('[SimulateLead] Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
 );
 
 export default router;

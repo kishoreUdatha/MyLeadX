@@ -109,6 +109,41 @@ router.post('/webhook/speech/:callId', async (req: Request, res: Response) => {
   }
 });
 
+// Call flow speech input webhook - for calls using call flow execution
+router.post('/webhook/callflow/:callId', async (req: Request, res: Response) => {
+  try {
+    const { callId } = req.params;
+    const { SpeechResult, Confidence, Digits } = req.body;
+
+    console.log(`[CallFlow] Input received for call ${callId}: Speech="${SpeechResult}" Digits="${Digits}" (confidence: ${Confidence})`);
+
+    // Handle case where user interrupted with keypad or provided no input
+    if (!SpeechResult && !Digits) {
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+          <Say>I didn't catch that. Could you please repeat?</Say>
+          <Redirect>/api/outbound-calls/twiml/${callId}</Redirect>
+        </Response>`);
+      return;
+    }
+
+    // Use the call flow speech handler
+    const twiml = await outboundCallService.handleCallFlowSpeechInput(callId, SpeechResult || '', Digits);
+
+    res.set('Content-Type', 'text/xml');
+    res.send(twiml);
+  } catch (error) {
+    console.error('[CallFlow] Speech handling error:', error);
+    res.set('Content-Type', 'text/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+      <Response>
+        <Say>Sorry, there was an error processing your response. Goodbye.</Say>
+        <Hangup/>
+      </Response>`);
+  }
+});
+
 // Call status webhook
 router.post('/webhook/status', async (req: Request, res: Response) => {
   try {

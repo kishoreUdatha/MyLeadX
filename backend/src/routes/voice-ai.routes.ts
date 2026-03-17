@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { voiceAIService } from '../integrations/voice-ai.service';
+import { elevenlabsService } from '../integrations/elevenlabs.service';
 import { authenticate } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { ApiResponse } from '../utils/apiResponse';
@@ -145,6 +146,71 @@ router.get('/session/:sessionId/transcript', async (req: Request, res: Response)
   }
 });
 
+// Get all available voices (public)
+router.get('/voices', async (req: Request, res: Response) => {
+  try {
+    const voices: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      gender?: string;
+      accent?: string;
+      description?: string;
+      premium?: boolean;
+    }> = [];
+
+    // OpenAI voices
+    const openaiVoices = [
+      { id: 'openai-alloy', name: 'Alloy', provider: 'openai', gender: 'neutral', accent: 'American', description: 'Neutral and balanced' },
+      { id: 'openai-echo', name: 'Echo', provider: 'openai', gender: 'male', accent: 'American', description: 'Clear and resonant' },
+      { id: 'openai-fable', name: 'Fable', provider: 'openai', gender: 'male', accent: 'British', description: 'British storyteller' },
+      { id: 'openai-onyx', name: 'Onyx', provider: 'openai', gender: 'male', accent: 'American', description: 'Deep and authoritative' },
+      { id: 'openai-nova', name: 'Nova', provider: 'openai', gender: 'female', accent: 'American', description: 'Warm and engaging' },
+      { id: 'openai-shimmer', name: 'Shimmer', provider: 'openai', gender: 'female', accent: 'American', description: 'Soft and soothing' },
+    ];
+    voices.push(...openaiVoices);
+
+    // ElevenLabs voices
+    if (elevenlabsService.isAvailable()) {
+      const elevenLabsVoices = elevenlabsService.getPrebuiltVoices();
+      voices.push(...elevenLabsVoices);
+    } else {
+      // Show ElevenLabs voices as unavailable
+      const elevenLabsVoices = elevenlabsService.getPrebuiltVoices().map(v => ({
+        ...v,
+        description: `${v.description} (Configure ELEVENLABS_API_KEY to enable)`,
+      }));
+      voices.push(...elevenLabsVoices);
+    }
+
+    // Sarvam voices (Indian languages)
+    const { sarvamService } = await import('../integrations/sarvam.service');
+    if (sarvamService.isAvailable()) {
+      const sarvamVoices = [
+        { id: 'sarvam-priya', name: 'Priya', provider: 'sarvam', gender: 'female', accent: 'Indian', description: 'Hindi female voice' },
+        { id: 'sarvam-dev', name: 'Dev', provider: 'sarvam', gender: 'male', accent: 'Indian', description: 'Hindi male voice' },
+        { id: 'sarvam-kavya', name: 'Kavya', provider: 'sarvam', gender: 'female', accent: 'Indian', description: 'Indian English female' },
+        { id: 'sarvam-ravi', name: 'Ravi', provider: 'sarvam', gender: 'male', accent: 'Indian', description: 'Indian English male' },
+        { id: 'sarvam-neha', name: 'Neha', provider: 'sarvam', gender: 'female', accent: 'Indian', description: 'Multilingual female' },
+        { id: 'sarvam-aditya', name: 'Aditya', provider: 'sarvam', gender: 'male', accent: 'Indian', description: 'Multilingual male' },
+      ];
+      voices.push(...sarvamVoices);
+    }
+
+    ApiResponse.success(res, 'Voices retrieved', {
+      voices,
+      providers: {
+        openai: { available: true, name: 'OpenAI TTS', description: 'High-quality voices, good for English' },
+        elevenlabs: { available: elevenlabsService.isAvailable(), name: 'ElevenLabs', description: 'Premium natural voices, best quality' },
+        sarvam: { available: sarvamService.isAvailable(), name: 'Sarvam AI', description: 'Indian language voices' },
+      },
+    });
+  } catch (error) {
+    console.error('[Voices] Error:', error);
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
+
 // Text to Speech endpoint (public - for widget)
 router.post('/tts', async (req: Request, res: Response) => {
   try {
@@ -159,8 +225,42 @@ router.post('/tts', async (req: Request, res: Response) => {
     let audioBuffer: Buffer;
     let contentType = 'audio/mpeg';
 
-    // Use Sarvam for Indian language TTS when requested
-    if (provider === 'sarvam') {
+    // Detect provider from voice ID prefix if not explicitly set
+    let detectedProvider = provider;
+    if (!detectedProvider && voice) {
+      if (voice.startsWith('elevenlabs-')) {
+        detectedProvider = 'elevenlabs';
+      } else if (voice.startsWith('sarvam-')) {
+        detectedProvider = 'sarvam';
+      } else if (voice.startsWith('openai-')) {
+        detectedProvider = 'openai';
+      }
+    }
+
+    // ElevenLabs TTS (Premium)
+    if (detectedProvider === 'elevenlabs') {
+      if (!elevenlabsService.isAvailable()) {
+        console.log('[TTS] ElevenLabs not configured, falling back to OpenAI');
+      } else {
+        try {
+          console.log('[TTS] Using ElevenLabs TTS with voice:', voice);
+          const cleanVoiceId = voice.replace('elevenlabs-', '');
+          audioBuffer = await elevenlabsService.textToSpeech(text, cleanVoiceId);
+          console.log('[TTS] ElevenLabs TTS generated, size:', audioBuffer.length);
+
+          res.set({
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': audioBuffer.length,
+          });
+          return res.send(audioBuffer);
+        } catch (elevenLabsError) {
+          console.warn('[TTS] ElevenLabs TTS failed, falling back to OpenAI:', (elevenLabsError as Error).message);
+        }
+      }
+    }
+
+    // Sarvam TTS (Indian languages)
+    if (detectedProvider === 'sarvam') {
       const { sarvamService } = await import('../integrations/sarvam.service');
 
       if (!sarvamService.isAvailable()) {
@@ -168,13 +268,13 @@ router.post('/tts', async (req: Request, res: Response) => {
       } else {
         try {
           console.log('[TTS] Using Sarvam TTS with voice:', voice, 'language:', language);
+          const cleanVoiceId = voice.replace('sarvam-', '');
 
-          // Generate TTS using Sarvam
           audioBuffer = await sarvamService.textToSpeech(
             text,
-            voice || 'priya',
+            cleanVoiceId || 'priya',
             language || 'hi-IN',
-            22050 // Higher sample rate for preview
+            22050
           );
 
           console.log('[TTS] Sarvam TTS generated, size:', audioBuffer.length);
@@ -191,23 +291,32 @@ router.post('/tts', async (req: Request, res: Response) => {
       }
     }
 
-    // Fallback to OpenAI TTS
+    // OpenAI TTS (Default/Fallback)
     console.log('[TTS] Using OpenAI TTS with voice:', voice || 'alloy');
 
-    // Map Sarvam voice names to OpenAI voices
-    const openaiVoiceMap: Record<string, string> = {
+    // Clean voice ID and map to OpenAI voice
+    let openaiVoice = (voice || 'alloy').replace('openai-', '');
+
+    // Map other provider voice names to OpenAI voices as fallback
+    const voiceMap: Record<string, string> = {
       'priya': 'nova',
       'dev': 'echo',
       'kavya': 'shimmer',
       'ravi': 'onyx',
       'neha': 'nova',
       'aditya': 'echo',
-      'anjali': 'shimmer',
-      'rahul': 'onyx',
-      'meera': 'nova',
-      'arjun': 'echo',
+      'Rachel': 'nova',
+      'Adam': 'onyx',
+      'Josh': 'echo',
+      'Bella': 'shimmer',
     };
-    const openaiVoice = openaiVoiceMap[voice || ''] || voice || 'alloy';
+    openaiVoice = voiceMap[openaiVoice] || openaiVoice;
+
+    // Validate OpenAI voice
+    const validOpenAIVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+    if (!validOpenAIVoices.includes(openaiVoice)) {
+      openaiVoice = 'alloy';
+    }
 
     audioBuffer = await voiceAIService.textToSpeech(text, openaiVoice);
 
@@ -338,6 +447,7 @@ router.post('/agents', async (req: TenantRequest, res: Response) => {
       industry,
       customPrompt,
       customQuestions,
+      createdById: req.user?.id,
     });
 
     ApiResponse.success(res, 'Agent created', agent, 201);
@@ -407,6 +517,32 @@ router.put('/agents/:agentId', async (req: TenantRequest, res: Response) => {
     console.log('[VoiceAI] Updating agent:', agentId, 'with fields:', Object.keys(filteredData));
 
     const agent = await voiceAIService.updateAgent(agentId, filteredData);
+
+    // Handle agent integrations separately (Calendar, CRM, Payment, Custom API)
+    if (updateData.agentIntegrations) {
+      const integrationsService = require('../services/integration.service').default;
+      const { calendar, crm, payment, customApi } = updateData.agentIntegrations;
+
+      // Save calendar integration settings
+      if (calendar) {
+        await integrationsService.agentIntegration.toggleIntegration(agentId, 'CALENDAR', true, calendar);
+      }
+
+      // Save CRM integration settings
+      if (crm) {
+        await integrationsService.agentIntegration.toggleIntegration(agentId, 'CRM', true, crm);
+      }
+
+      // Save payment integration settings
+      if (payment) {
+        await integrationsService.agentIntegration.toggleIntegration(agentId, 'PAYMENT', true, payment);
+      }
+
+      // Save custom API settings
+      if (customApi) {
+        await integrationsService.agentIntegration.toggleIntegration(agentId, 'CUSTOM_API', true, customApi);
+      }
+    }
 
     ApiResponse.success(res, 'Agent updated', agent);
   } catch (error) {

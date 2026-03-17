@@ -10,6 +10,9 @@ import paymentRoutes from './payment.routes';
 import adRoutes from './ad.routes';
 import plivoRoutes from './plivo.routes';
 import voiceAIRoutes from './voice-ai.routes';
+import voiceTemplateRoutes from './voice-template.routes';
+import callFlowRoutes from './call-flow.routes';
+import specializedAgentsRoutes from './specialized-agents.routes';
 import outboundCallRoutes from './outbound-call.routes';
 import advancedFeaturesRoutes from './advanced-features.routes';
 import uploadRoutes from './upload.routes';
@@ -52,11 +55,16 @@ import calendarRoutes from './calendar.routes';
 import notificationChannelRoutes from './notification-channel.routes';
 import emailSequenceRoutes from './email-sequence.routes';
 import crmIntegrationRoutes from './crm-integration.routes';
+import integrationRoutes from './integration.routes';
 import instagramIntegrationRoutes from './instagram-integration.routes';
 import facebookIntegrationRoutes from './facebook-integration.routes';
 import linkedinIntegrationRoutes from './linkedin-integration.routes';
 import googleAdsIntegrationRoutes from './google-ads-integration.routes';
 import healthRoutes from './health.routes';
+import complianceRoutes from './compliance.routes';
+import leadScoringRoutes from './lead-scoring.routes';
+import callAnalyticsRoutes from './call-analytics.routes';
+import otpRoutes from './otp.routes';
 
 const router = Router();
 
@@ -75,6 +83,9 @@ router.use('/payments', paymentRoutes);
 router.use('/ads', adRoutes);
 router.use('/plivo', plivoRoutes);
 router.use('/voice-ai', voiceAIRoutes);
+router.use('/voice-templates', voiceTemplateRoutes);
+router.use('/call-flows', callFlowRoutes);
+router.use('/agents', specializedAgentsRoutes);
 router.use('/outbound-calls', outboundCallRoutes);
 router.use('/advanced', advancedFeaturesRoutes);
 router.use('/uploads', uploadRoutes);
@@ -122,12 +133,21 @@ router.use('/calendar', calendarRoutes);
 router.use('/notification-channels', notificationChannelRoutes);
 router.use('/email-sequences', emailSequenceRoutes);
 router.use('/crm-integrations', crmIntegrationRoutes);
+router.use('/integrations', integrationRoutes);
 
 // Social Media Ad Integrations
 router.use('/instagram', instagramIntegrationRoutes);
 router.use('/facebook', facebookIntegrationRoutes);
 router.use('/linkedin', linkedinIntegrationRoutes);
 router.use('/google-ads', googleAdsIntegrationRoutes);
+
+// Compliance & Analytics
+router.use('/compliance', complianceRoutes);
+router.use('/lead-scoring', leadScoringRoutes);
+router.use('/call-analytics', callAnalyticsRoutes);
+
+// OTP Verification
+router.use('/otp', otpRoutes);
 
 // Public API (versioned) - for external integrations
 router.use('/v1', publicApiRoutes);
