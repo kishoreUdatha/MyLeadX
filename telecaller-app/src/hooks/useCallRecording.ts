@@ -95,7 +95,7 @@ export const useCallRecording = (): UseCallRecordingReturn => {
         // Create call record in backend
         const payload: StartCallPayload = {
           leadId: lead.id,
-          phone: lead.phone,
+          phoneNumber: lead.phone,
         };
 
         const call = await dispatch(startCall(payload)).unwrap();

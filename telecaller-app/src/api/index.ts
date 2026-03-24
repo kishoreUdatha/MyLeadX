@@ -3,11 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../types';
 
 // Base URL for API
-// For physical device, use your computer's IP address
-// In production: update this to your production API URL
-const API_BASE_URL = __DEV__
-  ? 'http://172.30.32.1:3001/api'
-  : 'https://api.crm-leads.com/api';
+// Using localhost with ADB reverse proxy for development
+const API_BASE_URL = 'http://localhost:3001/api';
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
@@ -23,6 +20,8 @@ api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     try {
       const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const fullUrl = `${config.baseURL || API_BASE_URL}${config.url}`;
+      console.log('[API] Full URL:', fullUrl, 'Token exists:', !!token);
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }

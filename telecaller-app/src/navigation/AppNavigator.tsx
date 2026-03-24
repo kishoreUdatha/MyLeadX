@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,19 +6,36 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  DeviceEventEmitter,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-import { useAppSelector, useAppDispatch } from '../store';
+import { RootStackParamList, MainTabParamList, STORAGE_KEYS } from '../types';
 
-const Stack = createNativeStackNavigator();
+// Import screens
+import DashboardScreen from '../screens/DashboardScreen';
+import LeadsScreen from '../screens/LeadsScreen';
+import HistoryScreen from '../screens/HistoryScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import CallScreen from '../screens/CallScreen';
+import OutcomeScreen from '../screens/OutcomeScreen';
+import LeadDetailScreen from '../screens/LeadDetailScreen';
+import EditLeadScreen from '../screens/EditLeadScreen';
+import CreateLeadScreen from '../screens/CreateLeadScreen';
+import AnalyticsScreen from '../screens/AnalyticsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import AIAnalysisScreen from '../screens/AIAnalysisScreen';
 
-// API URL - using Cloudflare tunnel (works without firewall issues)
-const API_URL = 'https://restoration-compression-email-word.trycloudflare.com/api';
+// API URL - using ADB reverse (localhost forwarded through USB)
+const API_URL = 'http://localhost:3001/api';
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 // Login Screen with actual API call
 const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => {
@@ -54,9 +71,12 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
       console.log('Login response:', data);
 
       if (data.success && data.data.accessToken) {
-        // Save token
-        await AsyncStorage.setItem('auth_token', data.data.accessToken);
-        await AsyncStorage.setItem('user_data', JSON.stringify(data.data.user));
+        // Save token using correct storage keys
+        await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.data.accessToken);
+        await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(data.data.user));
+        if (data.data.refreshToken) {
+          await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.data.refreshToken);
+        }
 
         Alert.alert('Success', 'Login successful!', [
           { text: 'OK', onPress: onLoginSuccess }
@@ -74,7 +94,7 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.loginContainer}>
       <Text style={styles.title}>CRM Telecaller</Text>
       <Text style={styles.subtitle}>Login to continue</Text>
 
@@ -117,67 +137,119 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
   );
 };
 
-// Dashboard after login
-const DashboardScreen: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
-  const [user, setUser] = useState<any>(null);
-
-  React.useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const userData = await AsyncStorage.getItem('user_data');
-      if (userData) {
-        setUser(JSON.parse(userData));
-      }
-    } catch (e) {
-      console.log('Error loading user:', e);
-    }
-  };
-
-  const handleLogout = async () => {
-    await AsyncStorage.removeItem('auth_token');
-    await AsyncStorage.removeItem('user_data');
-    onLogout();
-  };
-
+// Main Tab Navigator
+const MainTabNavigator: React.FC = () => {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Dashboard</Text>
-      <Text style={styles.subtitle}>Welcome, {user?.name || 'User'}!</Text>
-      <Text style={styles.info}>Email: {user?.email}</Text>
-      <Text style={styles.info}>Role: {user?.role?.name || 'N/A'}</Text>
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: string;
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Logout</Text>
-      </TouchableOpacity>
-    </View>
+          switch (route.name) {
+            case 'Dashboard':
+              iconName = focused ? 'view-dashboard' : 'view-dashboard-outline';
+              break;
+            case 'Leads':
+              iconName = focused ? 'account-group' : 'account-group-outline';
+              break;
+            case 'History':
+              iconName = focused ? 'phone-log' : 'phone-log';
+              break;
+            case 'Settings':
+              iconName = focused ? 'cog' : 'cog-outline';
+              break;
+            default:
+              iconName = 'circle';
+          }
+
+          return <Icon name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#3B82F6',
+        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 1,
+          borderTopColor: '#E5E7EB',
+          paddingBottom: 5,
+          paddingTop: 5,
+          height: 60,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '500',
+        },
+        headerStyle: {
+          backgroundColor: '#3B82F6',
+        },
+        headerTintColor: '#FFFFFF',
+        headerTitleStyle: {
+          fontWeight: '600',
+        },
+      })}
+    >
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{ title: 'Dashboard' }}
+      />
+      <Tab.Screen
+        name="Leads"
+        component={LeadsScreen}
+        options={{ title: 'Leads' }}
+      />
+      <Tab.Screen
+        name="History"
+        component={HistoryScreen}
+        options={{ title: 'Call History' }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ title: 'Settings' }}
+      />
+    </Tab.Navigator>
   );
 };
 
+// Main App Navigator
 const AppNavigator: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  React.useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      console.log('[AppNavigator] Auth check, token exists:', !!token);
       setIsLoggedIn(!!token);
     } catch (e) {
       setIsLoggedIn(false);
     } finally {
       setChecking(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+
+    // Listen for logout event
+    const subscription = DeviceEventEmitter.addListener('logout', () => {
+      console.log('[AppNavigator] Logout event received, setting isLoggedIn to false');
+      setIsLoggedIn(false);
+      setChecking(false); // Ensure we're not stuck in loading state
+      console.log('[AppNavigator] State updated, should show login screen');
+    });
+
+    console.log('[AppNavigator] Logout event listener registered');
+
+    return () => {
+      console.log('[AppNavigator] Removing logout event listener');
+      subscription.remove();
+    };
+  }, [checkAuth]);
 
   if (checking) {
     return (
-      <View style={styles.container}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3B82F6" />
       </View>
     );
@@ -185,15 +257,74 @@ const AppNavigator: React.FC = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: '#3B82F6',
+          },
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: {
+            fontWeight: '600',
+          },
+        }}
+      >
         {!isLoggedIn ? (
-          <Stack.Screen name="Login">
+          <Stack.Screen name="Login" options={{ headerShown: false }}>
             {() => <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />}
           </Stack.Screen>
         ) : (
-          <Stack.Screen name="Dashboard">
-            {() => <DashboardScreen onLogout={() => setIsLoggedIn(false)} />}
-          </Stack.Screen>
+          <>
+            <Stack.Screen
+              name="Main"
+              component={MainTabNavigator}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Call"
+              component={CallScreen}
+              options={{ title: 'Active Call', headerBackVisible: false }}
+            />
+            <Stack.Screen
+              name="Outcome"
+              component={OutcomeScreen}
+              options={{ title: 'Call Outcome', headerBackVisible: false }}
+            />
+            <Stack.Screen
+              name="LeadDetail"
+              component={LeadDetailScreen}
+              options={{ title: 'Lead Details' }}
+            />
+            <Stack.Screen
+              name="EditLead"
+              component={EditLeadScreen}
+              options={{ title: 'Edit Lead' }}
+            />
+            <Stack.Screen
+              name="CreateLead"
+              component={CreateLeadScreen}
+              options={{ title: 'Create Lead' }}
+            />
+            <Stack.Screen
+              name="Analytics"
+              component={AnalyticsScreen}
+              options={{ title: 'Analytics' }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={SettingsScreen}
+              options={{ title: 'Notifications' }}
+            />
+            <Stack.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{ title: 'Profile' }}
+            />
+            <Stack.Screen
+              name="AIAnalysis"
+              component={AIAnalysisScreen}
+              options={{ title: 'AI Analysis' }}
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
@@ -201,7 +332,13 @@ const AppNavigator: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loginContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -218,11 +355,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginBottom: 30,
-  },
-  info: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
   },
   input: {
     width: '100%',
@@ -252,15 +384,6 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: '600',
-  },
-  logoutButton: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#EF4444',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 30,
   },
   hint: {
     marginTop: 20,

@@ -117,7 +117,7 @@ export interface CallsState {
 
 export interface StartCallPayload {
   leadId: string;
-  phone: string;
+  phoneNumber: string;
 }
 
 export interface UpdateCallPayload {
@@ -166,6 +166,7 @@ export type RootStackParamList = {
   Analytics: undefined;
   Notifications: undefined;
   Profile: undefined;
+  AIAnalysis: { callId: string };
 };
 
 // Lead Form Data

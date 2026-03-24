@@ -23,33 +23,74 @@ export const leadsApi = {
       if (filters?.status) params.append('status', filters.status);
       if (filters?.search) params.append('search', filters.search);
 
-      const response = await api.get<PaginatedResponse<Lead>>(
-        `/telecaller/leads?${params.toString()}`
-      );
+      console.log('[LeadsAPI] Fetching leads from /telecaller/leads');
+      const { Alert } = require('react-native');
+      let response;
+      try {
+        response = await api.get(`/telecaller/leads?${params.toString()}`);
+        Alert.alert('Leads API', `Success: ${response.data?.success}, Count: ${response.data?.data?.leads?.length || 0}`);
+      } catch (err: any) {
+        Alert.alert('Leads Error', `${err.message}\nStatus: ${err.response?.status}`);
+        throw err;
+      }
+      console.log('[LeadsAPI] Response success:', response.data?.success, 'Leads:', response.data?.data?.leads?.length);
+
+      // Parse response - backend returns { success, message, data: { leads, total } }
+      const responseData = response.data;
+      const leads: Lead[] = responseData.data?.leads || [];
+      const total = responseData.data?.total || 0;
+
+      // Transform leads to match app's Lead type
+      const transformedLeads: Lead[] = leads.map((lead: any) => ({
+        id: lead.id,
+        name: `${lead.firstName || ''} ${lead.lastName || ''}`.trim() || 'Unknown',
+        phone: lead.phone || '',
+        email: lead.email || undefined,
+        company: lead.centerName || undefined,
+        status: 'NEW' as LeadStatus,
+        source: lead.source || undefined,
+        lastContactedAt: lead.lastContactedAt || undefined,
+        createdAt: lead.createdAt || new Date().toISOString(),
+        updatedAt: lead.updatedAt || new Date().toISOString(),
+      }));
 
       // Cache leads for offline access
-      const cachedLeads = await AsyncStorage.getItem(STORAGE_KEYS.CACHED_LEADS);
-      const existingLeads: Lead[] = cachedLeads ? JSON.parse(cachedLeads) : [];
+      try {
+        const cachedLeads = await AsyncStorage.getItem(STORAGE_KEYS.CACHED_LEADS);
+        const existingLeads: Lead[] = cachedLeads ? JSON.parse(cachedLeads) : [];
+        const mergedLeads = [...existingLeads];
 
-      // Merge new leads with cache (avoid duplicates)
-      const newLeads = response.data.data;
-      const mergedLeads = [...existingLeads];
+        transformedLeads.forEach((newLead: Lead) => {
+          const existingIndex = mergedLeads.findIndex((l) => l.id === newLead.id);
+          if (existingIndex >= 0) {
+            mergedLeads[existingIndex] = newLead;
+          } else {
+            mergedLeads.push(newLead);
+          }
+        });
 
-      newLeads.forEach((newLead) => {
-        const existingIndex = mergedLeads.findIndex((l) => l.id === newLead.id);
-        if (existingIndex >= 0) {
-          mergedLeads[existingIndex] = newLead;
-        } else {
-          mergedLeads.push(newLead);
-        }
-      });
+        const leadsToCache = mergedLeads.slice(-100);
+        await AsyncStorage.setItem(STORAGE_KEYS.CACHED_LEADS, JSON.stringify(leadsToCache));
+      } catch (e) {
+        console.log('Cache error:', e);
+      }
 
-      // Keep only latest 100 leads in cache
-      const leadsToCache = mergedLeads.slice(-100);
-      await AsyncStorage.setItem(STORAGE_KEYS.CACHED_LEADS, JSON.stringify(leadsToCache));
+      console.log('[LeadsAPI] Transformed leads count:', transformedLeads.length);
+      if (transformedLeads.length > 0) {
+        console.log('[LeadsAPI] First lead:', JSON.stringify(transformedLeads[0]));
+      }
 
-      return response.data;
+      return {
+        data: transformedLeads,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
     } catch (error) {
+      console.log('[LeadsAPI] Error fetching leads:', error);
       throw new Error(getErrorMessage(error));
     }
   },

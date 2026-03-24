@@ -1,5 +1,6 @@
 import api, { getErrorMessage } from './index';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeviceEventEmitter } from 'react-native';
 import {
   LoginCredentials,
   AuthResponse,
@@ -19,7 +20,8 @@ export const authApi = {
         password: credentials.password,
       });
 
-      const { user, token, refreshToken } = response.data.data;
+      const { user, accessToken, refreshToken } = response.data.data;
+      const token = accessToken;
 
       // Store tokens
       await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
@@ -40,25 +42,39 @@ export const authApi = {
    * Logout - clear all stored data
    */
   logout: async (): Promise<void> => {
+    console.log('[AuthAPI] Starting logout...');
     try {
       // Optionally call backend logout endpoint
-      await api.post('/auth/logout').catch(() => {});
+      await api.post('/auth/logout').catch(() => {
+        console.log('[AuthAPI] Backend logout call failed (ignored)');
+      });
 
       // Clear all stored data
+      console.log('[AuthAPI] Clearing storage...');
       await AsyncStorage.multiRemove([
         STORAGE_KEYS.AUTH_TOKEN,
         STORAGE_KEYS.REFRESH_TOKEN,
         STORAGE_KEYS.USER_DATA,
         STORAGE_KEYS.REMEMBER_ME,
       ]);
+      console.log('[AuthAPI] Storage cleared');
+
+      // Emit logout event for navigation
+      console.log('[AuthAPI] Emitting logout event...');
+      DeviceEventEmitter.emit('logout');
+      console.log('[AuthAPI] Logout event emitted');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('[AuthAPI] Logout error:', error);
       // Still clear local storage even if API call fails
       await AsyncStorage.multiRemove([
         STORAGE_KEYS.AUTH_TOKEN,
         STORAGE_KEYS.REFRESH_TOKEN,
         STORAGE_KEYS.USER_DATA,
       ]);
+
+      // Still emit logout event
+      console.log('[AuthAPI] Emitting logout event after error...');
+      DeviceEventEmitter.emit('logout');
     }
   },
 
