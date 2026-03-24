@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store';
@@ -9,19 +9,71 @@ import {
   ClockIcon,
   ExclamationCircleIcon,
   ArrowRightIcon,
+  TrashIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline';
+import api from '../../services/api';
+import { showToast } from '../../utils/toast';
+
+const PLATFORM_FILTERS = [
+  { value: '', label: 'All Sources' },
+  { value: 'YOUTUBE', label: 'YouTube Ads' },
+  { value: 'GOOGLE', label: 'Google Ads' },
+  { value: 'FACEBOOK', label: 'Facebook Ads' },
+  { value: 'INSTAGRAM', label: 'Instagram Ads' },
+  { value: 'LINKEDIN', label: 'LinkedIn Ads' },
+  { value: 'TIKTOK', label: 'TikTok Ads' },
+  { value: 'TWITTER', label: 'Twitter Ads' },
+  { value: 'FORM', label: 'Form Submissions' },
+];
 
 export default function RawImportsPage() {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
+  const [platformFilter, setPlatformFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const { imports, total, stats, isLoading } = useSelector(
     (state: RootState) => state.rawImports
   );
 
   useEffect(() => {
-    dispatch(fetchBulkImports({ page: 1, limit: 20 }));
+    dispatch(fetchBulkImports({ page: 1, limit: 50 }));
     dispatch(fetchStats());
   }, [dispatch]);
+
+  // Filter imports by platform and date
+  const filteredImports = useMemo(() => {
+    let filtered = imports;
+
+    // Filter by platform
+    if (platformFilter) {
+      filtered = filtered.filter((item) =>
+        item.fileName.toUpperCase().includes(platformFilter)
+      );
+    }
+
+    // Filter by date range
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((item) => new Date(item.createdAt) >= fromDate);
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((item) => new Date(item.createdAt) <= toDate);
+    }
+
+    return filtered;
+  }, [imports, platformFilter, dateFrom, dateTo]);
+
+  const clearFilters = () => {
+    setPlatformFilter('');
+    setDateFrom('');
+    setDateTo('');
+  };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -31,6 +83,21 @@ export default function RawImportsPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const handleDeleteImport = async (importId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent row click navigation
+    if (!window.confirm('Are you sure you want to delete this import and ALL its records? This cannot be undone.')) {
+      return;
+    }
+    try {
+      await api.delete(`/raw-imports/${importId}`);
+      showToast.success('Import and all records deleted successfully');
+      dispatch(fetchBulkImports({ page: 1, limit: 20 }));
+      dispatch(fetchStats());
+    } catch {
+      showToast.error('Failed to delete import');
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -70,13 +137,60 @@ export default function RawImportsPage() {
             Manage uploaded data before converting to leads
           </p>
         </div>
-        <button
-          onClick={() => navigate('/leads/bulk-upload')}
-          className="btn btn-primary btn-sm flex items-center gap-1 text-xs"
-        >
-          <DocumentArrowUpIcon className="h-4 w-4" />
-          Upload New Data
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Platform Filter */}
+          <div className="relative">
+            <FunnelIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+            >
+              {PLATFORM_FILTERS.map((filter) => (
+                <option key={filter.value} value={filter.value}>
+                  {filter.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+              placeholder="From"
+            />
+            <span className="text-gray-400 text-xs">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+              placeholder="To"
+            />
+          </div>
+
+          {/* Clear Filters */}
+          {(platformFilter || dateFrom || dateTo) && (
+            <button
+              onClick={clearFilters}
+              className="px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+            >
+              Clear
+            </button>
+          )}
+
+          <button
+            onClick={() => navigate('/leads/bulk-upload')}
+            className="btn btn-primary btn-sm flex items-center gap-1 text-xs"
+          >
+            <DocumentArrowUpIcon className="h-4 w-4" />
+            Upload New Data
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -148,7 +262,7 @@ export default function RawImportsPage() {
                     Loading...
                   </td>
                 </tr>
-              ) : imports.length === 0 ? (
+              ) : filteredImports.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     <DocumentArrowUpIcon className="h-8 w-8 mx-auto text-gray-300 mb-2" />
@@ -163,14 +277,17 @@ export default function RawImportsPage() {
                   </td>
                 </tr>
               ) : (
-                imports.map((item) => {
+                filteredImports.map((item) => {
                   // Parse source from fileName (e.g., "AD_FACEBOOK Import - 2026-03-16")
                   const getSourceFromFileName = (fileName: string) => {
                     const name = fileName.toUpperCase();
                     if (name.includes('AD_FACEBOOK') || name.includes('FACEBOOK')) return { label: 'Facebook Ads', color: 'blue' };
                     if (name.includes('AD_INSTAGRAM') || name.includes('INSTAGRAM')) return { label: 'Instagram Ads', color: 'pink' };
+                    if (name.includes('AD_YOUTUBE') || name.includes('YOUTUBE')) return { label: 'YouTube Ads', color: 'red' };
                     if (name.includes('AD_GOOGLE') || name.includes('GOOGLE')) return { label: 'Google Ads', color: 'red' };
                     if (name.includes('AD_LINKEDIN') || name.includes('LINKEDIN')) return { label: 'LinkedIn Ads', color: 'blue' };
+                    if (name.includes('AD_TIKTOK') || name.includes('TIKTOK')) return { label: 'TikTok Ads', color: 'pink' };
+                    if (name.includes('AD_TWITTER') || name.includes('TWITTER')) return { label: 'Twitter Ads', color: 'slate' };
                     if (name.includes('FORM')) return { label: 'Form Submissions', color: 'purple' };
                     if (name.includes('LANDING_PAGE') || name.includes('LANDING')) return { label: 'Landing Page', color: 'green' };
                     if (name.includes('WHATSAPP')) return { label: 'WhatsApp', color: 'green' };
@@ -228,10 +345,19 @@ export default function RawImportsPage() {
                       {getStatusBadge(item.status)}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-right">
-                      <button className="text-primary-600 hover:text-primary-800 flex items-center gap-0.5 text-xs">
-                        View
-                        <ArrowRightIcon className="h-3 w-3" />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button className="text-primary-600 hover:text-primary-800 flex items-center gap-0.5 text-xs">
+                          View
+                          <ArrowRightIcon className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteImport(item.id, e)}
+                          className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                          title="Delete import and all records"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   );

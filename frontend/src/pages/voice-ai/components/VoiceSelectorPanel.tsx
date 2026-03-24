@@ -13,7 +13,8 @@ interface VoiceSelectorPanelProps {
 
 const VOICE_REGIONS = [
   { id: 'sarvam', label: 'Indian Languages (Sarvam AI)', icon: '🇮🇳' },
-  { id: 'elevenlabs', label: 'Premium Voices (ElevenLabs)', icon: '🎙️' },
+  { id: 'ai4bharat', label: 'Indian Languages (AI4Bharat)', icon: '🔓' },
+  { id: 'elevenlabs', label: 'Premium Voices', icon: '🎙️' },
   { id: 'india', label: 'English (India)', icon: '🇮🇳' },
   { id: 'international', label: 'International', icon: '🌐' },
   { id: 'custom', label: 'Custom Cloned', icon: '✨' },
@@ -159,13 +160,33 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                               {voice.name[0]}
                             </div>
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-medium text-gray-900">{voice.name}</span>
                                 {voice.recommended && (
                                   <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                                 )}
+                                {voice.provider === 'ai4bharat' && (
+                                  <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded font-medium">
+                                    AI4Bharat
+                                  </span>
+                                )}
+                                {voice.provider === 'sarvam' && (
+                                  <span className="px-1.5 py-0.5 text-xs bg-orange-100 text-orange-700 rounded font-medium">
+                                    Sarvam
+                                  </span>
+                                )}
+                                {voice.provider === 'elevenlabs' && (
+                                  <span className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded font-medium">
+                                    ElevenLabs
+                                  </span>
+                                )}
+                                {voice.provider === 'openai' && (
+                                  <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded font-medium">
+                                    OpenAI
+                                  </span>
+                                )}
                                 {voice.premium && (
-                                  <span className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                                  <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">
                                     Premium
                                   </span>
                                 )}

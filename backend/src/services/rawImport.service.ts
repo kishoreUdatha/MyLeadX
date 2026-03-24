@@ -661,6 +661,62 @@ export class RawImportService {
 
     return { unique, duplicates };
   }
+
+  // ==================== DELETE ====================
+
+  async deleteRecord(recordId: string, organizationId: string) {
+    const record = await prisma.rawImportRecord.findFirst({
+      where: { id: recordId, organizationId },
+    });
+
+    if (!record) {
+      throw new NotFoundError('Record not found');
+    }
+
+    await prisma.rawImportRecord.delete({
+      where: { id: recordId },
+    });
+
+    return { deleted: true };
+  }
+
+  async bulkDeleteRecords(recordIds: string[], organizationId: string) {
+    const result = await prisma.rawImportRecord.deleteMany({
+      where: {
+        id: { in: recordIds },
+        organizationId,
+      },
+    });
+
+    return {
+      deletedCount: result.count,
+    };
+  }
+
+  async deleteBulkImport(bulkImportId: string, organizationId: string) {
+    const bulkImport = await prisma.bulkImport.findFirst({
+      where: { id: bulkImportId, organizationId },
+    });
+
+    if (!bulkImport) {
+      throw new NotFoundError('Bulk import not found');
+    }
+
+    // Delete all records first
+    const deletedRecords = await prisma.rawImportRecord.deleteMany({
+      where: { bulkImportId, organizationId },
+    });
+
+    // Then delete the bulk import
+    await prisma.bulkImport.delete({
+      where: { id: bulkImportId },
+    });
+
+    return {
+      deleted: true,
+      deletedRecordsCount: deletedRecords.count,
+    };
+  }
 }
 
 export const rawImportService = new RawImportService();

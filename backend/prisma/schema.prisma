@@ -42,6 +42,9 @@ model Organization {
   facebookIntegrations  FacebookIntegration[]
   linkedinIntegrations  LinkedInIntegration[]
   googleAdsIntegrations GoogleAdsIntegration[]
+  youtubeAdsIntegrations YouTubeAdsIntegration[]
+  twitterAdsIntegrations TwitterAdsIntegration[]
+  tiktokAdsIntegrations  TikTokAdsIntegration[]
   chatbotConversations  ChatbotConversation[]
   payments              Payment[]
   leadStages            LeadStage[]
@@ -104,6 +107,7 @@ model Organization {
 
   // Tracking
   visitorTracking VisitorTracking[]
+  adInteractions  AdInteraction[]
 
   // IVR & Monitoring
   ivrPhoneNumbers        IvrPhoneNumber[]
@@ -114,6 +118,9 @@ model Organization {
   crmIntegrations     CrmIntegration[]
   paymentIntegrations PaymentIntegration[]
   customApiEndpoints  CustomApiEndpoint[]
+
+  // Apify Web Scraping
+  apifyIntegration ApifyIntegration?
 
   @@map("organizations")
 }
@@ -168,8 +175,12 @@ model User {
   rawImportsConvertedBy RawImportRecord[] @relation("RawImportConvertedBy")
 
   // Voice Agents
-  voiceAgentsCreated VoiceAgent[] @relation("VoiceAgentCreator")
-  callFlowsCreated   CallFlow[]   @relation("CallFlowCreator")
+  voiceAgentsCreated   VoiceAgent[] @relation("VoiceAgentCreator")
+  voiceAgentsPublished VoiceAgent[] @relation("VoiceAgentPublisher")
+  callFlowsCreated     CallFlow[]   @relation("CallFlowCreator")
+
+  // Messaging
+  messageLogs MessageLog[]
 
   @@unique([organizationId, email])
   @@map("users")
@@ -385,10 +396,19 @@ model Lead {
   consentRecords            ConsentRecord[]
   funnelEvents              FunnelEvent[]
   otpVerifications          OtpVerification[]
+  adInteractionConversion   AdInteraction?             @relation("AdInteractionConversion")
+  outboundCalls             OutboundCall[]             @relation("LeadOutboundCalls")
+  messageLogs               MessageLog[]
+
+  // Interaction tracking
+  totalCalls       Int       @default(0)
+  lastContactedAt  DateTime?
+  nextFollowUpAt   DateTime?
 
   @@index([organizationId, phone])
   @@index([organizationId, email])
   @@index([organizationId, stageId])
+  @@index([organizationId, nextFollowUpAt])
   @@map("leads")
 }
 
@@ -463,11 +483,22 @@ model FollowUp {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  lead      Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  assignee  User @relation("FollowUpAssignee", fields: [assigneeId], references: [id])
-  createdBy User @relation("FollowUpCreator", fields: [createdById], references: [id])
+  // Follow-up type and AI call settings
+  followUpType    FollowUpType   @default(MANUAL)
+  voiceAgentId    String?        // AI agent to use for AI_CALL type
+  outboundCallId  String?        // Resulting outbound call ID
+  sourceCallId    String?        // The call that triggered this follow-up
+  attemptCount    Int            @default(0)
+  maxAttempts     Int            @default(3)
+  lastAttemptAt   DateTime?
+
+  lead       Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignee   User        @relation("FollowUpAssignee", fields: [assigneeId], references: [id])
+  createdBy  User        @relation("FollowUpCreator", fields: [createdById], references: [id])
+  voiceAgent VoiceAgent? @relation(fields: [voiceAgentId], references: [id])
 
   @@index([assigneeId, status, scheduledAt])
+  @@index([followUpType, status, scheduledAt])
   @@map("follow_ups")
 }
 
@@ -907,10 +938,13 @@ model AdCampaign {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  adLeads      AdLead[]
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  adLeads        AdLead[]
+  adInteractions AdInteraction[]
+  dailyMetrics   AdCampaignDailyMetrics[]
 
   @@unique([platform, externalId])
+  @@index([organizationId])
   @@map("ad_campaigns")
 }
 
@@ -937,9 +971,16 @@ model InstagramIntegration {
   instagramAccountId String? // Instagram business account ID
   instagramUsername  String?
   adAccountId        String?
+
+  // App Credentials (per-organization, uses Facebook App)
+  appId              String?   // Facebook App ID
+  appSecret          String?   // Facebook App Secret (for webhook signature)
+  verifyToken        String?   // Webhook verification token
+
   accessToken        String // Stored (consider encryption in production)
   selectedLeadForms  Json      @default("[]") // Array of form IDs and names
   fieldMapping       Json?     @default("{}") // Custom field mapping config
+  webhookSecret      String?   // Optional webhook secret
   isActive           Boolean   @default(true)
   lastSyncedAt       DateTime?
   createdAt          DateTime  @default(now())
@@ -958,9 +999,16 @@ model FacebookIntegration {
   pageId            String // Facebook page ID
   pageName          String?
   adAccountId       String?
+
+  // App Credentials (per-organization)
+  appId             String?   // Facebook App ID
+  appSecret         String?   // Facebook App Secret (for webhook signature)
+  verifyToken       String?   // Webhook verification token
+
   accessToken       String // Page access token
   selectedLeadForms Json      @default("[]") // Array of form IDs and names
   fieldMapping      Json?     @default("{}") // Custom field mapping config
+  webhookSecret     String?   // Optional webhook secret
   isActive          Boolean   @default(true)
   lastSyncedAt      DateTime?
   createdAt         DateTime  @default(now())
@@ -1017,6 +1065,82 @@ model GoogleAdsIntegration {
   @@map("google_ads_integrations")
 }
 
+// YouTube Ads Integration Configuration (via Google Ads API)
+model YouTubeAdsIntegration {
+  id                String    @id @default(uuid())
+  organizationId    String
+  channelId         String // YouTube Channel ID
+  channelName       String?
+  customerId        String? // Google Ads Customer ID (linked)
+  accessToken       String // OAuth access token
+  refreshToken      String? // OAuth refresh token
+  tokenExpiresAt    DateTime?
+  selectedCampaigns Json      @default("[]") // Array of video campaign IDs
+  fieldMapping      Json?     @default("{}") // Custom field mapping config
+  isActive          Boolean   @default(true)
+  lastSyncedAt      DateTime?
+  syncedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, channelId])
+  @@map("youtube_ads_integrations")
+}
+
+// Twitter/X Ads Integration Configuration
+model TwitterAdsIntegration {
+  id                  String    @id @default(uuid())
+  organizationId      String
+  adAccountId         String // Twitter Ads Account ID
+  adAccountName       String?
+  accessToken         String // OAuth 1.0a access token
+  accessTokenSecret   String? // OAuth 1.0a token secret
+  refreshToken        String? // OAuth 2.0 refresh token (if using OAuth 2.0)
+  tokenExpiresAt      DateTime?
+  selectedLeadCards   Json      @default("[]") // Array of Lead Gen Card IDs
+  selectedCampaigns   Json      @default("[]") // Array of campaign IDs
+  fieldMapping        Json?     @default("{}") // Custom field mapping config
+  webhookSecret       String? // For verifying webhook payloads
+  isActive            Boolean   @default(true)
+  lastSyncedAt        DateTime?
+  syncedAt            DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, adAccountId])
+  @@map("twitter_ads_integrations")
+}
+
+// TikTok Ads Integration Configuration
+model TikTokAdsIntegration {
+  id                  String    @id @default(uuid())
+  organizationId      String
+  advertiserId        String // TikTok Advertiser ID
+  advertiserName      String?
+  accessToken         String // OAuth access token
+  refreshToken        String? // OAuth refresh token
+  tokenExpiresAt      DateTime?
+  selectedInstantForms Json     @default("[]") // Array of Instant Form IDs
+  selectedCampaigns   Json      @default("[]") // Array of campaign IDs
+  pixelId             String? // TikTok Pixel ID for conversion tracking
+  fieldMapping        Json?     @default("{}") // Custom field mapping config
+  webhookSecret       String? // For verifying webhook payloads
+  isActive            Boolean   @default(true)
+  lastSyncedAt        DateTime?
+  syncedAt            DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, advertiserId])
+  @@map("tiktok_ads_integrations")
+}
+
 // Enums
 enum LeadSource {
   MANUAL
@@ -1028,6 +1152,9 @@ enum LeadSource {
   AD_INSTAGRAM
   AD_LINKEDIN
   AD_GOOGLE
+  AD_YOUTUBE
+  AD_TWITTER
+  AD_TIKTOK
   AI_VOICE_AGENT
   AI_VOICE_INBOUND
   AI_VOICE_OUTBOUND
@@ -1119,6 +1246,19 @@ enum ActivityType {
   PAYMENT_RECEIVED
   APPLICATION_SUBMITTED
   CUSTOM
+  // AI Call specific activities
+  AI_CALL_INITIATED
+  AI_CALL_COMPLETED
+  AI_CALL_FOLLOWUP
+  DATA_CAPTURED
+  LEAD_DATA_UPDATED
+  LEAD_MERGED
+}
+
+enum FollowUpType {
+  AI_CALL      // AI will make the follow-up call
+  HUMAN_CALL   // Human telecaller will call
+  MANUAL       // Manual follow-up (meeting, etc.)
 }
 
 enum QueryStatus {
@@ -1201,6 +1341,11 @@ enum CallDirection {
   HYBRID // Both inbound and outbound
 }
 
+enum VoiceAgentPublishStatus {
+  DRAFT // Agent is being configured, not live
+  PUBLISHED // Agent is live and can handle calls
+}
+
 enum CallType {
   MANUAL
   AI
@@ -1231,6 +1376,9 @@ enum AdPlatform {
   INSTAGRAM
   LINKEDIN
   GOOGLE
+  YOUTUBE
+  TWITTER
+  TIKTOK
 }
 
 // ==================== PHONE NUMBER MANAGEMENT ====================
@@ -1414,14 +1562,28 @@ model VoiceAgent {
   name           String
   description    String?
   industry       VoiceAgentIndustry
-  agentType      AgentType          @default(VOICE) // Type of agent
+  agentType      AgentType          @default(VOICE) // Type of agent (VOICE, SALES, APPOINTMENT, etc.)
+  callDirection  CallDirection      @default(HYBRID) // INBOUND, OUTBOUND, or HYBRID
   isActive       Boolean            @default(true)
+
+  // ==================== PUBLISH STATUS ====================
+  status            VoiceAgentPublishStatus @default(DRAFT) // DRAFT or PUBLISHED
+  publishedAt       DateTime?               // When the agent was last published
+  publishedById     String?                 // Who published it
+  publishedConfig   Json?                   // Snapshot of config at publish time
+  draftConfig       Json?                   // Current draft changes (if different from published)
+  versionNumber     Int                     @default(1) // Increments on each publish
+  versionHistory    Json                    @default("[]") // Array of {version, publishedAt, publishedBy, description}
 
   // AI Configuration
   systemPrompt String @db.Text
   voiceId      String @default("alloy") // OpenAI voice: alloy, echo, fable, onyx, nova, shimmer
   language     String @default("en")
   temperature  Float  @default(0.7)
+
+  // LLM Model Configuration
+  llmProvider  String @default("openai") // openai, anthropic, google, groq
+  llmModel     String @default("gpt-4o-mini") // gpt-4o, gpt-4o-mini, claude-3-sonnet, gemini-pro, llama-3
 
   // Qualification Questions
   questions Json @default("[]")
@@ -1527,18 +1689,69 @@ model VoiceAgent {
   surveyDelay     Int     @default(7) // Days after trigger to send
   reviewPlatforms Json    @default("[]") // Google, G2, etc.
 
+  // ==================== WORKFLOW SETTINGS ====================
+  workflowSteps Json @default("[]") // Array of {id, name, description, color, conditions}
+
+  // ==================== BRANCHES/VERSION CONTROL ====================
+  branches      Json    @default("[]") // Array of {id, name, description, active, createdAt}
+  activeBranch  String  @default("main")
+  branchHistory Json    @default("[]") // Array of {action, branch, timestamp, userId}
+
+  // ==================== ANALYSIS/EVALUATION SETTINGS ====================
+  evaluationCriteria Json @default("[]") // Array of {id, name, weight, description}
+  dataCollectionPoints Json @default("[]") // Array of {id, name, type, extractionRule}
+  analysisLanguage String @default("auto") // auto, en, es, fr, etc.
+
+  // ==================== TEST CASES ====================
+  testCases Json @default("[]") // Array of {id, name, description, steps, expectedOutcome, status, lastRun}
+
+  // ==================== SECURITY SETTINGS ====================
+  authenticationRequired Boolean @default(false)
+  rateLimitingEnabled    Boolean @default(true)
+  rateLimitRequests      Int     @default(60) // requests per minute
+  rateLimitBurst         Int     @default(10) // burst limit
+  contentFilteringEnabled Boolean @default(true)
+  contentFilterCategories Json   @default("[\"profanity\", \"violence\", \"adult\", \"hate_speech\"]")
+  dataRetentionDays      Int     @default(90)
+  anonymizeUserData      Boolean @default(true)
+  gdprComplianceEnabled  Boolean @default(true)
+  allowedDomains         Json    @default("[]") // Array of allowed domains for widget embedding
+  ipWhitelist            Json    @default("[]") // Array of allowed IP addresses
+  sessionTimeoutMinutes  Int     @default(30)
+
+  // ==================== ADVANCED SETTINGS ====================
+  topP              Float   @default(0.9) // Nucleus sampling
+  frequencyPenalty  Float   @default(0.0) // Frequency penalty
+  presencePenalty   Float   @default(0.0) // Presence penalty
+  maxResponseTokens Int     @default(500) // Max tokens in response
+  stopSequences     Json    @default("[]") // Array of stop sequences
+  speechRate        Float   @default(1.0) // TTS speech rate (0.5-2.0)
+  voicePitch        Float   @default(0.0) // Voice pitch adjustment (-1.0 to 1.0)
+  silenceDetection  Boolean @default(true)
+  debugMode         Boolean @default(false)
+  logLevel          String  @default("info") // error, warning, info, debug, trace
+  logConversations  Boolean @default(true)
+
+  // ==================== RAG SETTINGS ====================
+  ragSettings Json @default("{\"chunkSize\": 1000, \"chunkOverlap\": 200, \"topK\": 5, \"similarityThreshold\": 0.7, \"embeddingModel\": \"text-embedding-ada-002\", \"searchType\": \"semantic\"}")
+
+  // Metadata for extensibility
+  metadata Json @default("{}")
+
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy         User?                  @relation("VoiceAgentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  publishedBy       User?                  @relation("VoiceAgentPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
   sessions          VoiceSession[]
   outboundCampaigns OutboundCallCampaign[]
   outboundCalls     OutboundCall[]
   scheduledCalls    ScheduledCall[]
   rawImportRecords  RawImportRecord[]      @relation("RawImportAIAgent")
   phoneNumbers      PhoneNumber[] // Phone numbers assigned to this agent
+  followUps         FollowUp[]             // Follow-ups assigned to this AI agent
 
   // Integration Relations
   agentIntegrations  AgentIntegration[]
@@ -1547,6 +1760,9 @@ model VoiceAgent {
   // Call Flow Reference
   callFlowId String?
   callFlow   CallFlow? @relation(fields: [callFlowId], references: [id], onDelete: SetNull)
+
+  // RAG Knowledge Chunks
+  knowledgeChunks KnowledgeChunk[]
 
   @@map("voice_agents")
 }
@@ -1898,15 +2114,23 @@ model OutboundCall {
   leadGenerated   Boolean @default(false)
   generatedLeadId String?
 
+  // Link to existing lead (for follow-up calls)
+  existingLeadId String?
+  isFollowUpCall Boolean @default(false)
+  followUpNumber Int     @default(1) // 1st call, 2nd call, etc.
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campaign OutboundCallCampaign? @relation(fields: [campaignId], references: [id])
-  contact  OutboundCallContact?  @relation(fields: [contactId], references: [id])
-  agent    VoiceAgent            @relation(fields: [agentId], references: [id])
+  campaign     OutboundCallCampaign? @relation(fields: [campaignId], references: [id])
+  contact      OutboundCallContact?  @relation(fields: [contactId], references: [id])
+  agent        VoiceAgent            @relation(fields: [agentId], references: [id])
+  existingLead Lead?                 @relation("LeadOutboundCalls", fields: [existingLeadId], references: [id])
 
   @@index([campaignId, status])
   @@index([agentId, createdAt])
+  @@index([existingLeadId])
+  @@index([phoneNumber])
   @@map("outbound_calls")
 }
 
@@ -3907,6 +4131,11 @@ model VisitorTracking {
   content  String? // utm_content
   term     String? // utm_term
 
+  // Ad Click IDs
+  gclid  String? // Google Click ID
+  fbclid String? // Facebook Click ID
+  utmId  String? // Generic utm_id parameter
+
   // Page info
   referrer    String? @db.Text
   landingPage String? @db.Text
@@ -4076,6 +4305,7 @@ model TelecallerCall {
   // Analysis
   qualification Json?   @default("{}")
   summary       String? @db.Text
+  aiAnalyzed    Boolean @default(false) // Whether AI analysis has been completed
 
   // Notes
   notes String? @db.Text
@@ -5338,3 +5568,263 @@ enum OtpChannel {
   WHATSAPP
   VOICE_CALL
 }
+
+// ==================== AD INTERACTION TRACKING ====================
+
+enum AdInteractionType {
+  CLICK       // User clicked ad and landed on page
+  IMPRESSION  // Ad was shown (synced from platform)
+  ENGAGEMENT  // User engagement (scroll, time on page, video watch)
+  CONVERSION  // Click converted to lead
+}
+
+// Track ad clicks that may or may not result in form submissions
+model AdInteraction {
+  id             String            @id @default(uuid())
+  organizationId String
+  type           AdInteractionType
+  visitorId      String            // From tracking pixel
+  sessionId      String?           // Session tracking for deduplication
+
+  // Click IDs from ad platforms
+  gclid   String? // Google Click ID
+  fbclid  String? // Facebook Click ID
+  ttclid  String? // TikTok Click ID
+  twclid  String? // Twitter Click ID
+  liclid  String? // LinkedIn Click ID
+
+  // UTM Parameters
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+
+  // Page info
+  landingPage String? @db.Text
+  referrer    String? @db.Text
+
+  // Device info
+  userAgent  String? @db.Text
+  ipAddress  String?
+  deviceType String?
+  browser    String?
+
+  // Engagement tracking (for impressions and engagement events)
+  scrollDepth     Int?  // Page scroll percentage (25, 50, 75, 100)
+  timeOnPage      Int?  // Seconds spent on page
+  videoWatchTime  Int?  // Seconds of video watched (for YouTube/TikTok)
+  videoPercentage Int?  // Video completion percentage
+
+  // Campaign relationship
+  adCampaignId String?
+
+  // Conversion tracking
+  convertedToLeadId String?   @unique
+  convertedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  adCampaign   AdCampaign?  @relation(fields: [adCampaignId], references: [id], onDelete: SetNull)
+  convertedTo  Lead?        @relation("AdInteractionConversion", fields: [convertedToLeadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, visitorId])
+  @@index([organizationId, sessionId])
+  @@index([organizationId, type])
+  @@index([gclid])
+  @@index([fbclid])
+  @@index([ttclid])
+  @@index([twclid])
+  @@index([convertedToLeadId])
+  @@map("ad_interactions")
+}
+
+// Store historical daily metrics for ad campaigns
+model AdCampaignDailyMetrics {
+  id           String   @id @default(uuid())
+  adCampaignId String
+  date         DateTime @db.Date
+
+  // Metrics
+  impressions Int     @default(0)
+  reach       Int     @default(0)
+  clicks      Int     @default(0)
+  conversions Int     @default(0)
+  spend       Decimal? @db.Decimal(10, 2)
+  cpc         Decimal? @db.Decimal(10, 4) // Cost per click
+  cpm         Decimal? @db.Decimal(10, 4) // Cost per 1000 impressions
+  ctr         Decimal? @db.Decimal(5, 4)  // Click-through rate
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  adCampaign AdCampaign @relation(fields: [adCampaignId], references: [id], onDelete: Cascade)
+
+  @@unique([adCampaignId, date])
+  @@index([adCampaignId])
+  @@index([date])
+  @@map("ad_campaign_daily_metrics")
+}
+
+// ===========================================
+// Apify Web Scraping Integration
+// ===========================================
+
+enum ApifyScraperType {
+  GOOGLE_MAPS
+  LINKEDIN_COMPANY
+  LINKEDIN_PEOPLE
+  YELLOW_PAGES
+  CUSTOM
+}
+
+enum ScheduleInterval {
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum ApifyScrapeJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model ApifyIntegration {
+  id             String   @id @default(uuid())
+  organizationId String   @unique
+  apiToken       String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  scraperConfigs ApifyScraperConfig[]
+  scrapeJobs     ApifyScrapeJob[]
+
+  @@map("apify_integrations")
+}
+
+model ApifyScraperConfig {
+  id               String           @id @default(uuid())
+  integrationId    String
+  name             String
+  scraperType      ApifyScraperType
+  actorId          String
+  inputConfig      Json             @default("{}")
+  scheduleEnabled  Boolean          @default(false)
+  scheduleInterval ScheduleInterval @default(DAILY)
+  scheduleCron     String?          // For CUSTOM interval
+  nextScheduledAt  DateTime?
+  fieldMapping     Json             @default("{}")
+  totalLeadsScraped Int             @default(0)
+  lastRunStatus    String?
+  lastRunAt        DateTime?
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  integration ApifyIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  scrapeJobs  ApifyScrapeJob[]
+
+  @@index([integrationId, isActive])
+  @@map("apify_scraper_configs")
+}
+
+model ApifyScrapeJob {
+  id            String               @id @default(uuid())
+  integrationId String
+  configId      String?
+  apifyRunId    String               @unique
+  actorId       String
+  status        ApifyScrapeJobStatus @default(PENDING)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  totalItems    Int                  @default(0)
+  importedItems Int                  @default(0)
+  duplicateItems Int                 @default(0)
+  failedItems   Int                  @default(0)
+  bulkImportId  String?
+  errorMessage  String?
+  inputSnapshot Json?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  integration ApifyIntegration    @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  config      ApifyScraperConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+
+  @@index([integrationId, status])
+  @@index([configId])
+  @@map("apify_scrape_jobs")
+}
+
+// ==================== RAG KNOWLEDGE CHUNKS ====================
+
+model KnowledgeChunk {
+  id             String   @id @default(uuid())
+  voiceAgentId   String   @map("voice_agent_id")
+  sourceType     String   @map("source_type") // "knowledge_base", "faq", "document"
+  sourceId       String?  @map("source_id")
+  sourceName     String?  @map("source_name")
+  content        String   @db.Text
+  chunkIndex     Int      @map("chunk_index")
+  totalChunks    Int      @map("total_chunks")
+  embedding      Unsupported("vector(1536)")?
+  embeddingModel String   @default("text-embedding-3-small") @map("embedding_model")
+  metadata       Json     @default("{}")
+  keywords       String[]
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  voiceAgent VoiceAgent @relation(fields: [voiceAgentId], references: [id], onDelete: Cascade)
+
+  @@index([voiceAgentId])
+  @@index([sourceType])
+  @@map("knowledge_chunks")
+}
+
+// ==================== MESSAGING ====================
+
+// Message Log for tracking all sent messages (SMS, WhatsApp, Email) during telecaller calls
+model MessageLog {
+  id             String  @id @default(uuid())
+  organizationId String
+  leadId         String?
+  userId         String?
+
+  // Message Details
+  type       TemplateType // SMS, WHATSAPP, EMAIL
+  to         String // Phone number or email
+  subject    String? // For emails
+  content    String       @db.Text
+  templateId String?
+
+  // Status
+  status     MessageStatus @default(PENDING)
+  externalId String? // Provider message ID
+  error      String?
+
+  // Timestamps
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([leadId])
+  @@index([type, status])
+  @@map("message_logs")
+}
+

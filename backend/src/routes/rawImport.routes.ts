@@ -148,6 +148,31 @@ router.post(
   rawImportController.bulkUpdateStatus.bind(rawImportController)
 );
 
+// Delete single record
+router.delete(
+  '/records/:id',
+  param('id').isUUID().withMessage('Invalid record ID'),
+  validate([]),
+  rawImportController.deleteRecord.bind(rawImportController)
+);
+
+// Delete bulk import and all its records
+router.delete(
+  '/:id',
+  param('id').isUUID().withMessage('Invalid bulk import ID'),
+  validate([]),
+  rawImportController.deleteBulkImport.bind(rawImportController)
+);
+
+// Bulk delete records
+router.post(
+  '/records/bulk-delete',
+  body('recordIds').isArray({ min: 1 }).withMessage('At least one record ID is required'),
+  body('recordIds.*').isUUID().withMessage('Invalid record ID'),
+  validate([]),
+  rawImportController.bulkDeleteRecords.bind(rawImportController)
+);
+
 // Test endpoint to simulate external leads (for testing purposes)
 const simulateLeadValidation = [
   body('source').isIn([

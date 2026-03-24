@@ -14,32 +14,251 @@ import { prisma } from '../config/database';
 
 const router = Router();
 
+// ==================== TEST ENDPOINTS (Development Only) ====================
+
+// Test Facebook lead capture WITHOUT signature verification
+router.post('/facebook/test-lead', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { organizationId, firstName, lastName, email, phone, campaignName } = req.body;
+
+    if (!organizationId) {
+      return res.status(400).json({ success: false, message: 'organizationId is required' });
+    }
+
+    // Simulate a Facebook lead webhook payload
+    const mockPayload = {
+      object: 'page',
+      entry: [{
+        id: 'test-page-' + Date.now(),
+        time: Date.now(),
+        changes: [{
+          field: 'leadgen',
+          value: {
+            leadgen_id: 'test-lead-' + Date.now(),
+            page_id: 'test-page-123',
+            form_id: 'test-form-123',
+            created_time: Math.floor(Date.now() / 1000),
+          },
+        }],
+      }],
+    };
+
+    // Create lead directly in RawImportRecord for testing
+    const { externalLeadImportService } = await import('../services/external-lead-import.service');
+
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: firstName || 'Test',
+      lastName: lastName || 'Lead',
+      email: email || `test${Date.now()}@example.com`,
+      phone: phone || `+91${Math.floor(Math.random() * 9000000000) + 1000000000}`,
+      source: 'AD_FACEBOOK',
+      sourceDetails: `Test Campaign: ${campaignName || 'Facebook Test Campaign'}`,
+      campaignName: campaignName || 'Facebook Test Campaign',
+      customFields: {
+        testLead: true,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    console.log(`[Facebook Test] Lead created: ${result.rawImportRecord.id}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Test lead created successfully',
+      data: {
+        id: result.rawImportRecord.id,
+        isDuplicate: result.isDuplicate,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Facebook Test] Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Test Instagram lead capture WITHOUT signature verification
+router.post('/instagram/test-lead', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { organizationId, firstName, lastName, email, phone, campaignName } = req.body;
+
+    if (!organizationId) {
+      return res.status(400).json({ success: false, message: 'organizationId is required' });
+    }
+
+    const { externalLeadImportService } = await import('../services/external-lead-import.service');
+
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: firstName || 'Test',
+      lastName: lastName || 'Lead',
+      email: email || `test${Date.now()}@example.com`,
+      phone: phone || `+91${Math.floor(Math.random() * 9000000000) + 1000000000}`,
+      source: 'AD_INSTAGRAM',
+      sourceDetails: `Test Campaign: ${campaignName || 'Instagram Test Campaign'}`,
+      campaignName: campaignName || 'Instagram Test Campaign',
+      customFields: {
+        testLead: true,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    console.log(`[Instagram Test] Lead created: ${result.rawImportRecord.id}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Test lead created successfully',
+      data: {
+        id: result.rawImportRecord.id,
+        isDuplicate: result.isDuplicate,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Instagram Test] Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ==================== WEBHOOK ENDPOINTS ====================
+
 // Facebook webhook verification (GET)
+// Multi-tenant: searches ALL integrations for matching verify token
 router.get('/facebook/webhook', async (req: Request, res: Response) => {
   const mode = req.query['hub.mode'] as string;
   const token = req.query['hub.verify_token'] as string;
   const challenge = req.query['hub.challenge'] as string;
+  const orgId = req.query['org'] as string; // Optional: org ID in webhook URL
 
-  const result = await facebookService.verifyWebhook(mode, token, challenge);
-  if (result) {
-    res.status(200).send(challenge);
-  } else {
-    res.status(403).send('Forbidden');
+  console.log(`[Facebook] Webhook verification request - mode: ${mode}, token: ${token?.substring(0, 10)}...`);
+
+  if (mode !== 'subscribe') {
+    console.warn('[Facebook] Invalid mode for webhook verification');
+    return res.status(403).send('Forbidden');
   }
+
+  // If org ID provided, look up org-specific verify token first
+  if (orgId) {
+    const integration = await prisma.facebookIntegration.findFirst({
+      where: { organizationId: orgId, isActive: true },
+    });
+    if (integration?.verifyToken && integration.verifyToken === token) {
+      console.info(`[Facebook] Webhook verified for org ${orgId}`);
+      return res.status(200).send(challenge);
+    }
+  }
+
+  // Multi-tenant: Search ALL integrations for matching verify token
+  const matchingIntegration = await prisma.facebookIntegration.findFirst({
+    where: {
+      verifyToken: token,
+      isActive: true
+    },
+  });
+
+  if (matchingIntegration) {
+    console.info(`[Facebook] Webhook verified for org ${matchingIntegration.organizationId}`);
+    return res.status(200).send(challenge);
+  }
+
+  // Fallback to env variable (for backwards compatibility)
+  const envToken = process.env.FACEBOOK_VERIFY_TOKEN;
+  if (envToken && token === envToken) {
+    console.info('[Facebook] Webhook verified using env token');
+    return res.status(200).send(challenge);
+  }
+
+  console.warn(`[Facebook] No matching verify token found`);
+  res.status(403).send('Forbidden');
 });
 
 // Facebook webhook handler (POST)
+// Looks up organization by page ID and uses org-specific app secret
 router.post('/facebook/webhook', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const signature = req.headers['x-hub-signature-256'] as string;
-    const payload = JSON.stringify(req.body);
+    // Use raw body for signature verification (captured by express.json verify function)
+    const payload = (req as any).rawBody || JSON.stringify(req.body);
+    const isTestMode = req.headers['x-test-mode'] === 'true' && process.env.NODE_ENV === 'development';
 
-    if (!facebookService.verifySignature(payload, signature)) {
-      return res.status(401).send('Invalid signature');
+    // Extract page ID from webhook payload to find organization
+    const entry = (req.body.entry as any[])?.[0];
+    const pageId = entry?.id;
+
+    let organizationId: string | null = null;
+    let appSecret: string | null = null;
+    let accessToken: string | null = null;
+
+    // Look up integration by page ID to get org-specific credentials
+    if (pageId) {
+      const integration = await prisma.facebookIntegration.findFirst({
+        where: { pageId, isActive: true },
+      });
+      if (integration) {
+        organizationId = integration.organizationId;
+        appSecret = integration.appSecret;
+        accessToken = integration.accessToken;
+      }
     }
 
-    // Get organization from webhook data or default
-    const organizationId = req.body.organizationId || process.env.DEFAULT_ORG_ID;
+    // If not found by pageId, try lookup by organizationId from query/header
+    if (!appSecret) {
+      const orgIdFromRequest = req.query.organizationId as string || req.headers['x-organization-id'] as string;
+      if (orgIdFromRequest) {
+        const integration = await prisma.facebookIntegration.findFirst({
+          where: { organizationId: orgIdFromRequest, isActive: true },
+        });
+        if (integration) {
+          organizationId = integration.organizationId;
+          appSecret = integration.appSecret;
+          accessToken = integration.accessToken;
+          // Update the pageId in the database for future lookups
+          if (pageId && integration.pageId !== pageId) {
+            await prisma.facebookIntegration.update({
+              where: { id: integration.id },
+              data: { pageId, pageName: `Page ${pageId}` },
+            });
+            console.info(`[Facebook] Updated pageId to ${pageId} for org ${organizationId}`);
+          }
+        }
+      }
+    }
+
+    // Skip signature verification in test mode (development only)
+    if (!isTestMode) {
+      // Verify signature with org-specific secret or fallback
+      if (appSecret) {
+        if (!facebookService.verifySignatureWithSecret(payload, signature, appSecret)) {
+          console.warn(`[Facebook] Invalid signature for page ${pageId}`);
+          return res.status(401).send('Invalid signature');
+        }
+      } else if (signature) {
+        // Fallback to env-based verification
+        if (!facebookService.verifySignature(payload, signature)) {
+          return res.status(401).send('Invalid signature');
+        }
+      }
+    } else {
+      console.info('[Facebook] Test mode - skipping signature verification');
+    }
+
+    // Use found org ID or fallback - check multiple sources
+    if (!organizationId) {
+      organizationId =
+        req.body.organizationId ||
+        req.query.organizationId as string ||
+        req.headers['x-organization-id'] as string ||
+        process.env.DEFAULT_ORG_ID;
+    }
+
+    if (!organizationId) {
+      console.warn('[Facebook] No organization found for webhook');
+      return res.status(400).send('Organization not found');
+    }
+
+    // Set the access token from the integration for fetching lead data
+    if (accessToken) {
+      facebookService.setAccessToken(accessToken);
+    } else {
+      console.warn('[Facebook] No access token found for integration, lead data may not be fetchable');
+    }
 
     const lead = await facebookService.handleWebhook(req.body, organizationId);
 
@@ -50,16 +269,63 @@ router.post('/facebook/webhook', async (req: Request, res: Response, next: NextF
 });
 
 // Instagram webhook handler (uses Facebook webhook infrastructure)
+// Looks up organization by page ID and uses org-specific app secret
 router.post('/instagram/webhook', webhookLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const signature = req.headers['x-hub-signature-256'] as string;
     const payload = JSON.stringify(req.body);
 
-    if (!instagramService.verifySignature(payload, signature)) {
-      return res.status(401).send('Invalid signature');
+    // Extract page ID from webhook payload to find organization
+    const entry = (req.body.entry as any[])?.[0];
+    const pageId = entry?.id;
+
+    let organizationId: string | null = null;
+    let appSecret: string | null = null;
+
+    // Look up integration by page ID to get org-specific credentials
+    if (pageId) {
+      const integration = await prisma.instagramIntegration.findFirst({
+        where: { pageId, isActive: true },
+      });
+      if (integration) {
+        organizationId = integration.organizationId;
+        appSecret = integration.appSecret;
+      }
     }
 
-    const organizationId = req.body.organizationId || process.env.DEFAULT_ORG_ID;
+    // Skip signature verification in test mode (development only)
+    const isTestMode = req.headers['x-test-mode'] === 'true' && process.env.NODE_ENV === 'development';
+
+    if (!isTestMode) {
+      // Verify signature with org-specific secret or fallback
+      if (appSecret) {
+        if (!instagramService.verifySignatureWithSecret(payload, signature, appSecret)) {
+          console.warn(`[Instagram] Invalid signature for page ${pageId}`);
+          return res.status(401).send('Invalid signature');
+        }
+      } else if (signature) {
+        if (!instagramService.verifySignature(payload, signature)) {
+          return res.status(401).send('Invalid signature');
+        }
+      }
+    } else {
+      console.info('[Instagram] Test mode - skipping signature verification');
+    }
+
+    // Use found org ID or fallback - check multiple sources
+    if (!organizationId) {
+      organizationId =
+        req.body.organizationId ||
+        req.query.organizationId as string ||
+        req.headers['x-organization-id'] as string ||
+        process.env.DEFAULT_ORG_ID;
+    }
+
+    if (!organizationId) {
+      console.warn('[Instagram] No organization found for webhook');
+      return res.status(400).send('Organization not found');
+    }
+
     const lead = await instagramService.handleWebhook(req.body, organizationId);
 
     ApiResponse.success(res, 'Webhook processed', { lead });

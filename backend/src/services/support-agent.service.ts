@@ -1,11 +1,12 @@
 /**
  * Support Agent Service - Single Responsibility Principle
- * Handles customer support conversations
+ * Handles customer support conversations with RAG-powered knowledge retrieval
  */
 
 import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
 import { AgentContext, AgentResponse, SupportTicket } from './specialized-agent.types';
+import { ragService } from './rag.service';
 
 const prisma = new PrismaClient();
 
@@ -14,7 +15,7 @@ const openai = process.env.OPENAI_API_KEY
   : null;
 
 /**
- * Handle support conversation
+ * Handle support conversation with RAG-powered knowledge retrieval
  */
 export async function handleConversation(context: AgentContext, userMessage: string): Promise<AgentResponse> {
   const agent = await prisma.voiceAgent.findUnique({
@@ -25,8 +26,48 @@ export async function handleConversation(context: AgentContext, userMessage: str
 
   const ticketCategories = (agent.ticketCategories as string[]) || [];
   const escalationRules = (agent.escalationRules as any[]) || [];
-  const knowledgeBase = agent.knowledgeBase || '';
-  const faqs = (agent.faqs as any[]) || [];
+
+  // Use RAG to retrieve relevant knowledge instead of full knowledge base
+  let relevantKnowledge = '';
+  try {
+    const ragSettings = (agent.ragSettings as any) || {};
+    const topK = ragSettings.topK || 5;
+    const similarityThreshold = ragSettings.similarityThreshold || 0.5;
+
+    // Check if agent has indexed knowledge
+    const indexStatus = await ragService.getIndexStatus(context.agentId);
+
+    if (indexStatus.indexed && indexStatus.totalChunks > 0) {
+      // Use RAG retrieval
+      const results = await ragService.hybridSearch(context.agentId, userMessage, {
+        topK,
+        similarityThreshold,
+      });
+
+      if (results.length > 0) {
+        relevantKnowledge = ragService.buildContextFromResults(results, 2000);
+        console.log(`[Support] RAG retrieved ${results.length} relevant chunks for query`);
+      }
+    } else {
+      // Fallback to full knowledge base if not indexed
+      const knowledgeBase = agent.knowledgeBase || '';
+      const faqs = (agent.faqs as any[]) || [];
+
+      relevantKnowledge = knowledgeBase;
+      if (faqs.length > 0) {
+        relevantKnowledge += '\n\nFAQS:\n' + faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n');
+      }
+      console.log(`[Support] Using full knowledge base (not indexed)`);
+    }
+  } catch (error) {
+    console.error('[Support] RAG retrieval error, falling back to full knowledge:', error);
+    // Fallback to full knowledge base on error
+    relevantKnowledge = agent.knowledgeBase || '';
+    const faqs = (agent.faqs as any[]) || [];
+    if (faqs.length > 0) {
+      relevantKnowledge += '\n\nFAQS:\n' + faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n');
+    }
+  }
 
   const systemPrompt = `You are ${agent.name}, a customer support agent.
 
@@ -36,11 +77,8 @@ YOUR ROLE:
 - Create support tickets for complex issues
 - Escalate to human agents when needed
 
-KNOWLEDGE BASE:
-${knowledgeBase}
-
-FAQS:
-${faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n')}
+RELEVANT KNOWLEDGE (retrieved based on customer's query):
+${relevantKnowledge || 'No specific knowledge found for this query.'}
 
 TICKET CATEGORIES:
 ${ticketCategories.map(c => `- ${c}`).join('\n')}
@@ -50,7 +88,7 @@ ${escalationRules.map((r: any) => `- If "${r.trigger}": Escalate to ${r.team}`).
 
 CONVERSATION FLOW:
 1. Understand the customer's issue
-2. Try to resolve using knowledge base
+2. Try to resolve using the knowledge provided above
 3. If complex, create a ticket
 4. If urgent or negative sentiment, escalate
 

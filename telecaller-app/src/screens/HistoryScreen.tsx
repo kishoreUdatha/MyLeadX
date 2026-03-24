@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppDispatch, useAppSelector } from '../store';
 import { fetchCalls } from '../store/slices/callsSlice';
 import {
@@ -18,7 +20,9 @@ import {
   getOutcomeColor,
   formatPhoneNumber,
 } from '../utils/formatters';
-import { Call, CallOutcome } from '../types';
+import { Call, CallOutcome, RootStackParamList } from '../types';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const OUTCOME_FILTERS: { label: string; value: CallOutcome | undefined }[] = [
   { label: 'All', value: undefined },
@@ -30,38 +34,69 @@ const OUTCOME_FILTERS: { label: string; value: CallOutcome | undefined }[] = [
 
 const HistoryScreen: React.FC = () => {
   const dispatch = useAppDispatch();
+  const navigation = useNavigation<NavigationProp>();
   const { calls, isLoading, pagination } = useAppSelector((state) => state.calls);
 
   const [activeFilter, setActiveFilter] = useState<CallOutcome | undefined>(undefined);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadCalls(true);
-  }, []);
+  const hasInitializedRef = useRef(false);
+  const isLoadingRef = useRef(false);
+  const lastLoadTimeRef = useRef(0);
+  const currentPageRef = useRef(1);
 
   const loadCalls = useCallback(
-    (refresh: boolean = false) => {
-      const page = refresh ? 1 : pagination.page + 1;
-      dispatch(
+    async (refresh: boolean = false) => {
+      const page = refresh ? 1 : currentPageRef.current + 1;
+      if (refresh) {
+        currentPageRef.current = 1;
+      }
+      await dispatch(
         fetchCalls({
           page,
           filters: activeFilter ? { outcome: activeFilter } : undefined,
           refresh,
         })
       );
+      if (!refresh) {
+        currentPageRef.current = page;
+      }
     },
-    [dispatch, pagination.page, activeFilter]
+    [dispatch, activeFilter]
   );
 
+  useEffect(() => {
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      loadCalls(true);
+    }
+  }, [loadCalls]);
+
   const handleRefresh = useCallback(() => {
+    isLoadingRef.current = false;
     loadCalls(true);
   }, [loadCalls]);
 
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && pagination.hasMore) {
-      loadCalls(false);
+    const now = Date.now();
+    // Debounce: prevent calls within 1 second
+    if (now - lastLoadTimeRef.current < 1000) {
+      return;
     }
-  }, [isLoading, pagination.hasMore, loadCalls]);
+    if (isLoadingRef.current || isLoading || !pagination.hasMore) {
+      return;
+    }
+    if (calls.length === 0) {
+      return;
+    }
+    lastLoadTimeRef.current = now;
+    isLoadingRef.current = true;
+    loadCalls(false).finally(() => {
+      setTimeout(() => {
+        isLoadingRef.current = false;
+      }, 500);
+    });
+  }, [isLoading, pagination.hasMore, loadCalls, calls.length]);
 
   const handleFilterChange = useCallback(
     (outcome: CallOutcome | undefined) => {
@@ -165,6 +200,16 @@ const HistoryScreen: React.FC = () => {
                   </Text>
                 </View>
               )}
+
+              {/* AI Analysis Button */}
+              <TouchableOpacity
+                style={styles.aiAnalysisButton}
+                onPress={() => navigation.navigate('AIAnalysis', { callId: item.id })}
+              >
+                <Icon name="robot" size={18} color="#FFFFFF" />
+                <Text style={styles.aiAnalysisButtonText}>View AI Analysis</Text>
+                <Icon name="chevron-right" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
           )}
         </TouchableOpacity>
@@ -244,7 +289,11 @@ const HistoryScreen: React.FC = () => {
           />
         }
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.3}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
       />
@@ -398,6 +447,22 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   sentimentScore: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  aiAnalysisButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  aiAnalysisButtonText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },

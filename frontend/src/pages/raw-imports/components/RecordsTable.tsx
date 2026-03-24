@@ -8,6 +8,7 @@ import {
   CpuChipIcon,
   PhoneIcon,
   ClockIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { RawImportRecordStatus } from '../../../services/rawImport.service';
 import { STATUS_BADGE_STYLES, SOURCE_BADGE_STYLES, formatDate } from '../raw-import-detail.constants';
@@ -36,6 +37,7 @@ interface RecordsTableProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   onPageChange: (page: number) => void;
+  onDelete?: (id: string) => void;
 }
 
 const getStatusBadge = (status: RawImportRecordStatus) => (
@@ -67,6 +69,7 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
   onSelectAll,
   onClearSelection,
   onPageChange,
+  onDelete,
 }) => (
   <div className="card">
     <div className="overflow-x-auto">
@@ -88,18 +91,19 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
             <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Assigned To</th>
             <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Calls</th>
             <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Last Call</th>
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Actions</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {isLoading ? (
             <tr>
-              <td colSpan={8} className="px-3 py-8 text-center text-xs text-gray-500">
+              <td colSpan={9} className="px-3 py-8 text-center text-xs text-gray-500">
                 Loading...
               </td>
             </tr>
           ) : records.length === 0 ? (
             <tr>
-              <td colSpan={8} className="px-3 py-8 text-center text-xs text-gray-500">
+              <td colSpan={9} className="px-3 py-8 text-center text-xs text-gray-500">
                 No records found
               </td>
             </tr>
@@ -166,6 +170,17 @@ export const RecordsTable: React.FC<RecordsTableProps> = ({
                       </span>
                     ) : (
                       '-'
+                    )}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {onDelete && (
+                      <button
+                        onClick={() => onDelete(record.id)}
+                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                        title="Delete record"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
                     )}
                   </td>
                 </tr>

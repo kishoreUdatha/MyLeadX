@@ -1,10 +1,14 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { body, param, query } from 'express-validator';
+import { PrismaClient } from '@prisma/client';
 import { leadController } from '../controllers/lead.controller';
 import { validate } from '../middlewares/validate';
 import { authenticate, authorize } from '../middlewares/auth';
-import { tenantMiddleware } from '../middlewares/tenant';
+import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { uploadSpreadsheet } from '../middlewares/upload';
+import { ApiResponse } from '../utils/apiResponse';
+
+const prisma = new PrismaClient();
 
 const router = Router();
 
@@ -113,6 +117,13 @@ router.put(
   leadController.update.bind(leadController)
 );
 
+// PATCH for partial updates (same as PUT but for mobile app compatibility)
+router.patch(
+  '/:id',
+  validate(updateLeadValidation),
+  leadController.update.bind(leadController)
+);
+
 router.delete(
   '/:id',
   authorize('admin'),
@@ -125,6 +136,85 @@ router.put(
   authorize('admin'),
   validate(assignLeadValidation),
   leadController.assign.bind(leadController)
+);
+
+// Add note to lead
+router.post(
+  '/:id/notes',
+  [
+    param('id').isUUID().withMessage('Invalid lead ID'),
+    body('content').trim().notEmpty().withMessage('Note content is required'),
+  ],
+  validate([]),
+  async (req: TenantRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+      const userId = req.user!.id;
+
+      // Verify lead exists and belongs to org
+      const lead = await prisma.lead.findFirst({
+        where: { id, organizationId: req.organization!.id },
+      });
+
+      if (!lead) {
+        return ApiResponse.error(res, 'Lead not found', 404);
+      }
+
+      const note = await prisma.leadNote.create({
+        data: {
+          leadId: id,
+          userId,
+          content,
+        },
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+        },
+      });
+
+      // Log activity
+      await prisma.leadActivity.create({
+        data: {
+          leadId: id,
+          type: 'NOTE_ADDED',
+          title: 'Note Added',
+          description: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+          userId,
+        },
+      });
+
+      ApiResponse.success(res, 'Note added', note);
+    } catch (error) {
+      ApiResponse.error(res, (error as Error).message, 500);
+    }
+  }
+);
+
+// Get lead notes
+router.get(
+  '/:id/notes',
+  param('id').isUUID().withMessage('Invalid lead ID'),
+  async (req: TenantRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const notes = await prisma.leadNote.findMany({
+        where: { leadId: id },
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      ApiResponse.success(res, 'Notes retrieved', notes);
+    } catch (error) {
+      ApiResponse.error(res, (error as Error).message, 500);
+    }
+  }
 );
 
 export default router;

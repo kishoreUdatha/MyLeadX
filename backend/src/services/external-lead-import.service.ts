@@ -15,7 +15,7 @@ export interface ExternalLeadData {
   email?: string;
   phone: string;
   alternatePhone?: string;
-  source: 'AD_FACEBOOK' | 'AD_INSTAGRAM' | 'AD_GOOGLE' | 'AD_LINKEDIN' | 'FORM' | 'LANDING_PAGE' | 'WEBSITE' | 'WHATSAPP' | 'API';
+  source: 'AD_FACEBOOK' | 'AD_INSTAGRAM' | 'AD_GOOGLE' | 'AD_LINKEDIN' | 'FORM' | 'LANDING_PAGE' | 'WEBSITE' | 'WHATSAPP' | 'API' | 'APIFY';
   sourceDetails?: string;
   campaignName?: string;
   customFields?: Record<string, any>;

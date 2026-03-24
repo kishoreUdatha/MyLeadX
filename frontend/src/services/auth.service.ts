@@ -1,4 +1,12 @@
+/**
+ * Authentication Service
+ *
+ * Handles login, logout, registration, and password management
+ */
+
 import api from './api';
+import { tokenService } from './token.service';
+import { socketService } from './socket.service';
 
 export interface LoginCredentials {
   email: string;
@@ -35,8 +43,11 @@ export const authService = {
     const response = await api.post('/auth/login', credentials);
     const data = response.data.data;
 
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
+    // Store tokens using token service
+    tokenService.setTokens(data.accessToken, data.refreshToken);
+
+    // Reconnect socket with new token
+    await socketService.reconnect();
 
     return data;
   },
@@ -45,8 +56,11 @@ export const authService = {
     const response = await api.post('/auth/register', data);
     const result = response.data.data;
 
-    localStorage.setItem('accessToken', result.accessToken);
-    localStorage.setItem('refreshToken', result.refreshToken);
+    // Store tokens using token service
+    tokenService.setTokens(result.accessToken, result.refreshToken);
+
+    // Connect socket with new token
+    await socketService.connectAsync();
 
     return result;
   },
@@ -55,8 +69,9 @@ export const authService = {
     try {
       await api.post('/auth/logout');
     } finally {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+      // Clear tokens and disconnect socket
+      tokenService.clearTokens();
+      socketService.disconnect();
     }
   },
 
@@ -75,5 +90,26 @@ export const authService = {
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await api.post('/auth/change-password', { currentPassword, newPassword });
+  },
+
+  /**
+   * Check if user is authenticated (has valid token)
+   */
+  isAuthenticated(): boolean {
+    return tokenService.isTokenValid();
+  },
+
+  /**
+   * Get the current access token
+   */
+  getAccessToken(): string | null {
+    return tokenService.getAccessToken();
+  },
+
+  /**
+   * Refresh the access token manually
+   */
+  async refreshToken(): Promise<string | null> {
+    return tokenService.refreshAccessToken();
   },
 };

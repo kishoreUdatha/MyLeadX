@@ -24,6 +24,7 @@ import {
   UserGroupIcon,
   CpuChipIcon,
   ArrowPathIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { showToast } from '../../utils/toast';
 import api from '../../services/api';
@@ -215,6 +216,39 @@ export default function RawImportDetailPage() {
     setSelectedTelecallers([]);
   };
 
+  const handleDeleteRecord = async (recordId: string) => {
+    if (!window.confirm('Are you sure you want to delete this record?')) {
+      return;
+    }
+    try {
+      await api.delete(`/raw-imports/records/${recordId}`);
+      showToast.success('Record deleted successfully');
+      loadRecords();
+      dispatch(fetchBulkImportById(id!));
+    } catch {
+      showToast.error('Failed to delete record');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedRecords.length === 0) {
+      showToast.error('Please select records to delete');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete ${selectedRecords.length} record(s)?`)) {
+      return;
+    }
+    try {
+      await api.post('/raw-imports/records/bulk-delete', { recordIds: selectedRecords });
+      showToast.success(`${selectedRecords.length} record(s) deleted successfully`);
+      dispatch(clearSelectedRecords());
+      loadRecords();
+      dispatch(fetchBulkImportById(id!));
+    } catch {
+      showToast.error('Failed to delete records');
+    }
+  };
+
   const closeCampaignModal = () => {
     setShowCampaignModal(false);
     setSelectedAgent('');
@@ -316,6 +350,13 @@ export default function RawImportDetailPage() {
               <CpuChipIcon className="h-3.5 w-3.5" />
               AI Campaign
             </button>
+            <button
+              onClick={handleBulkDelete}
+              className="btn btn-outline btn-sm flex items-center gap-1 text-xs bg-red-50 border-red-300 text-red-700 hover:bg-red-100"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              Delete
+            </button>
           </div>
         </div>
       )}
@@ -360,6 +401,7 @@ export default function RawImportDetailPage() {
         onSelectAll={() => dispatch(selectAllRecords())}
         onClearSelection={() => dispatch(clearSelectedRecords())}
         onPageChange={setPage}
+        onDelete={handleDeleteRecord}
       />
 
       {/* Telecaller Assignment Panel */}

@@ -168,6 +168,7 @@ class CallExecutionService {
           timeLimit: 600,
           timeOut: 30,
           record: true,
+          recordingChannels: 'dual', // Separate agent & customer channels for AI analysis
           recordingFormat: 'mp3',
         });
 

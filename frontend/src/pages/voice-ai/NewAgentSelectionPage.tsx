@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserIcon, BriefcaseIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { UserIcon, BriefcaseIcon, SparklesIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
 
 interface AgentType {
   id: string;
@@ -78,6 +78,11 @@ export const NewAgentSelectionPage: React.FC = () => {
     navigate('/voice-ai/create', { state: { isBlank: true } });
   };
 
+  const handleSelectConversationalAI = () => {
+    // Navigate to Conversational AI agent creation wizard
+    navigate('/voice-ai/create-conversational');
+  };
+
   const handleSelectAgentType = (agentType: AgentType) => {
     // Navigate to agent creation with pre-selected type
     navigate('/voice-ai/create', { state: { agentType: agentType.id } });
@@ -92,20 +97,48 @@ export const NewAgentSelectionPage: React.FC = () => {
           <p className="text-gray-500 text-lg">What type of agent would you like to create?</p>
         </div>
 
-        {/* Blank Agent Option */}
-        <button
-          onClick={handleSelectBlank}
-          className="w-full mb-6 p-6 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all group"
-        >
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-8 h-8 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center group-hover:border-gray-400">
-              <SparklesIcon className="w-4 h-4 text-gray-400 group-hover:text-gray-500" />
+        {/* Quick Options */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {/* Blank Agent Option */}
+          <button
+            onClick={handleSelectBlank}
+            className="p-6 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all group"
+          >
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-8 h-8 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center group-hover:border-gray-400">
+                <SparklesIcon className="w-4 h-4 text-gray-400 group-hover:text-gray-500" />
+              </div>
+              <span className="text-base font-medium text-gray-700 group-hover:text-gray-900">
+                Blank Agent
+              </span>
             </div>
-            <span className="text-base font-medium text-gray-700 group-hover:text-gray-900">
-              Blank Agent
-            </span>
-          </div>
-        </button>
+          </button>
+
+          {/* Conversational AI Option */}
+          <button
+            onClick={handleSelectConversationalAI}
+            className="p-6 border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl hover:border-purple-300 hover:shadow-lg transition-all group relative overflow-hidden"
+          >
+            <div className="absolute top-2 right-2">
+              <span className="px-2 py-0.5 text-xs font-semibold text-purple-700 bg-purple-100 rounded-full">
+                Premium
+              </span>
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center group-hover:bg-purple-200">
+                <MicrophoneIcon className="w-4 h-4 text-purple-600" />
+              </div>
+              <div className="text-left">
+                <span className="text-base font-medium text-gray-900 block">
+                  Conversational AI
+                </span>
+                <span className="text-xs text-gray-500">
+                  Natural voice conversations
+                </span>
+              </div>
+            </div>
+          </button>
+        </div>
 
         {/* Agent Type Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">

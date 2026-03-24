@@ -1,10 +1,17 @@
 /**
  * Call Finalization Service - Single Responsibility Principle
  * Handles call completion, summary generation, lead creation
+ *
+ * Now integrated with Lead Lifecycle Service for:
+ * - Duplicate detection by phone number
+ * - Lead creation vs update logic
+ * - Automatic follow-up scheduling (AI or Human)
+ * - Qualification data merging across multiple calls
  */
 
 import OpenAI from 'openai';
 import { PrismaClient, CallOutcome } from '@prisma/client';
+import { leadLifecycleService } from './lead-lifecycle.service';
 
 const prisma = new PrismaClient();
 
@@ -15,6 +22,7 @@ const openai = process.env.OPENAI_API_KEY
 class CallFinalizationService {
   /**
    * Finalize a completed call - generate summary, create/update lead
+   * Now uses Lead Lifecycle Service for intelligent lead management
    */
   async finalizeCall(callId: string) {
     const call = await prisma.outboundCall.findUnique({
@@ -36,7 +44,7 @@ class CallFinalizationService {
     // Determine outcome
     const outcome = await this.determineOutcome(transcript);
 
-    // Update call
+    // Update call with analysis results
     const updatedCall = await prisma.outboundCall.update({
       where: { id: callId },
       data: {
@@ -50,13 +58,25 @@ class CallFinalizationService {
     // Check if this call was for a RawImportRecord
     await this.updateRawImportRecordFromCall(updatedCall);
 
-    // Update existing lead or create new one
-    if (call.leadId) {
-      await this.updateExistingLeadWithCallData(call.leadId, updatedCall);
-    } else {
-      const qualification = call.qualification as any;
-      if (qualification && Object.keys(qualification).length > 0) {
-        await this.createLeadFromCall(updatedCall, qualification);
+    // Use Lead Lifecycle Service for intelligent lead management
+    // This handles:
+    // - Finding existing leads by phone number
+    // - Creating new leads or updating existing ones
+    // - Merging qualification data from multiple calls
+    // - Scheduling appropriate follow-ups (AI or Human)
+    try {
+      await leadLifecycleService.processCompletedCall(updatedCall);
+      console.log(`[CallFinalization] Lead lifecycle processing completed for call ${callId}`);
+    } catch (error) {
+      console.error(`[CallFinalization] Error in lead lifecycle processing:`, error);
+      // Fallback to legacy behavior if lifecycle service fails
+      if (call.leadId) {
+        await this.updateExistingLeadWithCallData(call.leadId, updatedCall);
+      } else {
+        const qualification = call.qualification as any;
+        if (qualification && Object.keys(qualification).length > 0) {
+          await this.createLeadFromCall(updatedCall, qualification);
+        }
       }
     }
   }

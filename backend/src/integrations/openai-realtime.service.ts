@@ -10,9 +10,19 @@ import {
   QualificationData,
   FunctionCallResult,
 } from '../types/realtime.types';
+import { calendarService } from '../services/calendar.service';
 
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
-const DEFAULT_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
+const DEFAULT_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+
+// Retry configuration for WebSocket connections
+const RECONNECT_CONFIG = {
+  maxAttempts: 5,
+  initialDelayMs: 1000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 2,
+  jitterFactor: 0.2,
+};
 
 export interface OpenAIRealtimeConfig {
   apiKey: string;
@@ -21,6 +31,7 @@ export interface OpenAIRealtimeConfig {
   instructions?: string;
   temperature?: number;
   tools?: RealtimeTool[];
+  silenceDurationMs?: number; // Agent-specific silence timeout
 }
 
 export interface RealtimeConnectionEvents {
@@ -46,21 +57,84 @@ export class OpenAIRealtimeConnection extends EventEmitter {
   private sessionId: string | null = null;
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 3;
+  private maxReconnectAttempts: number = RECONNECT_CONFIG.maxAttempts;
   private pendingFunctionCalls: Map<string, { name: string; arguments: string }> = new Map();
   private conversationItems: Map<string, RealtimeConversationItem> = new Map();
   private currentResponseId: string | null = null;
   private assistantTranscript: string = '';
+  private hasActiveResponse: boolean = false;
+  private isReconnecting: boolean = false;
+  private shouldReconnect: boolean = true;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
 
   constructor(config: OpenAIRealtimeConfig) {
     super();
     this.config = config;
   }
 
+  /**
+   * Calculate delay with exponential backoff and jitter
+   */
+  private calculateReconnectDelay(): number {
+    const exponentialDelay = RECONNECT_CONFIG.initialDelayMs *
+      Math.pow(RECONNECT_CONFIG.backoffMultiplier, this.reconnectAttempts);
+    const cappedDelay = Math.min(exponentialDelay, RECONNECT_CONFIG.maxDelayMs);
+    const jitter = cappedDelay * RECONNECT_CONFIG.jitterFactor * (Math.random() * 2 - 1);
+    return Math.max(0, Math.round(cappedDelay + jitter));
+  }
+
+  /**
+   * Attempt to reconnect with exponential backoff
+   */
+  private async attemptReconnect(): Promise<void> {
+    if (!this.shouldReconnect || this.isReconnecting) {
+      return;
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(`[OpenAI Realtime] Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`);
+      this.emit('error', {
+        code: 'max_reconnect_exceeded',
+        message: `Failed to reconnect after ${this.maxReconnectAttempts} attempts`
+      });
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+    const delay = this.calculateReconnectDelay();
+
+    console.log(
+      `[OpenAI Realtime] Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} ` +
+      `in ${delay}ms...`
+    );
+
+    this.reconnectTimeout = setTimeout(async () => {
+      try {
+        await this.connect();
+        console.log('[OpenAI Realtime] Reconnection successful');
+        this.isReconnecting = false;
+      } catch (error) {
+        console.error('[OpenAI Realtime] Reconnection failed:', error);
+        this.isReconnecting = false;
+        // Try again
+        this.attemptReconnect();
+      }
+    }, delay);
+  }
+
   async connect(): Promise<void> {
+    // Clear any pending reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
     return new Promise((resolve, reject) => {
       const model = this.config.model || DEFAULT_MODEL;
       const url = `${OPENAI_REALTIME_URL}?model=${model}`;
+
+      console.log(`[OpenAI Realtime] Connecting to ${url}...`);
 
       this.ws = new WebSocket(url, {
         headers: {
@@ -73,6 +147,7 @@ export class OpenAIRealtimeConnection extends EventEmitter {
         console.log('[OpenAI Realtime] WebSocket connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        this.isReconnecting = false;
         this.emit('connected');
         resolve();
       });
@@ -95,15 +170,62 @@ export class OpenAIRealtimeConnection extends EventEmitter {
       });
 
       this.ws.on('close', (code, reason) => {
-        console.log(`[OpenAI Realtime] WebSocket closed: ${code} - ${reason}`);
+        const reasonStr = reason.toString();
+        console.log(`[OpenAI Realtime] WebSocket closed: ${code} - ${reasonStr}`);
+
+        const wasConnected = this.isConnected;
         this.isConnected = false;
         this.sessionId = null;
-        this.emit('disconnected', reason.toString());
+        this.emit('disconnected', reasonStr);
+
+        // Attempt reconnection if we were previously connected and should reconnect
+        // Don't reconnect for normal closures (1000) or if explicitly disabled
+        if (wasConnected && this.shouldReconnect && code !== 1000) {
+          console.log('[OpenAI Realtime] Connection lost unexpectedly, attempting reconnect...');
+          this.attemptReconnect();
+        }
       });
     });
   }
 
+  /**
+   * Connect with retry logic for initial connection
+   */
+  async connectWithRetry(): Promise<void> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= RECONNECT_CONFIG.maxAttempts; attempt++) {
+      try {
+        await this.connect();
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        if (attempt < RECONNECT_CONFIG.maxAttempts) {
+          const delay = RECONNECT_CONFIG.initialDelayMs *
+            Math.pow(RECONNECT_CONFIG.backoffMultiplier, attempt - 1);
+          const cappedDelay = Math.min(delay, RECONNECT_CONFIG.maxDelayMs);
+
+          console.warn(
+            `[OpenAI Realtime] Connection attempt ${attempt}/${RECONNECT_CONFIG.maxAttempts} failed: ` +
+            `${lastError.message}. Retrying in ${cappedDelay}ms...`
+          );
+
+          await new Promise(resolve => setTimeout(resolve, cappedDelay));
+        }
+      }
+    }
+
+    console.error(`[OpenAI Realtime] Failed to connect after ${RECONNECT_CONFIG.maxAttempts} attempts`);
+    throw lastError || new Error('Failed to connect to OpenAI Realtime API');
+  }
+
   private handleServerEvent(event: RealtimeServerEvent): void {
+    // Log all events except audio data (too verbose)
+    if (event.type !== 'response.audio.delta' && event.type !== 'input_audio_buffer.speech_started' && event.type !== 'input_audio_buffer.speech_stopped') {
+      console.log(`[OpenAI Realtime] Event: ${event.type}`);
+    }
+
     switch (event.type) {
       case 'session.created':
         this.sessionId = event.session.id;
@@ -145,6 +267,7 @@ export class OpenAIRealtimeConnection extends EventEmitter {
       case 'response.created':
         this.currentResponseId = event.response.id;
         this.assistantTranscript = '';
+        this.hasActiveResponse = true;
         this.emit('response.created', { responseId: event.response.id });
         break;
 
@@ -191,6 +314,7 @@ export class OpenAIRealtimeConnection extends EventEmitter {
         break;
 
       case 'response.done':
+        this.hasActiveResponse = false;
         this.emit('response.done', {
           responseId: event.response.id,
           usage: event.response.usage || {},
@@ -198,6 +322,11 @@ export class OpenAIRealtimeConnection extends EventEmitter {
         break;
 
       case 'error':
+        // Suppress harmless "no active response" error from cancellation attempts
+        if (event.error.code === 'response_cancel_not_active') {
+          console.log('[OpenAI Realtime] Ignoring cancel error (no active response)');
+          break;
+        }
         console.error('[OpenAI Realtime] Error:', event.error);
         this.emit('error', {
           code: event.error.code,
@@ -208,7 +337,9 @@ export class OpenAIRealtimeConnection extends EventEmitter {
   }
 
   private configureSession(): void {
+    // Use minimal config first, then update with full config after connection is stable
     const sessionConfig: Partial<RealtimeSessionConfig> = {
+      modalities: ['text', 'audio'],
       voice: this.config.voice || 'alloy',
       instructions: this.config.instructions || 'You are a helpful assistant.',
       input_audio_format: 'pcm16',
@@ -220,17 +351,32 @@ export class OpenAIRealtimeConnection extends EventEmitter {
         type: 'server_vad',
         threshold: 0.5,
         prefix_padding_ms: 300,
-        silence_duration_ms: 500,
+        silence_duration_ms: this.config.silenceDurationMs || 800,
       },
       temperature: this.config.temperature || 0.8,
-      tools: this.config.tools || this.getDefaultTools(),
-      tool_choice: 'auto',
     };
+
+    console.log('[OpenAI Realtime] Sending session config (without tools first)');
 
     this.send({
       type: 'session.update',
       session: sessionConfig,
     });
+
+    // Send tools in a separate update after a small delay
+    setTimeout(() => {
+      const tools = this.config.tools || this.getDefaultTools();
+      if (tools && tools.length > 0) {
+        console.log('[OpenAI Realtime] Sending tools config');
+        this.send({
+          type: 'session.update',
+          session: {
+            tools,
+            tool_choice: 'auto',
+          },
+        });
+      }
+    }, 500);
   }
 
   private getDefaultTools(): RealtimeTool[] {
@@ -318,10 +464,16 @@ export class OpenAIRealtimeConnection extends EventEmitter {
     });
   }
 
-  cancelResponse(): void {
+  cancelResponse(): boolean {
+    // Only cancel if there's an active response to avoid "no active response" error
+    if (!this.hasActiveResponse) {
+      return false;
+    }
     this.send({
       type: 'response.cancel',
     });
+    this.hasActiveResponse = false;
+    return true;
   }
 
   createResponse(options?: { instructions?: string }): void {
@@ -364,14 +516,48 @@ export class OpenAIRealtimeConnection extends EventEmitter {
   }
 
   disconnect(): void {
+    // Disable reconnection when explicitly disconnecting
+    this.shouldReconnect = false;
+
+    // Clear any pending reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
     if (this.ws) {
-      this.ws.close();
+      this.ws.close(1000, 'Client disconnecting');
       this.ws = null;
     }
     this.isConnected = false;
+    this.isReconnecting = false;
     this.sessionId = null;
+    this.reconnectAttempts = 0;
     this.conversationItems.clear();
     this.pendingFunctionCalls.clear();
+  }
+
+  /**
+   * Enable or disable automatic reconnection
+   */
+  setAutoReconnect(enabled: boolean): void {
+    this.shouldReconnect = enabled;
+    if (!enabled && this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+      this.isReconnecting = false;
+    }
+  }
+
+  /**
+   * Get current reconnection status
+   */
+  getReconnectStatus(): { isReconnecting: boolean; attempts: number; maxAttempts: number } {
+    return {
+      isReconnecting: this.isReconnecting,
+      attempts: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts,
+    };
   }
 
   getSessionId(): string | null {
@@ -399,12 +585,52 @@ class OpenAIRealtimeService {
     const connection = new OpenAIRealtimeConnection(config);
     this.connections.set(sessionId, connection);
 
-    // Clean up on disconnect
+    // Clean up on disconnect only if not reconnecting
     connection.on('disconnected', () => {
-      this.connections.delete(sessionId);
+      const status = connection.getReconnectStatus();
+      if (!status.isReconnecting) {
+        // Give some time for reconnection to be initiated
+        setTimeout(() => {
+          const currentStatus = connection.getReconnectStatus();
+          if (!currentStatus.isReconnecting && !connection.isActive()) {
+            this.connections.delete(sessionId);
+          }
+        }, 2000);
+      }
+    });
+
+    // Re-add to connections map when reconnected
+    connection.on('connected', () => {
+      if (!this.connections.has(sessionId)) {
+        this.connections.set(sessionId, connection);
+      }
     });
 
     return connection;
+  }
+
+  /**
+   * Create a connection and connect with retry logic
+   */
+  async createAndConnect(
+    sessionId: string,
+    config: OpenAIRealtimeConfig,
+    useRetry: boolean = true
+  ): Promise<OpenAIRealtimeConnection> {
+    const connection = this.createConnection(sessionId, config);
+
+    try {
+      if (useRetry) {
+        await connection.connectWithRetry();
+      } else {
+        await connection.connect();
+      }
+      return connection;
+    } catch (error) {
+      // Clean up on connection failure
+      this.connections.delete(sessionId);
+      throw error;
+    }
   }
 
   getConnection(sessionId: string): OpenAIRealtimeConnection | undefined {
@@ -477,8 +703,45 @@ class OpenAIRealtimeService {
     data: QualificationData,
     context?: { sessionId: string; organizationId: string }
   ): Promise<{ success: boolean; message: string; data: QualificationData }> {
-    // In a real implementation, this would save to the database
     console.log('[OpenAI Realtime] Collected qualification data:', data);
+
+    // If email is being collected, check if there's an appointment that needs updating
+    if (data.email && context?.sessionId) {
+      try {
+        const { prisma } = await import('../config/database');
+
+        // Find appointments for this session that don't have an email
+        const appointmentWithoutEmail = await prisma.appointment.findFirst({
+          where: {
+            voiceSessionId: context.sessionId,
+            contactEmail: null,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (appointmentWithoutEmail) {
+          // Update the appointment with the email
+          const updatedAppointment = await prisma.appointment.update({
+            where: { id: appointmentWithoutEmail.id },
+            data: { contactEmail: data.email },
+          });
+          console.log('[OpenAI Realtime] Updated appointment with email:', updatedAppointment.id);
+
+          // Now sync to calendar since we have the email
+          try {
+            const eventId = await calendarService.syncAppointmentToCalendar(updatedAppointment);
+            if (eventId) {
+              console.log('[OpenAI Realtime] Calendar event created:', eventId);
+            }
+          } catch (calendarError) {
+            console.error('[OpenAI Realtime] Calendar sync failed:', calendarError);
+          }
+        }
+      } catch (error) {
+        console.error('[OpenAI Realtime] Failed to update appointment with email:', error);
+      }
+    }
+
     return {
       success: true,
       message: 'Qualification data recorded successfully.',
@@ -489,13 +752,137 @@ class OpenAIRealtimeService {
   private async handleScheduleCallback(
     data: { preferred_time: string; reason?: string },
     context?: { sessionId: string; organizationId: string }
-  ): Promise<{ success: boolean; message: string; scheduledAt: string }> {
+  ): Promise<{ success: boolean; message: string; scheduledAt: string; appointmentId?: string }> {
     console.log('[OpenAI Realtime] Scheduling callback:', data);
-    return {
-      success: true,
-      message: `Callback scheduled for ${data.preferred_time}.`,
-      scheduledAt: data.preferred_time,
-    };
+
+    if (!context?.sessionId || !context?.organizationId) {
+      console.error('[OpenAI Realtime] Cannot create appointment - missing context');
+      return {
+        success: true, // Return success to AI so it confirms to user
+        message: `Callback scheduled for ${data.preferred_time}.`,
+        scheduledAt: data.preferred_time,
+      };
+    }
+
+    try {
+      // Import prisma dynamically to avoid circular dependency
+      const { prisma } = await import('../config/database');
+
+      // Get session to find qualification data
+      const session = await prisma.voiceSession.findUnique({
+        where: { id: context.sessionId },
+        include: { agent: true, lead: true },
+      });
+
+      if (!session) {
+        console.error('[OpenAI Realtime] Session not found:', context.sessionId);
+        return {
+          success: true,
+          message: `Callback scheduled for ${data.preferred_time}.`,
+          scheduledAt: data.preferred_time,
+        };
+      }
+
+      const qualification = (session.qualification as Record<string, string>) || {};
+      const contactName = qualification.name || session.visitorName || 'Voice Lead';
+      const contactPhone = qualification.phone || session.visitorPhone || 'unknown';
+      const contactEmail = qualification.email || session.visitorEmail;
+
+      // Validate required fields - name and phone are required
+      if (!qualification.name && !session.visitorName) {
+        console.log('[OpenAI Realtime] Missing name for appointment');
+        return {
+          success: false,
+          message: 'I need your name before I can schedule the appointment. Could you please tell me your name?',
+          scheduledAt: data.preferred_time,
+        };
+      }
+
+      if (!qualification.phone && !session.visitorPhone) {
+        console.log('[OpenAI Realtime] Missing phone for appointment');
+        return {
+          success: false,
+          message: 'I need your phone number before I can schedule the appointment. Could you please provide your phone number?',
+          scheduledAt: data.preferred_time,
+        };
+      }
+
+      // Email is required for sending calendar invitation
+      if (!contactEmail) {
+        console.log('[OpenAI Realtime] Missing email for appointment - will sync calendar when email is collected');
+      }
+
+      // Parse the preferred time
+      let scheduledAt: Date;
+      try {
+        scheduledAt = new Date(data.preferred_time);
+        if (isNaN(scheduledAt.getTime())) {
+          // Try to parse natural language times like "tomorrow at 2pm"
+          scheduledAt = new Date(); // Default to now + 1 day
+          scheduledAt.setDate(scheduledAt.getDate() + 1);
+        }
+      } catch {
+        scheduledAt = new Date();
+        scheduledAt.setDate(scheduledAt.getDate() + 1);
+      }
+
+      // Create the appointment
+      const appointment = await prisma.appointment.create({
+        data: {
+          organizationId: context.organizationId,
+          leadId: session.leadId,
+          voiceSessionId: context.sessionId,
+          title: `Callback: ${contactName}`,
+          description: data.reason || 'Scheduled via voice agent',
+          appointmentType: session.agent?.appointmentType || 'callback',
+          scheduledAt,
+          duration: session.agent?.appointmentDuration || 30,
+          timezone: session.agent?.appointmentTimezone || 'Asia/Kolkata',
+          locationType: 'PHONE',
+          contactName,
+          contactPhone,
+          contactEmail,
+          status: 'SCHEDULED',
+        },
+      });
+
+      console.log('[OpenAI Realtime] Appointment created:', appointment.id);
+
+      // Sync to calendar if email is available
+      if (contactEmail) {
+        try {
+          const eventId = await calendarService.syncAppointmentToCalendar(appointment);
+          if (eventId) {
+            console.log('[OpenAI Realtime] Calendar event created and invitation sent:', eventId);
+          } else {
+            console.log('[OpenAI Realtime] Calendar sync skipped - no integration configured');
+          }
+        } catch (calendarError) {
+          console.error('[OpenAI Realtime] Calendar sync failed:', calendarError);
+          // Don't fail the appointment creation if calendar sync fails
+        }
+      } else {
+        console.log('[OpenAI Realtime] Calendar sync deferred - waiting for email to be collected');
+      }
+
+      const confirmationMessage = contactEmail
+        ? `Great! Your appointment has been scheduled for ${scheduledAt.toLocaleString()}. A calendar invitation will be sent to ${contactEmail}.`
+        : `Great! Your appointment has been scheduled for ${scheduledAt.toLocaleString()}. Could you please provide your email address so I can send you a calendar invitation?`;
+
+      return {
+        success: true,
+        message: confirmationMessage,
+        scheduledAt: data.preferred_time,
+        appointmentId: appointment.id,
+      };
+    } catch (error) {
+      console.error('[OpenAI Realtime] Failed to create appointment:', error);
+      return {
+        success: false,
+        message: 'Sorry, there was an issue scheduling your appointment. Let me try again. Could you confirm the time you prefer?',
+        scheduledAt: data.preferred_time,
+      };
+    }
   }
 
   private async handleEndConversation(

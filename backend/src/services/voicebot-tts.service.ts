@@ -6,6 +6,7 @@
 import * as WebSocket from 'ws';
 import OpenAI from 'openai';
 import { sarvamService } from '../integrations/sarvam.service';
+import { ai4bharatService, AI4BHARAT_LANGUAGES } from '../integrations/ai4bharat.service';
 import { resamplePCM, resamplePCMSimple } from './voicebot-audio.service';
 import { normalizeLanguageCode } from './voicebot-transcription.service';
 
@@ -256,6 +257,38 @@ export async function generateSarvamTTS(text: string, language: string, voiceGen
 }
 
 /**
+ * Generate TTS using AI4Bharat IndicTTS for Indian languages
+ * Returns raw PCM audio at 8kHz
+ */
+export async function generateAI4BharatTTS(
+  text: string,
+  language: string,
+  voiceGender: 'male' | 'female' = 'female'
+): Promise<Buffer> {
+  if (!ai4bharatService.isAvailable()) {
+    throw new Error('AI4Bharat service not available');
+  }
+
+  console.log(`[TTS] Using AI4Bharat for: "${text.substring(0, 50)}..." (${language}, ${voiceGender})`);
+
+  const result = await ai4bharatService.synthesize(
+    text,
+    language as keyof typeof AI4BHARAT_LANGUAGES,
+    voiceGender,
+    8000 // Request 8kHz for telephony
+  );
+
+  // Extract PCM from WAV if needed
+  let pcmAudio = result.audio;
+  if (result.format === 'wav' && pcmAudio.slice(0, 4).toString() === 'RIFF') {
+    pcmAudio = pcmAudio.slice(44); // Skip WAV header
+  }
+
+  console.log(`[TTS] AI4Bharat: ${pcmAudio.length} bytes @ 8kHz`);
+  return pcmAudio;
+}
+
+/**
  * Generate TTS audio based on language and voice settings
  */
 export async function generateTTS(
@@ -292,6 +325,17 @@ export async function generateTTS(
     }
   }
 
+  // Check for AI4Bharat voice
+  if (voiceId?.toLowerCase().startsWith('ai4bharat') && ai4bharatService.isAvailable()) {
+    try {
+      resampledAudio = await generateAI4BharatTTS(text, normalizedLang, voiceGender);
+      setCachedTTS(text, normalizedLang, voiceId, resampledAudio);
+      return resampledAudio;
+    } catch (error) {
+      console.error('[TTS] AI4Bharat error, falling back:', error);
+    }
+  }
+
   // Use Sarvam for regional Indian languages
   if (isRegionalIndian && sarvamService.isAvailable()) {
     try {
@@ -299,7 +343,31 @@ export async function generateTTS(
       setCachedTTS(text, normalizedLang, cacheVoice, resampledAudio);
       return resampledAudio;
     } catch (error) {
-      console.error('[TTS] Sarvam error, falling back to OpenAI:', error);
+      console.error('[TTS] Sarvam error, falling back to AI4Bharat:', error);
+
+      // Try AI4Bharat as fallback for Indian languages
+      if (ai4bharatService.isAvailable() && ai4bharatService.isLanguageSupported(normalizedLang)) {
+        try {
+          resampledAudio = await generateAI4BharatTTS(text, normalizedLang, voiceGender);
+          setCachedTTS(text, normalizedLang, `ai4bharat-${normalizedLang}`, resampledAudio);
+          return resampledAudio;
+        } catch (ai4bError) {
+          console.error('[TTS] AI4Bharat fallback error:', ai4bError);
+        }
+      }
+    }
+  }
+
+  // Try AI4Bharat for regional Indian languages if Sarvam not available
+  if (isRegionalIndian && !sarvamService.isAvailable() && ai4bharatService.isAvailable()) {
+    if (ai4bharatService.isLanguageSupported(normalizedLang)) {
+      try {
+        resampledAudio = await generateAI4BharatTTS(text, normalizedLang, voiceGender);
+        setCachedTTS(text, normalizedLang, `ai4bharat-${normalizedLang}`, resampledAudio);
+        return resampledAudio;
+      } catch (error) {
+        console.error('[TTS] AI4Bharat error, falling back to OpenAI:', error);
+      }
     }
   }
 
@@ -388,6 +456,7 @@ export const voicebotTTSService = {
   generateOpenAITTS,
   generateSarvamTTS,
   generateElevenLabsTTS,
+  generateAI4BharatTTS,
   sendAudioChunks,
   getCachedTTS,
   setCachedTTS,

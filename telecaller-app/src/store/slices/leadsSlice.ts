@@ -31,6 +31,7 @@ export const fetchLeads = createAsyncThunk(
       const { filters } = state.leads;
 
       const response = await leadsApi.getAssignedLeads(page, 20, filters);
+      console.log('[LeadsSlice] Got leads:', response.data?.length, 'pagination:', response.pagination);
 
       return {
         leads: response.data,

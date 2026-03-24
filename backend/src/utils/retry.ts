@@ -38,7 +38,7 @@ function calculateDelay(attempt: number, options: RetryOptions): number {
 /**
  * Check if error is retryable
  */
-function isRetryableError(error: Error, retryableErrors?: string[]): boolean {
+export function isRetryableError(error: Error, retryableErrors?: string[]): boolean {
   // Network errors are always retryable
   const networkErrors = [
     'ECONNRESET',
@@ -71,7 +71,21 @@ function isRetryableError(error: Error, retryableErrors?: string[]): boolean {
   }
 
   // Default: timeout and rate limit errors are retryable
-  const retryableMessages = ['timeout', 'rate limit', 'too many requests', 'service unavailable'];
+  const retryableMessages = [
+    'timeout',
+    'rate limit',
+    'too many requests',
+    'service unavailable',
+    'server_error',
+    'overloaded',
+    'capacity',
+    'bad gateway',
+    'gateway timeout',
+    'internal server error',
+    'sorry about that',
+    'please try again',
+    'temporarily unavailable',
+  ];
   return retryableMessages.some(msg => error.message.toLowerCase().includes(msg));
 }
 
@@ -322,3 +336,43 @@ export const webhookRetryQueue = new RetryQueue({
   maxDelayMs: 300000,
   processIntervalMs: 10000,
 });
+
+/**
+ * OpenAI-specific retry configuration
+ * Handles transient server errors, rate limits, and network issues
+ */
+export const openaiRetryOptions: Partial<RetryOptions> = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 2,
+  retryableErrors: [
+    'server_error',
+    'rate_limit',
+    'overloaded',
+    'capacity',
+    'timeout',
+    'bad gateway',
+    'gateway timeout',
+    'service unavailable',
+    'internal server error',
+    'sorry about that',
+    'please try again',
+  ],
+  onRetry: (error, attempt, delayMs) => {
+    console.warn(
+      `[OpenAI Retry] Attempt ${attempt} failed: ${error.message}. ` +
+      `Retrying in ${Math.round(delayMs)}ms...`
+    );
+  },
+};
+
+/**
+ * Helper to wrap OpenAI calls with retry logic
+ */
+export async function withOpenAIRetry<T>(
+  fn: () => Promise<T>,
+  customOptions?: Partial<RetryOptions>
+): Promise<T> {
+  return withRetry(fn, { ...openaiRetryOptions, ...customOptions });
+}

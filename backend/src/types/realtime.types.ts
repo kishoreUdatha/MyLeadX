@@ -1,6 +1,7 @@
 // ==================== OPENAI REALTIME API TYPES ====================
 
 export interface RealtimeSessionConfig {
+  modalities: ('text' | 'audio')[];  // Enable text and/or audio modalities for real-time streaming
   model: string;
   voice: string;
   instructions: string;
@@ -14,6 +15,7 @@ export interface RealtimeSessionConfig {
     threshold: number;
     prefix_padding_ms: number;
     silence_duration_ms: number;
+    create_response?: boolean;  // Automatically create response when turn ends
   } | null;
   tools: RealtimeTool[];
   tool_choice: 'auto' | 'none' | 'required' | { type: 'function'; name: string };

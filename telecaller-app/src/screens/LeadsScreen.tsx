@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -41,20 +41,53 @@ const LeadsScreen: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<LeadStatus | undefined>(undefined);
+  const isLoadingRef = useRef(false);
+  const hasInitializedRef = useRef(false);
+  const lastLoadTimeRef = useRef(0);
 
   useEffect(() => {
-    loadLeads(true);
-  }, []);
+    // Only load once on mount
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      console.log('[LeadsScreen] Initial load triggered');
+      loadLeads(true).then(() => {
+        console.log('[LeadsScreen] Leads loaded, count:', leads.length);
+      });
+    }
+  }, [loadLeads]);
+
+  useEffect(() => {
+    console.log('[LeadsScreen] Leads state updated, count:', leads.length, 'isLoading:', isLoading);
+  }, [leads, isLoading]);
 
   const handleRefresh = useCallback(() => {
+    isLoadingRef.current = false; // Reset on refresh
     loadLeads(true);
   }, [loadLeads]);
 
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && hasMore) {
-      loadLeads(false);
+    const now = Date.now();
+    // Debounce: prevent calls within 1 second of each other
+    if (now - lastLoadTimeRef.current < 1000) {
+      return;
     }
-  }, [isLoading, hasMore, loadLeads]);
+    // Prevent multiple concurrent calls
+    if (isLoadingRef.current || isLoading || !hasMore) {
+      return;
+    }
+    // Prevent loading if we have no data yet (initial load in progress)
+    if (leads.length === 0) {
+      return;
+    }
+    lastLoadTimeRef.current = now;
+    isLoadingRef.current = true;
+    loadLeads(false).finally(() => {
+      // Reset after a delay to prevent rapid re-triggering
+      setTimeout(() => {
+        isLoadingRef.current = false;
+      }, 500);
+    });
+  }, [isLoading, hasMore, loadLeads, leads.length]);
 
   const handleSearch = useCallback(
     (text: string) => {
@@ -187,7 +220,11 @@ const LeadsScreen: React.FC = () => {
           />
         }
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.3}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
       />
@@ -207,95 +244,86 @@ const LeadsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 12,
     marginBottom: 8,
     paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderRadius: 8,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1F2937',
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1E293B',
   },
   filtersContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
+    paddingVertical: 6,
+    gap: 6,
   },
   filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#F8FAFC',
   },
   filterButtonActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: '#2563EB',
   },
   filterText: {
-    fontSize: 14,
-    color: '#4B5563',
+    fontSize: 13,
+    color: '#64748B',
   },
   filterTextActive: {
     color: '#FFFFFF',
     fontWeight: '500',
   },
   listContent: {
-    paddingVertical: 8,
-    paddingBottom: 24,
+    paddingVertical: 4,
+    paddingBottom: 80,
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 64,
+    paddingVertical: 48,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#4B5563',
-    marginTop: 16,
+    color: '#64748B',
+    marginTop: 12,
   },
   emptySubtitle: {
-    fontSize: 14,
-    color: '#9CA3AF',
+    fontSize: 13,
+    color: '#94A3B8',
     marginTop: 4,
   },
   footer: {
-    paddingVertical: 16,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   fab: {
     position: 'absolute',
     right: 16,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#3B82F6',
+    bottom: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    elevation: 2,
   },
 });
 

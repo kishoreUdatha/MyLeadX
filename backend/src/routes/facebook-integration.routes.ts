@@ -52,6 +52,64 @@ router.get(
   }
 );
 
+// Save credentials for webhook setup (before full integration)
+router.post(
+  '/webhook-credentials',
+  authorize('admin'),
+  validate([
+    body('verifyToken').notEmpty().withMessage('Verify token is required'),
+  ]),
+  async (req: TenantRequest, res: Response, next: NextFunction) => {
+    try {
+      const { appId, appSecret, verifyToken } = req.body;
+
+      // Use a placeholder pageId for webhook setup
+      const placeholderPageId = 'pending-webhook-setup';
+
+      // Check if a pending integration already exists
+      const existing = await prisma.facebookIntegration.findUnique({
+        where: {
+          organizationId_pageId: {
+            organizationId: req.organizationId!,
+            pageId: placeholderPageId,
+          },
+        },
+      });
+
+      if (existing) {
+        const updated = await prisma.facebookIntegration.update({
+          where: { id: existing.id },
+          data: {
+            appId: appId || existing.appId,
+            appSecret: appSecret || existing.appSecret,
+            verifyToken: verifyToken,
+            updatedAt: new Date(),
+          },
+        });
+        return ApiResponse.success(res, 'Webhook credentials updated', updated);
+      }
+
+      const integration = await prisma.facebookIntegration.create({
+        data: {
+          organizationId: req.organizationId!,
+          pageId: placeholderPageId,
+          pageName: 'Pending Webhook Setup',
+          appId,
+          appSecret,
+          verifyToken,
+          accessToken: '',
+          selectedLeadForms: [],
+          fieldMapping: {},
+        },
+      });
+
+      ApiResponse.created(res, 'Webhook credentials saved', integration);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Create a new integration
 router.post(
   '/integrations',
@@ -66,6 +124,9 @@ router.post(
         pageId,
         pageName,
         adAccountId,
+        appId,
+        appSecret,
+        verifyToken,
         accessToken,
         selectedLeadForms,
         fieldMapping,
@@ -87,6 +148,9 @@ router.post(
           data: {
             pageName,
             adAccountId,
+            appId: appId || existing.appId,
+            appSecret: appSecret || existing.appSecret,
+            verifyToken: verifyToken || existing.verifyToken,
             accessToken,
             selectedLeadForms: selectedLeadForms || [],
             fieldMapping: fieldMapping || {},
@@ -104,6 +168,9 @@ router.post(
           pageId,
           pageName,
           adAccountId,
+          appId,
+          appSecret,
+          verifyToken,
           accessToken,
           selectedLeadForms: selectedLeadForms || [],
           fieldMapping: fieldMapping || {},
@@ -203,7 +270,11 @@ router.get(
       const forms = await facebookService.getLeadForms(req.params.pageId);
 
       ApiResponse.success(res, 'Lead forms retrieved', forms);
-    } catch (error) {
+    } catch (error: any) {
+      // 403 means no lead forms exist yet or page not linked - return empty array
+      if (error.response?.status === 403 || error.status === 403) {
+        return ApiResponse.success(res, 'No lead forms found', []);
+      }
       next(error);
     }
   }
@@ -234,12 +305,22 @@ router.get(
   async (req: TenantRequest, res: Response, next: NextFunction) => {
     try {
       const baseUrl = config.baseUrl || `${req.protocol}://${req.get('host')}`;
-      const webhookUrl = `${baseUrl}/api/ads/facebook/webhook`;
-      const verifyToken = config.facebook.verifyToken || 'your-verify-token';
+      // Include organizationId in webhook URL for proper routing
+      const webhookUrl = `${baseUrl}/api/ads/facebook/webhook?organizationId=${req.organizationId}`;
+
+      // Try to get verifyToken from existing integration first
+      let verifyToken = config.facebook.verifyToken || 'your-verify-token';
+      const existingIntegration = await prisma.facebookIntegration.findFirst({
+        where: { organizationId: req.organizationId, isActive: true },
+      });
+      if (existingIntegration?.verifyToken) {
+        verifyToken = existingIntegration.verifyToken;
+      }
 
       ApiResponse.success(res, 'Webhook URL retrieved', {
         webhookUrl,
         verifyToken,
+        organizationId: req.organizationId,
         instructions: [
           '1. Go to Facebook Developer Console (developers.facebook.com)',
           '2. Navigate to your app > Webhooks',
@@ -324,6 +405,62 @@ router.post(
         synced: leads.created,
         skipped: leads.skipped,
         total: leads.total,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Sync all integrations for the organization
+router.post(
+  '/integrations/sync',
+  authorize('admin'),
+  async (req: TenantRequest, res: Response, next: NextFunction) => {
+    try {
+      const integrations = await prisma.facebookIntegration.findMany({
+        where: { organizationId: req.organizationId, isActive: true },
+      });
+
+      let totalSynced = 0;
+      let totalSkipped = 0;
+
+      for (const integration of integrations) {
+        if (!integration.accessToken || integration.pageId === 'pending-webhook-setup') {
+          continue;
+        }
+
+        try {
+          facebookService.setAccessToken(integration.accessToken);
+          const selectedForms = integration.selectedLeadForms as any[] || [];
+          const fieldMapping = integration.fieldMapping as Record<string, string> || {};
+
+          for (const form of selectedForms) {
+            const formId = typeof form === 'string' ? form : form.id;
+            if (formId) {
+              const result = await facebookService.syncFormLeads(
+                formId,
+                req.organizationId!,
+                fieldMapping
+              );
+              totalSynced += result.created;
+              totalSkipped += result.skipped;
+            }
+          }
+
+          await prisma.facebookIntegration.update({
+            where: { id: integration.id },
+            data: { lastSyncedAt: new Date() },
+          });
+        } catch (err) {
+          console.error(`[Facebook] Sync error for integration ${integration.id}:`, err);
+        }
+      }
+
+      ApiResponse.success(res, 'Facebook integrations synced', {
+        integrations: integrations.length,
+        synced: totalSynced,
+        skipped: totalSkipped,
       });
     } catch (error) {
       next(error);

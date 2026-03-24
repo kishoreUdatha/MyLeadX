@@ -32,6 +32,7 @@ import {
   ShieldCheckIcon,
   FunnelIcon,
   TrophyIcon,
+  MagnifyingGlassCircleIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -72,9 +73,11 @@ const callsNavigation: NavItem[] = [
 // Marketing - Campaigns & outreach
 const marketingNavigation: NavItem[] = [
   { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon, roles: ['admin', 'manager', 'counselor'] },
+  { name: 'Ad Integrations', href: '/ad-integrations', icon: ArrowPathRoundedSquareIcon, roles: ['admin', 'manager'] },
   { name: 'WhatsApp', href: '/whatsapp/bulk', icon: WhatsAppIcon, roles: ['admin', 'manager', 'counselor'] },
   { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['admin', 'manager'] },
   { name: 'Raw Data', href: '/raw-imports', icon: DocumentArrowUpIcon, roles: ['admin', 'manager'] },
+  { name: 'Web Scraping', href: '/apify-dashboard', icon: MagnifyingGlassCircleIcon, roles: ['admin', 'manager'] },
 ];
 
 // Analytics - Reports & insights
@@ -101,7 +104,7 @@ const settingsNavigation: NavItem[] = [
 ];
 
 // Routes where top header should be hidden
-const headerHiddenRoutes = ['/voice-ai/create', '/voice-ai/create-from-template', '/call-flows/builder'];
+const headerHiddenRoutes = ['/voice-ai/create', '/voice-ai/create-from-template', '/voice-ai/agents', '/call-flows/builder'];
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -154,7 +157,7 @@ export default function DashboardLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`min-h-screen ${hideHeader ? 'bg-white overflow-x-hidden' : 'bg-slate-50'}`}>
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -361,7 +364,7 @@ export default function DashboardLayout() {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-52">
+      <div className={`lg:pl-52 min-h-screen ${hideHeader ? 'bg-white overflow-hidden scrollbar-hide' : ''}`}>
         {/* Top bar - Compact (hidden on certain routes) */}
         {!hideHeader && (
         <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-slate-200/60">
@@ -442,10 +445,8 @@ export default function DashboardLayout() {
         )}
 
         {/* Page content */}
-        <main className={hideHeader ? "p-0" : "py-4 px-4 sm:px-5 lg:px-6"}>
-          <div className={hideHeader ? "" : "animate-fade-in"}>
-            <Outlet />
-          </div>
+        <main className={hideHeader ? "min-h-screen bg-white overflow-x-hidden" : "py-4 px-4 sm:px-5 lg:px-6"}>
+          <Outlet />
         </main>
       </div>
     </div>

@@ -374,6 +374,16 @@ export const circuitBreakers = {
       console.warn(`[CircuitBreaker] ${name} state changed: ${from} -> ${to}`);
     },
   }),
+
+  apify: circuitBreakerRegistry.getOrCreate({
+    name: 'apify',
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeout: 30000,
+    onStateChange: (name, from, to) => {
+      console.warn(`[CircuitBreaker] ${name} state changed: ${from} -> ${to}`);
+    },
+  }),
 };
 
 /**

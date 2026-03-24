@@ -4,3 +4,6 @@ export { default as AdIntegrationsPage } from './AdIntegrationsPage';
 export { default as FacebookSetupPage } from './FacebookSetupPage';
 export { default as LinkedInSetupPage } from './LinkedInSetupPage';
 export { default as GoogleAdsSetupPage } from './GoogleAdsSetupPage';
+export { default as YouTubeSetupPage } from './YouTubeSetupPage';
+export { default as TwitterSetupPage } from './TwitterSetupPage';
+export { default as TikTokSetupPage } from './TikTokSetupPage';

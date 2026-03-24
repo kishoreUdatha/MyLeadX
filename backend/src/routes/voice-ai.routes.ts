@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { voiceAIService } from '../integrations/voice-ai.service';
 import { elevenlabsService } from '../integrations/elevenlabs.service';
+import { openaiService } from '../integrations/openai.service';
 import { authenticate } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { ApiResponse } from '../utils/apiResponse';
@@ -233,6 +234,8 @@ router.post('/tts', async (req: Request, res: Response) => {
         detectedProvider = 'elevenlabs';
       } else if (voice.startsWith('sarvam-')) {
         detectedProvider = 'sarvam';
+      } else if (voice.startsWith('ai4bharat-')) {
+        detectedProvider = 'ai4bharat';
       } else if (voice.startsWith('openai-')) {
         detectedProvider = 'openai';
       }
@@ -288,6 +291,62 @@ router.post('/tts', async (req: Request, res: Response) => {
           return res.send(audioBuffer);
         } catch (sarvamError) {
           console.warn('[TTS] Sarvam TTS failed, falling back to OpenAI:', (sarvamError as Error).message);
+        }
+      }
+    }
+
+    // AI4Bharat TTS (Open source Indian languages via HuggingFace)
+    if (detectedProvider === 'ai4bharat') {
+      const { ai4bharatService } = await import('../integrations/ai4bharat.service');
+
+      if (!ai4bharatService.isAvailable()) {
+        console.log('[TTS] AI4Bharat not available, falling back to OpenAI');
+      } else {
+        try {
+          // Extract gender from voice ID (e.g., ai4bharat-te-female -> female)
+          const voiceGender = voice.includes('female') ? 'female' : 'male';
+
+          // PRIORITY: Use language from request (agent config) first
+          // Normalize and validate the language code
+          let langCode = language;
+
+          // Normalize short language codes (e.g., 'te' -> 'te-IN')
+          if (langCode && langCode.length === 2) {
+            langCode = `${langCode}-IN`;
+          }
+
+          // Validate it's a supported Indian language code
+          const supportedLangs = ['hi-IN', 'te-IN', 'ta-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'bn-IN', 'gu-IN', 'pa-IN', 'or-IN', 'as-IN'];
+          if (!langCode || !supportedLangs.includes(langCode)) {
+            // Fall back to extracting from voice ID
+            const voiceMatch = voice.match(/ai4bharat-(\w{2})-/);
+            if (voiceMatch) {
+              langCode = `${voiceMatch[1]}-IN`;
+            } else {
+              langCode = 'te-IN'; // Default fallback
+            }
+          }
+
+          console.log('[TTS] Using AI4Bharat TTS with voice:', voice, 'language:', langCode, '(from request:', language, ')');
+
+          const result = await ai4bharatService.synthesize(
+            text,
+            langCode as any,
+            voiceGender,
+            22050
+          );
+
+          audioBuffer = result.audio;
+          console.log('[TTS] AI4Bharat TTS generated, size:', audioBuffer.length);
+          contentType = 'audio/wav';
+
+          res.set({
+            'Content-Type': contentType,
+            'Content-Length': audioBuffer.length,
+          });
+          return res.send(audioBuffer);
+        } catch (ai4bharatError) {
+          console.warn('[TTS] AI4Bharat TTS failed, falling back to OpenAI:', (ai4bharatError as Error).message);
         }
       }
     }
@@ -433,6 +492,227 @@ router.get('/templates/:industry', async (req: TenantRequest, res: Response) => 
   }
 });
 
+// ==================== AI TEST EVALUATION FUNCTION ====================
+async function evaluateTestResult(
+  testInput: string,
+  expectedOutput: string,
+  actualOutput: string,
+  agentName: string
+): Promise<{ passed: boolean; score: number; reason: string }> {
+  try {
+    const OpenAI = (await import('openai')).default;
+    const openai = new OpenAI({ apiKey: config.openai.apiKey });
+
+    const evaluationPrompt = `You are a QA evaluator for an AI voice agent named "${agentName}".
+
+Evaluate if the agent's actual response appropriately addresses the test case.
+
+TEST INPUT (what user said): "${testInput}"
+
+EXPECTED BEHAVIOR: "${expectedOutput}"
+
+ACTUAL RESPONSE: "${actualOutput}"
+
+Evaluate based on:
+1. Does the response address the user's input appropriately?
+2. Does it match the expected behavior/intent?
+3. Is the response helpful and relevant?
+4. Is the tone appropriate?
+
+Respond in JSON format ONLY:
+{
+  "passed": true/false,
+  "score": 0-100,
+  "reason": "Brief explanation of why it passed or failed"
+}`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: evaluationPrompt }],
+      max_tokens: 200,
+      temperature: 0.1,
+    });
+
+    const responseText = completion.choices[0]?.message?.content || '';
+
+    // Parse JSON response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      return {
+        passed: result.passed === true,
+        score: typeof result.score === 'number' ? result.score : (result.passed ? 80 : 30),
+        reason: result.reason || 'Evaluation complete',
+      };
+    }
+
+    // Fallback if parsing fails
+    return {
+      passed: actualOutput.length > 10,
+      score: 50,
+      reason: 'Could not parse evaluation result',
+    };
+  } catch (error) {
+    console.error('Evaluation error:', error);
+    return {
+      passed: actualOutput.length > 10,
+      score: 50,
+      reason: 'Evaluation service unavailable',
+    };
+  }
+}
+
+// ==================== CHAT TEST ENDPOINT ====================
+// Test agent responses via chat (text-based testing)
+// Uses the model configured in the agent settings
+router.post('/chat/test', async (req: TenantRequest, res: Response) => {
+  try {
+    const { agentId, message, conversationHistory = [], testMode = false, expectedOutput } = req.body;
+
+    if (!agentId || !message) {
+      return ApiResponse.error(res, 'Agent ID and message are required', 400);
+    }
+
+    // Get the agent with model configuration
+    const agent = await prisma.voiceAgent.findFirst({
+      where: {
+        id: agentId,
+        organizationId: req.organizationId,
+      },
+    });
+
+    if (!agent) {
+      return ApiResponse.error(res, 'Agent not found', 404);
+    }
+
+    // Build conversation context
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      {
+        role: 'system',
+        content: agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant. ${agent.greeting ? `Start conversations with: "${agent.greeting}"` : ''}`,
+      },
+      ...conversationHistory.map((msg: { role: string; content: string }) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      })),
+      {
+        role: 'user',
+        content: message,
+      },
+    ];
+
+    // Get agent's configured LLM provider and model
+    const llmProvider = (agent as any).llmProvider || 'openai';
+    const llmModel = (agent as any).llmModel || 'gpt-4o-mini';
+
+    let responseText = '';
+
+    // Route to appropriate provider
+    if (llmProvider === 'openai') {
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({ apiKey: config.openai.apiKey });
+
+      const completion = await openai.chat.completions.create({
+        model: llmModel,
+        messages,
+        max_tokens: 500,
+        temperature: agent.temperature || 0.7,
+      });
+
+      responseText = completion.choices[0]?.message?.content || '';
+    } else if (llmProvider === 'anthropic') {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+      const systemMessage = messages.find(m => m.role === 'system')?.content || '';
+      const chatMessages = messages.filter(m => m.role !== 'system');
+
+      const completion = await anthropic.messages.create({
+        model: llmModel || 'claude-3-sonnet-20240229',
+        max_tokens: 500,
+        system: systemMessage,
+        messages: chatMessages.map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+      });
+
+      responseText = (completion.content[0] as any)?.text || '';
+    } else if (llmProvider === 'google') {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
+      const model = genAI.getGenerativeModel({ model: llmModel || 'gemini-pro' });
+
+      const systemMessage = messages.find(m => m.role === 'system')?.content || '';
+      const chatMessages = messages.filter(m => m.role !== 'system');
+
+      const chat = model.startChat({
+        history: chatMessages.slice(0, -1).map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        })),
+      });
+
+      const result = await chat.sendMessage(
+        `${systemMessage}\n\n${chatMessages[chatMessages.length - 1]?.content || message}`
+      );
+      responseText = result.response.text();
+    } else if (llmProvider === 'groq') {
+      const Groq = (await import('groq-sdk')).default;
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+      const completion = await groq.chat.completions.create({
+        model: llmModel || 'llama-3.1-70b-versatile',
+        messages,
+        max_tokens: 500,
+        temperature: agent.temperature || 0.7,
+      });
+
+      responseText = completion.choices[0]?.message?.content || '';
+    } else {
+      // Default to OpenAI
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({ apiKey: config.openai.apiKey });
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages,
+        max_tokens: 500,
+        temperature: agent.temperature || 0.7,
+      });
+
+      responseText = completion.choices[0]?.message?.content || '';
+    }
+
+    if (!responseText) {
+      responseText = 'I apologize, I could not generate a response. Please try again.';
+    }
+
+    // If in test mode with expected output, evaluate the response
+    let evaluation = null;
+    if (testMode && expectedOutput) {
+      evaluation = await evaluateTestResult(
+        message,
+        expectedOutput,
+        responseText,
+        agent.name
+      );
+    }
+
+    ApiResponse.success(res, 'Chat response generated', {
+      response: responseText,
+      agentName: agent.name,
+      provider: llmProvider,
+      model: llmModel,
+      testMode,
+      evaluation, // { passed: boolean, score: number, reason: string }
+    });
+  } catch (error) {
+    console.error('Chat test error:', error);
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
+
 // Create new voice agent
 router.post('/agents', async (req: TenantRequest, res: Response) => {
   try {
@@ -483,6 +763,77 @@ router.get('/agents/:agentId', async (req: TenantRequest, res: Response) => {
   }
 });
 
+// Upload document for agent knowledge base
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for documents
+  fileFilter: (req, file, cb) => {
+    // Allow common document types
+    const allowedMimes = [
+      'application/pdf',
+      'text/plain',
+      'text/csv',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/json',
+      'text/markdown',
+    ];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} not allowed`));
+    }
+  }
+});
+
+router.post('/agents/documents/upload', documentUpload.single('file'), async (req: TenantRequest, res: Response) => {
+  try {
+    const { agentId } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return ApiResponse.error(res, 'No file uploaded', 400);
+    }
+
+    if (!agentId) {
+      return ApiResponse.error(res, 'Agent ID is required', 400);
+    }
+
+    // Verify agent belongs to organization
+    const agent = await prisma.voiceAgent.findFirst({
+      where: { id: agentId, organizationId: req.organizationId }
+    });
+
+    if (!agent) {
+      return ApiResponse.error(res, 'Agent not found', 404);
+    }
+
+    // For now, store as base64 in the document record (for small files)
+    // For production, you'd want to upload to S3/cloud storage
+    const document = {
+      id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: 'file',
+      name: file.originalname,
+      size: file.size,
+      mimeType: file.mimetype,
+      uploadedAt: new Date().toISOString(),
+      // Store file content as base64 for text-based files (for RAG processing)
+      content: file.mimetype.startsWith('text/') || file.mimetype === 'application/json'
+        ? file.buffer.toString('utf-8')
+        : undefined,
+    };
+
+    console.log('[VoiceAI] Document uploaded:', { agentId, name: file.originalname, size: file.size });
+
+    ApiResponse.success(res, 'Document uploaded successfully', { document });
+  } catch (error) {
+    console.error('[VoiceAI] Document upload error:', error);
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
+
 // Update agent
 router.put('/agents/:agentId', async (req: TenantRequest, res: Response) => {
   try {
@@ -491,13 +842,14 @@ router.put('/agents/:agentId', async (req: TenantRequest, res: Response) => {
 
     // Filter out fields that don't exist in the schema
     const allowedFields = [
+      // Core Settings
       'name', 'description', 'industry', 'isActive', 'systemPrompt', 'voiceId',
       'language', 'temperature', 'questions', 'knowledgeBase', 'faqs', 'greeting',
       'fallbackMessage', 'transferMessage', 'endMessage', 'maxDuration',
       'personality', 'responseSpeed', 'interruptHandling', 'workingHoursEnabled',
       'workingHoursStart', 'workingHoursEnd', 'workingDays', 'afterHoursMessage',
       'silenceTimeout', 'widgetColor', 'widgetTitle', 'widgetSubtitle', 'widgetPosition',
-      'documents', // Documents for WhatsApp sharing during calls
+      'documents', 'callDirection',
       // Lead Generation & CRM Integration Settings
       'autoCreateLeads', 'deduplicateByPhone', 'defaultStageId', 'defaultAssigneeId', 'autoAdvanceStage',
       // Appointment Booking Settings
@@ -505,7 +857,26 @@ router.put('/agents/:agentId', async (req: TenantRequest, res: Response) => {
       // CRM Integration Settings
       'crmIntegration', 'crmWebhookUrl', 'triggerWebhookOnLead',
       // Realtime Settings
-      'realtimeEnabled', 'webrtcEnabled'
+      'realtimeEnabled', 'webrtcEnabled',
+      // Workflow Settings
+      'workflowSteps',
+      // Branches/Version Control
+      'branches', 'activeBranch', 'branchHistory',
+      // Analysis/Evaluation Settings
+      'evaluationCriteria', 'dataCollectionPoints', 'analysisLanguage',
+      // Test Cases
+      'testCases',
+      // Security Settings
+      'authenticationRequired', 'rateLimitingEnabled', 'rateLimitRequests', 'rateLimitBurst',
+      'contentFilteringEnabled', 'contentFilterCategories', 'dataRetentionDays',
+      'anonymizeUserData', 'gdprComplianceEnabled', 'allowedDomains', 'ipWhitelist', 'sessionTimeoutMinutes',
+      // Advanced Settings
+      'topP', 'frequencyPenalty', 'presencePenalty', 'maxResponseTokens', 'stopSequences',
+      'speechRate', 'voicePitch', 'silenceDetection', 'debugMode', 'logLevel', 'logConversations',
+      // RAG Settings
+      'ragSettings',
+      // Metadata
+      'metadata'
     ];
 
     const filteredData: Record<string, any> = {};
@@ -564,6 +935,152 @@ router.delete('/agents/:agentId', async (req: TenantRequest, res: Response) => {
     ApiResponse.error(res, (error as Error).message, 500);
   }
 });
+
+// ==================== PUBLISH FEATURE ====================
+
+// Publish agent - makes the agent live
+router.post('/agents/:agentId/publish', async (req: TenantRequest, res: Response) => {
+  try {
+    const { agentId } = req.params;
+    const { description } = req.body; // Optional version description
+    const userId = req.user?.id;
+
+    // Get current agent
+    const agent = await prisma.voiceAgent.findUnique({
+      where: { id: agentId },
+    });
+
+    if (!agent) {
+      return ApiResponse.error(res, 'Agent not found', 404);
+    }
+
+    // Create a snapshot of current configuration
+    const configSnapshot = {
+      systemPrompt: agent.systemPrompt,
+      voiceId: agent.voiceId,
+      language: agent.language,
+      temperature: agent.temperature,
+      questions: agent.questions,
+      knowledgeBase: agent.knowledgeBase,
+      greeting: agent.greeting,
+      fallbackMessage: agent.fallbackMessage,
+      personality: agent.personality,
+      workingHoursEnabled: agent.workingHoursEnabled,
+      workingHoursStart: agent.workingHoursStart,
+      workingHoursEnd: agent.workingHoursEnd,
+      workingDays: agent.workingDays,
+      realtimeEnabled: agent.realtimeEnabled,
+      webrtcEnabled: agent.webrtcEnabled,
+      // Security settings
+      authenticationRequired: agent.authenticationRequired,
+      rateLimitingEnabled: agent.rateLimitingEnabled,
+      rateLimitRequests: agent.rateLimitRequests,
+      rateLimitBurst: agent.rateLimitBurst,
+      contentFilteringEnabled: agent.contentFilteringEnabled,
+      allowedDomains: agent.allowedDomains,
+      ipWhitelist: agent.ipWhitelist,
+    };
+
+    // Update version history
+    const versionHistory = (agent.versionHistory as any[]) || [];
+    const newVersion = agent.versionNumber + 1;
+    versionHistory.push({
+      version: newVersion,
+      publishedAt: new Date().toISOString(),
+      publishedBy: userId,
+      description: description || `Version ${newVersion}`,
+      config: configSnapshot,
+    });
+
+    // Update agent
+    const updatedAgent = await prisma.voiceAgent.update({
+      where: { id: agentId },
+      data: {
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        publishedById: userId,
+        publishedConfig: configSnapshot,
+        draftConfig: null, // Clear draft when publishing
+        versionNumber: newVersion,
+        versionHistory: versionHistory,
+      },
+    });
+
+    console.log(`[VoiceAI] Agent ${agentId} published as version ${newVersion} by user ${userId}`);
+
+    ApiResponse.success(res, 'Agent published successfully', {
+      status: updatedAgent.status,
+      versionNumber: updatedAgent.versionNumber,
+      publishedAt: updatedAgent.publishedAt,
+    });
+  } catch (error) {
+    console.error('[VoiceAI] Publish agent error:', error);
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
+
+// Unpublish agent - returns to draft mode
+router.post('/agents/:agentId/unpublish', async (req: TenantRequest, res: Response) => {
+  try {
+    const { agentId } = req.params;
+
+    const agent = await prisma.voiceAgent.findUnique({
+      where: { id: agentId },
+    });
+
+    if (!agent) {
+      return ApiResponse.error(res, 'Agent not found', 404);
+    }
+
+    const updatedAgent = await prisma.voiceAgent.update({
+      where: { id: agentId },
+      data: {
+        status: 'DRAFT',
+      },
+    });
+
+    console.log(`[VoiceAI] Agent ${agentId} unpublished`);
+
+    ApiResponse.success(res, 'Agent unpublished', {
+      status: updatedAgent.status,
+    });
+  } catch (error) {
+    console.error('[VoiceAI] Unpublish agent error:', error);
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
+
+// Get agent version history
+router.get('/agents/:agentId/versions', async (req: TenantRequest, res: Response) => {
+  try {
+    const { agentId } = req.params;
+
+    const agent = await prisma.voiceAgent.findUnique({
+      where: { id: agentId },
+      select: {
+        versionNumber: true,
+        versionHistory: true,
+        publishedAt: true,
+        status: true,
+      },
+    });
+
+    if (!agent) {
+      return ApiResponse.error(res, 'Agent not found', 404);
+    }
+
+    ApiResponse.success(res, 'Version history retrieved', {
+      currentVersion: agent.versionNumber,
+      status: agent.status,
+      publishedAt: agent.publishedAt,
+      versions: agent.versionHistory || [],
+    });
+  } catch (error) {
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
+
+// ==================== END PUBLISH FEATURE ====================
 
 // Get agent sessions
 router.get('/agents/:agentId/sessions', async (req: TenantRequest, res: Response) => {

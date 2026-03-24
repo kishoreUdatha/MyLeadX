@@ -2,6 +2,7 @@ import axios from 'axios';
 import { config } from '../config';
 import { prisma } from '../config/database';
 import { AdPlatform, LeadSource, LeadPriority } from '@prisma/client';
+import { externalLeadImportService } from '../services/external-lead-import.service';
 
 const LINKEDIN_API_URL = 'https://api.linkedin.com/v2';
 
@@ -253,7 +254,7 @@ export class LinkedInService {
 
     // Extract campaign ID from associated entity
     const campaignUrn = leadData.associatedEntityUrn;
-    const campaignId = campaignUrn.split(':').pop() || '';
+    const campaignId = campaignUrn.split(':').pop() || 'unknown';
 
     // Find or create ad campaign
     let adCampaign = await prisma.adCampaign.findUnique({
@@ -278,31 +279,21 @@ export class LinkedInService {
       });
     }
 
-    // Create lead
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId,
-        firstName: fields.firstName || fields.name?.split(' ')[0] || 'Unknown',
-        lastName: fields.lastName || fields.name?.split(' ').slice(1).join(' '),
-        email: fields.email,
-        phone: fields.phone || 'N/A',
-        source: LeadSource.AD_LINKEDIN,
-        sourceDetails: `Campaign: ${adCampaign.name}`,
-        priority: LeadPriority.MEDIUM,
-        customFields: {
-          ...fields,
-          linkedInLeadId: leadData.id,
-        },
-      },
-    });
-
-    // Create ad lead record
-    await prisma.adLead.create({
-      data: {
-        adCampaignId: adCampaign.id,
-        leadId: lead.id,
-        externalId: leadData.id,
-        rawData: leadData as any,
+    // Use externalLeadImportService to route to Raw Imports (like other platforms)
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: fields.firstName || fields.name?.split(' ')[0] || 'Unknown',
+      lastName: fields.lastName || fields.name?.split(' ').slice(1).join(' ') || '',
+      email: fields.email || '',
+      phone: fields.phone || '',
+      source: 'AD_LINKEDIN',
+      sourceDetails: `LinkedIn Campaign: ${adCampaign.name}`,
+      customFields: {
+        ...fields,
+        linkedInLeadId: leadData.id,
+        campaignId: campaignId,
+        campaignName: adCampaign.name,
+        company: fields.company || '',
+        jobTitle: fields.title || '',
       },
     });
 
@@ -312,7 +303,8 @@ export class LinkedInService {
       data: { conversions: { increment: 1 } },
     });
 
-    return lead;
+    console.info(`[LinkedIn] Lead imported to Raw Imports: ${result.id}`);
+    return result;
   }
 
   private parseFormAnswers(answers: LinkedInLeadData['formResponse']['answers']): Record<string, string> {

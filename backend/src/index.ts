@@ -14,7 +14,7 @@ import { websocketService } from './services/websocket.service';
 import { setupSwagger } from './swagger';
 import testCallRoutes from './routes/test-call.routes';
 import voicebotRoutes, { initializeVoiceBotWebSocket } from './routes/voicebot.routes';
-import { jobQueueService } from './services/job-queue.service';
+import { initializeScheduledJobs } from './services/job-initializer.service';
 import fs from 'fs';
 import path from 'path';
 
@@ -36,8 +36,16 @@ app.use(
   })
 );
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
+// Body parsing middleware - capture raw body for webhook signature verification
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: any, res, buf) => {
+    // Save raw body for webhook routes that need signature verification
+    if (req.url?.includes('/webhook')) {
+      req.rawBody = buf.toString();
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging middleware
@@ -57,7 +65,7 @@ if (!fs.existsSync(publicDir)) {
 }
 app.use('/demo', express.static(publicDir));
 
-// Audio files for TTS (ElevenLabs generated audio)
+// Audio files for TTS (Generated audio)
 const audioDir = path.join(__dirname, '../public/audio');
 if (!fs.existsSync(audioDir)) {
   fs.mkdirSync(audioDir, { recursive: true });
@@ -97,15 +105,15 @@ async function startServer() {
     // Initialize Voice Bot WebSocket for Exotel streaming
     initializeVoiceBotWebSocket(httpServer);
 
-    // Start scheduled call checker (checks every minute for callbacks)
-    jobQueueService.startScheduledCallChecker();
-
-    httpServer.listen(config.port, () => {
+    httpServer.listen(config.port, async () => {
       console.log(`Server running on port ${config.port}`);
       console.log(`WebSocket enabled`);
       console.log(`Voice Bot WebSocket: wss://${config.baseUrl?.replace('https://', '').replace('http://', '')}/voice-stream`);
       console.log(`Environment: ${config.env}`);
       console.log(`API docs available at ${config.baseUrl}/api-docs`);
+
+      // Initialize scheduled jobs after server starts
+      await initializeScheduledJobs();
     });
   } catch (error) {
     console.error('Failed to start server:', error);

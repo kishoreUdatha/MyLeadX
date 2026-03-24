@@ -1,12 +1,14 @@
 /**
  * Voicebot AI Service - Single Responsibility Principle
  * Handles AI response generation, language switching, and call analysis
+ * Enhanced with RAG-powered knowledge retrieval
  */
 
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
 import { detectUserMood, getMoodResponseStyle } from './voicebot-mood.service';
 import { normalizeLanguageCode } from './voicebot-transcription.service';
+import { ragService } from './rag.service';
 
 const prisma = new PrismaClient();
 
@@ -154,12 +156,14 @@ export function getLanguageAcknowledgment(language: string, languageName: string
 
 /**
  * Build system prompt for AI response generation
+ * @param ragContext - Optional RAG-retrieved context to include instead of full FAQs
  */
 function buildSystemPrompt(
   agent: any,
   currentLanguage: string,
   moodResult: { mood: string; intensity: string },
-  moodStyle: string
+  moodStyle: string,
+  ragContext?: string
 ): string {
   const currentLanguageName = LANGUAGE_NAMES[currentLanguage] || 'English (Indian accent)';
   const isHindi = currentLanguage.startsWith('hi');
@@ -255,14 +259,61 @@ ${questionsText}
 Remember: Don't interrogate! Ask casually like a friend would.`;
   }
 
-  // Add FAQs
-  const faqs = agent?.faqs || [];
-  if (faqs.length > 0) {
-    const faqsText = faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n');
-    systemPrompt += `\n\nFAQs (use these to answer questions):\n${faqsText}`;
+  // Add knowledge context - prefer RAG context if available
+  if (ragContext && ragContext.trim().length > 0) {
+    systemPrompt += `\n\nRELEVANT KNOWLEDGE (retrieved based on the conversation):\n${ragContext}`;
+  } else {
+    // Fallback to full FAQs if no RAG context
+    const faqs = agent?.faqs || [];
+    if (faqs.length > 0) {
+      const faqsText = faqs.map((f: any) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n');
+      systemPrompt += `\n\nFAQs (use these to answer questions):\n${faqsText}`;
+    }
   }
 
   return systemPrompt;
+}
+
+/**
+ * Check if message is conversational (greetings, confirmations, etc.)
+ * These don't need RAG lookup - saves ~300-500ms latency
+ */
+function isConversationalMessage(message: string): boolean {
+  // Patterns that indicate conversational/non-knowledge messages
+  const conversationalPatterns = [
+    // Greetings
+    /^(hi|hello|hey|namaste|namaskar|good\s*(morning|afternoon|evening|night))[\s!.,?]*$/i,
+    // Confirmations
+    /^(yes|yeah|yep|yup|ok|okay|sure|alright|fine|haan|ji|theek|accha)[\s!.,?]*$/i,
+    // Negations
+    /^(no|nope|nah|nahi|nahin)[\s!.,?]*$/i,
+    // Thanks
+    /^(thanks|thank\s*you|dhanyavaad|shukriya)[\s!.,?]*$/i,
+    // Farewells
+    /^(bye|goodbye|see\s*you|alvida|phir\s*milenge)[\s!.,?]*$/i,
+    // Simple acknowledgments
+    /^(hmm|hm+|ah|oh|i\s*see|got\s*it|understood)[\s!.,?]*$/i,
+    // Short responses (less than 3 words, no question words)
+    /^[a-z\s]{1,15}$/i,
+  ];
+
+  // Question indicators that DO need RAG
+  const questionIndicators = [
+    'what', 'how', 'why', 'when', 'where', 'which', 'who', 'whom',
+    'tell me', 'explain', 'describe', 'kya', 'kaise', 'kyun', 'kab',
+    'price', 'cost', 'fee', 'scholarship', 'admission', 'course',
+    'program', 'visa', 'eligibility', 'requirement', 'document',
+    '?'
+  ];
+
+  // If contains question indicators, it's NOT conversational
+  const hasQuestionIndicator = questionIndicators.some(q => message.includes(q));
+  if (hasQuestionIndicator) {
+    return false;
+  }
+
+  // Check if matches conversational patterns
+  return conversationalPatterns.some(pattern => pattern.test(message));
 }
 
 /**
@@ -296,8 +347,45 @@ export async function generateAIResponse(
     const moodResult = await detectUserMood(userMessage, conversationContext);
     const moodStyle = getMoodResponseStyle(moodResult.mood, moodResult.intensity);
 
-    // Build system prompt
-    const systemPrompt = buildSystemPrompt(agent, currentLanguage, moodResult, moodStyle);
+    // Retrieve RAG context if available (with smart bypass for conversational messages)
+    let ragContext: string | undefined;
+    try {
+      if (agent?.id) {
+        // Smart bypass: Skip RAG for simple conversational messages
+        const lowerMessage = userMessage.toLowerCase().trim();
+        const isConversational = isConversationalMessage(lowerMessage);
+
+        if (!isConversational) {
+          const ragSettings = (agent.ragSettings as any) || {};
+          const topK = ragSettings.topK || 5;
+          const similarityThreshold = ragSettings.similarityThreshold || 0.5;
+
+          // Check if agent has indexed knowledge
+          const indexStatus = await ragService.getIndexStatus(agent.id);
+
+          if (indexStatus.indexed && indexStatus.totalChunks > 0) {
+            // Use RAG retrieval based on the user message
+            const results = await ragService.hybridSearch(agent.id, userMessage, {
+              topK,
+              similarityThreshold,
+            });
+
+            if (results.length > 0) {
+              ragContext = ragService.buildContextFromResults(results, 1500);
+              console.log(`[AIService] RAG retrieved ${results.length} relevant chunks`);
+            }
+          }
+        } else {
+          console.log(`[AIService] Skipping RAG for conversational message: "${lowerMessage.substring(0, 30)}..."`);
+        }
+      }
+    } catch (error) {
+      console.error('[AIService] RAG retrieval error:', error);
+      // Continue without RAG context - will fall back to full FAQs
+    }
+
+    // Build system prompt with RAG context
+    const systemPrompt = buildSystemPrompt(agent, currentLanguage, moodResult, moodStyle, ragContext);
 
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
@@ -338,13 +426,15 @@ export async function extractQualificationData(
     const customFields = questions.map((q: any) => q.field || 'info').join(', ');
     const standardFields = 'name, firstName, lastName, email, phone, company, designation, budget, timeline, interest, location, city, requirements';
 
+    const appointmentFields = 'appointmentTime, preferredDate, preferredTime';
+
     const response = await openai.chat.completions.create({
       model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
           content: `You are extracting lead information from a phone conversation.
-Extract any of these fields if mentioned: ${standardFields}${customFields ? ', ' + customFields : ''}
+Extract any of these fields if mentioned: ${standardFields}, ${appointmentFields}${customFields ? ', ' + customFields : ''}
 
 IMPORTANT:
 - Extract names in both English and transliterated form
@@ -352,6 +442,7 @@ IMPORTANT:
 - If someone says "I work at TCS" extract company: "TCS"
 - If they mention a budget like "50 lakhs" extract budget: "50 lakhs"
 - If they mention location like "Hyderabad" extract city: "Hyderabad"
+- APPOINTMENT/SCHEDULING: If the user mentions ANY date, time, or scheduling preference for a meeting/appointment/demo/call, extract it to "appointmentTime" field. Capture the exact phrasing they used.
 - Return ONLY valid JSON with extracted fields
 - Return {} if nothing relevant found`,
         },

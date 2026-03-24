@@ -278,21 +278,31 @@ export class GoogleAdsService {
   private mapFieldName(googleFieldName: string): string {
     const mappings: Record<string, string> = {
       'FULL_NAME': 'fullName',
+      'FULLNAME': 'fullName',
       'FIRST_NAME': 'firstName',
+      'FIRSTNAME': 'firstName',
       'LAST_NAME': 'lastName',
+      'LASTNAME': 'lastName',
       'EMAIL': 'email',
       'PHONE_NUMBER': 'phone',
+      'PHONE': 'phone',
       'CITY': 'city',
       'REGION': 'state',
+      'STATE': 'state',
       'COUNTRY': 'country',
       'POSTAL_CODE': 'postalCode',
+      'POSTALCODE': 'postalCode',
       'COMPANY_NAME': 'company',
+      'COMPANY': 'company',
       'JOB_TITLE': 'jobTitle',
+      'JOBTITLE': 'jobTitle',
       'WORK_EMAIL': 'workEmail',
+      'WORKEMAIL': 'workEmail',
       'WORK_PHONE': 'workPhone',
+      'WORKPHONE': 'workPhone',
     };
 
-    return mappings[googleFieldName] || googleFieldName.toLowerCase();
+    return mappings[googleFieldName] || mappings[googleFieldName.toUpperCase()] || googleFieldName.toLowerCase();
   }
 
   /**

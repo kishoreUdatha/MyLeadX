@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import { adInteractionService } from './ad-interaction.service';
 
 const prisma = new PrismaClient();
 
@@ -33,6 +34,10 @@ interface TrackingData {
   browser?: string;
   country?: string;
   city?: string;
+  // Ad click IDs
+  gclid?: string;
+  fbclid?: string;
+  utmId?: string;
 }
 
 interface CaptureLeadParams {
@@ -59,6 +64,10 @@ interface CaptureLeadParams {
   customFields?: Record<string, any>;
   ipAddress?: string;
   userAgent?: string;
+  // For ad interaction linking
+  visitorId?: string;
+  gclid?: string;
+  fbclid?: string;
 }
 
 interface FacebookLeadData {
@@ -89,6 +98,242 @@ class LeadTrackingService {
   }
 
   /**
+   * Generate a unique session ID
+   */
+  generateSessionId(): string {
+    return 'sid_' + crypto.randomBytes(12).toString('hex') + '_' + Date.now().toString(36);
+  }
+
+  /**
+   * Generate enhanced tracking pixel with engagement tracking
+   * Includes: scroll depth, time on page, video interactions, session management
+   */
+  generateEnhancedTrackingPixel(organizationId: string, baseUrl: string): string {
+    const pixelCode = `
+<!-- CRM Enhanced Lead Tracking Pixel -->
+<script>
+(function() {
+  var orgId = '${organizationId}';
+  var endpoint = '${baseUrl}/api/tracking';
+
+  // Generate or get visitor ID
+  var visitorId = localStorage.getItem('crm_vid');
+  if (!visitorId) {
+    visitorId = 'vid_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+    localStorage.setItem('crm_vid', visitorId);
+  }
+
+  // Generate session ID (new for each page load/tab)
+  var sessionId = 'sid_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+
+  // Get UTM params and ad click IDs
+  var params = new URLSearchParams(window.location.search);
+  var trackingData = {
+    organizationId: orgId,
+    visitorId: visitorId,
+    sessionId: sessionId,
+    source: params.get('utm_source') || '',
+    medium: params.get('utm_medium') || '',
+    campaign: params.get('utm_campaign') || '',
+    content: params.get('utm_content') || '',
+    term: params.get('utm_term') || '',
+    utmId: params.get('utm_id') || '',
+    gclid: params.get('gclid') || '',
+    fbclid: params.get('fbclid') || '',
+    ttclid: params.get('ttclid') || '',
+    twclid: params.get('twclid') || '',
+    liclid: params.get('li_fat_id') || '',
+    referrer: document.referrer,
+    landingPage: window.location.href,
+    userAgent: navigator.userAgent
+  };
+
+  // Store click IDs for form submissions
+  if (trackingData.gclid || trackingData.fbclid || trackingData.ttclid || trackingData.twclid) {
+    sessionStorage.setItem('crm_utm', JSON.stringify(trackingData));
+  }
+
+  // Track initial page view / impression
+  var img = new Image();
+  img.src = endpoint + '/pixel?data=' + encodeURIComponent(JSON.stringify(trackingData));
+
+  // ==================== ENGAGEMENT TRACKING ====================
+
+  // Track scroll depth
+  var scrollMilestones = [25, 50, 75, 100];
+  var scrollReported = {};
+
+  function getScrollPercent() {
+    var h = document.documentElement,
+        b = document.body,
+        st = 'scrollTop',
+        sh = 'scrollHeight';
+    return Math.round((h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100);
+  }
+
+  function checkScroll() {
+    var percent = getScrollPercent();
+    for (var i = 0; i < scrollMilestones.length; i++) {
+      var milestone = scrollMilestones[i];
+      if (percent >= milestone && !scrollReported[milestone]) {
+        scrollReported[milestone] = true;
+        sendEngagement({ scrollDepth: milestone });
+      }
+    }
+  }
+
+  window.addEventListener('scroll', (function() {
+    var timeout;
+    return function() {
+      clearTimeout(timeout);
+      timeout = setTimeout(checkScroll, 100);
+    };
+  })());
+
+  // Track time on page
+  var startTime = Date.now();
+  var timeCheckpoints = [15, 30, 60, 120, 300]; // seconds
+  var timeReported = {};
+
+  setInterval(function() {
+    var seconds = Math.floor((Date.now() - startTime) / 1000);
+    for (var i = 0; i < timeCheckpoints.length; i++) {
+      var checkpoint = timeCheckpoints[i];
+      if (seconds >= checkpoint && !timeReported[checkpoint]) {
+        timeReported[checkpoint] = true;
+        sendEngagement({ timeOnPage: checkpoint });
+      }
+    }
+  }, 5000);
+
+  // Track video interactions (YouTube, TikTok embeds, HTML5 video)
+  function trackVideos() {
+    // Track HTML5 videos
+    document.querySelectorAll('video').forEach(function(video) {
+      if (video.dataset.crmTracked) return;
+      video.dataset.crmTracked = 'true';
+
+      var videoStarted = false;
+      var videoMilestones = [25, 50, 75, 100];
+      var videoReported = {};
+
+      video.addEventListener('play', function() {
+        if (!videoStarted) {
+          videoStarted = true;
+          sendEngagement({ videoEvent: 'start', videoId: video.id || 'html5-video' });
+        }
+      });
+
+      video.addEventListener('timeupdate', function() {
+        if (video.duration > 0) {
+          var percent = Math.floor((video.currentTime / video.duration) * 100);
+          for (var i = 0; i < videoMilestones.length; i++) {
+            var milestone = videoMilestones[i];
+            if (percent >= milestone && !videoReported[milestone]) {
+              videoReported[milestone] = true;
+              sendEngagement({
+                videoWatchTime: Math.floor(video.currentTime),
+                videoPercentage: milestone,
+                videoId: video.id || 'html5-video'
+              });
+            }
+          }
+        }
+      });
+
+      video.addEventListener('ended', function() {
+        sendEngagement({ videoEvent: 'complete', videoId: video.id || 'html5-video' });
+      });
+    });
+
+    // Track YouTube embeds
+    if (window.YT && window.YT.Player) {
+      document.querySelectorAll('iframe[src*="youtube.com"]').forEach(function(iframe) {
+        if (iframe.dataset.crmTracked) return;
+        iframe.dataset.crmTracked = 'true';
+        // YouTube tracking requires iframe API - notify of presence
+        sendEngagement({ videoDetected: 'youtube', videoId: iframe.src });
+      });
+    }
+  }
+
+  // Run video tracking on load and mutations
+  trackVideos();
+  var observer = new MutationObserver(trackVideos);
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Send engagement event
+  function sendEngagement(data) {
+    var payload = Object.assign({}, trackingData, data);
+    navigator.sendBeacon ?
+      navigator.sendBeacon(endpoint + '/impression', JSON.stringify(payload)) :
+      fetch(endpoint + '/impression', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true
+      });
+  }
+
+  // Send final engagement data on page unload
+  window.addEventListener('beforeunload', function() {
+    var finalData = {
+      type: 'session_end',
+      timeOnPage: Math.floor((Date.now() - startTime) / 1000),
+      scrollDepth: getScrollPercent(),
+      finalUrl: window.location.href
+    };
+    sendEngagement(finalData);
+  });
+
+  // ==================== LEAD CAPTURE ====================
+
+  // Expose enhanced lead capture function
+  window.CRMCaptureLead = function(leadData) {
+    var utm = JSON.parse(sessionStorage.getItem('crm_utm') || '{}');
+    var payload = Object.assign({}, leadData, {
+      organizationId: orgId,
+      visitorId: visitorId,
+      sessionId: sessionId,
+      utmSource: utm.source,
+      utmMedium: utm.medium,
+      utmCampaign: utm.campaign,
+      utmContent: utm.content,
+      utmTerm: utm.term,
+      gclid: utm.gclid,
+      fbclid: utm.fbclid,
+      ttclid: utm.ttclid,
+      twclid: utm.twclid,
+      referrer: document.referrer,
+      landingPage: window.location.href,
+      timeOnPage: Math.floor((Date.now() - startTime) / 1000),
+      scrollDepth: getScrollPercent()
+    });
+
+    return fetch(endpoint + '/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r) { return r.json(); });
+  };
+
+  // Auto-capture forms with data-crm-capture attribute
+  document.querySelectorAll('form[data-crm-capture]').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+      var formData = new FormData(form);
+      var data = {};
+      formData.forEach(function(value, key) { data[key] = value; });
+      window.CRMCaptureLead(data);
+    });
+  });
+})();
+</script>
+<!-- End CRM Enhanced Lead Tracking Pixel -->`;
+
+    return pixelCode;
+  }
+
+  /**
    * Generate tracking pixel code for an organization
    */
   generateTrackingPixel(organizationId: string, baseUrl: string): string {
@@ -106,13 +351,16 @@ class LeadTrackingService {
     localStorage.setItem('crm_vid', visitorId);
   }
 
-  // Get UTM params
+  // Get UTM params and ad click IDs
   var params = new URLSearchParams(window.location.search);
   var utmSource = params.get('utm_source') || '';
   var utmMedium = params.get('utm_medium') || '';
   var utmCampaign = params.get('utm_campaign') || '';
   var utmContent = params.get('utm_content') || '';
   var utmTerm = params.get('utm_term') || '';
+  var utmId = params.get('utm_id') || '';
+  var gclid = params.get('gclid') || '';
+  var fbclid = params.get('fbclid') || '';
 
   // Track page view
   var data = {
@@ -125,16 +373,20 @@ class LeadTrackingService {
     term: utmTerm,
     referrer: document.referrer,
     landingPage: window.location.href,
-    userAgent: navigator.userAgent
+    userAgent: navigator.userAgent,
+    gclid: gclid,
+    fbclid: fbclid,
+    utmId: utmId
   };
 
   // Send tracking data
   var img = new Image();
   img.src = endpoint + '?data=' + encodeURIComponent(JSON.stringify(data));
 
-  // Store UTM params for form submissions
-  if (utmSource) sessionStorage.setItem('crm_utm', JSON.stringify({
-    source: utmSource, medium: utmMedium, campaign: utmCampaign, content: utmContent, term: utmTerm
+  // Store UTM params and click IDs for form submissions
+  if (utmSource || gclid || fbclid) sessionStorage.setItem('crm_utm', JSON.stringify({
+    source: utmSource, medium: utmMedium, campaign: utmCampaign, content: utmContent, term: utmTerm,
+    gclid: gclid, fbclid: fbclid, utmId: utmId
   }));
 
   // Expose lead capture function
@@ -148,6 +400,8 @@ class LeadTrackingService {
       utmCampaign: utm.campaign,
       utmContent: utm.content,
       utmTerm: utm.term,
+      gclid: utm.gclid,
+      fbclid: utm.fbclid,
       referrer: document.referrer,
       landingPage: window.location.href
     });
@@ -282,22 +536,48 @@ class LeadTrackingService {
    */
   async trackPageView(data: TrackingData) {
     try {
+      const visitorId = data.visitorId || this.generateVisitorId();
+
       // Store visitor tracking data
       await prisma.visitorTracking.create({
         data: {
           organizationId: data.organizationId,
-          visitorId: data.visitorId || this.generateVisitorId(),
+          visitorId,
           source: data.source,
           medium: data.medium,
           campaign: data.campaign,
           content: data.content,
           term: data.term,
+          gclid: data.gclid,
+          fbclid: data.fbclid,
+          utmId: data.utmId,
           referrer: data.referrer,
           landingPage: data.landingPage,
           userAgent: data.userAgent,
           ipAddress: data.ipAddress,
         },
       });
+
+      // If click IDs are present, create an AdInteraction record
+      if (data.gclid || data.fbclid) {
+        await adInteractionService.trackAdClick({
+          organizationId: data.organizationId,
+          visitorId,
+          gclid: data.gclid,
+          fbclid: data.fbclid,
+          utmSource: data.source,
+          utmMedium: data.medium,
+          utmCampaign: data.campaign,
+          utmContent: data.content,
+          utmTerm: data.term,
+          landingPage: data.landingPage,
+          referrer: data.referrer,
+          userAgent: data.userAgent,
+          ipAddress: data.ipAddress,
+          deviceType: data.deviceType,
+          browser: data.browser,
+        });
+      }
 
       return { success: true };
     } catch (error) {
@@ -331,6 +611,9 @@ class LeadTrackingService {
       customFields,
       ipAddress,
       userAgent,
+      visitorId,
+      gclid,
+      fbclid,
     } = params;
 
     // Validate - need at least email or phone
@@ -413,6 +696,8 @@ class LeadTrackingService {
           utmCampaign,
           utmContent,
           utmTerm,
+          gclid,
+          fbclid,
           referrer,
           landingPage,
           formId,
@@ -441,6 +726,20 @@ class LeadTrackingService {
         },
       },
     });
+
+    // Convert ad interaction to lead if visitor came from ad click
+    if (visitorId) {
+      try {
+        await adInteractionService.convertToLead({
+          visitorId,
+          organizationId,
+          leadId: lead.id,
+        });
+      } catch (error) {
+        console.error('Failed to convert ad interaction:', error);
+        // Don't fail the lead capture if ad interaction conversion fails
+      }
+    }
 
     return {
       success: true,

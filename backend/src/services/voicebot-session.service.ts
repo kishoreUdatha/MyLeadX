@@ -55,10 +55,10 @@ export interface VoiceBotSession {
 // Active sessions store
 const sessions = new Map<string, VoiceBotSession>();
 
-// Session timing constants
-export const SILENCE_THRESHOLD = 600; // 600ms of silence to trigger processing
-export const MAX_AUDIO_WAIT = 2500; // 2.5 seconds max wait before processing
-export const MAX_BUFFER_SIZE = 48000; // Max 3 seconds of audio before forced processing
+// Session timing constants - optimized for fast response
+export const SILENCE_THRESHOLD = 800; // 800ms of silence to trigger processing (fast response)
+export const MAX_AUDIO_WAIT = 3000; // 3 seconds max wait before processing
+export const MAX_BUFFER_SIZE = 96000; // Max 6 seconds of audio before forced processing
 
 /**
  * Create a new voice bot session

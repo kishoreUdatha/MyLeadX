@@ -13,6 +13,11 @@ interface SendEmailInput {
   userId: string;
   campaignId?: string;
   enableTracking?: boolean;
+  attachments?: Array<{
+    filename: string;
+    content: string | Buffer;
+    contentType?: string;
+  }>;
 }
 
 interface SendBulkEmailInput {
@@ -75,6 +80,7 @@ export class EmailService {
         subject: input.subject,
         text: input.body,
         html: processedHtml,
+        attachments: input.attachments,
       });
 
       // Update email log with sent status
@@ -213,6 +219,207 @@ export class EmailService {
       return { success: true, message: 'Email connection verified' };
     } catch (error) {
       return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * Generate ICS calendar file content
+   */
+  generateIcsContent(event: {
+    uid: string;
+    title: string;
+    description?: string;
+    startTime: Date;
+    endTime: Date;
+    location?: string;
+    organizerEmail: string;
+    organizerName?: string;
+    attendeeEmail: string;
+    attendeeName?: string;
+  }): string {
+    const formatIcsDate = (date: Date): string => {
+      return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    };
+
+    const escapeIcsText = (text: string): string => {
+      return text
+        .replace(/\\/g, '\\\\')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/\n/g, '\\n');
+    };
+
+    const now = new Date();
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//VoiceBridge//Calendar//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:REQUEST',
+      'BEGIN:VEVENT',
+      `UID:${event.uid}`,
+      `DTSTAMP:${formatIcsDate(now)}`,
+      `DTSTART:${formatIcsDate(event.startTime)}`,
+      `DTEND:${formatIcsDate(event.endTime)}`,
+      `SUMMARY:${escapeIcsText(event.title)}`,
+    ];
+
+    if (event.description) {
+      lines.push(`DESCRIPTION:${escapeIcsText(event.description)}`);
+    }
+
+    if (event.location) {
+      lines.push(`LOCATION:${escapeIcsText(event.location)}`);
+    }
+
+    lines.push(`ORGANIZER;CN=${event.organizerName || 'VoiceBridge'}:mailto:${event.organizerEmail}`);
+    lines.push(`ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=${event.attendeeName || event.attendeeEmail}:mailto:${event.attendeeEmail}`);
+
+    lines.push('STATUS:CONFIRMED');
+    lines.push('SEQUENCE:0');
+    lines.push('BEGIN:VALARM');
+    lines.push('TRIGGER:-PT60M');
+    lines.push('ACTION:EMAIL');
+    lines.push(`DESCRIPTION:Reminder: ${escapeIcsText(event.title)}`);
+    lines.push('END:VALARM');
+    lines.push('BEGIN:VALARM');
+    lines.push('TRIGGER:-PT15M');
+    lines.push('ACTION:DISPLAY');
+    lines.push(`DESCRIPTION:Reminder: ${escapeIcsText(event.title)}`);
+    lines.push('END:VALARM');
+    lines.push('END:VEVENT');
+    lines.push('END:VCALENDAR');
+
+    return lines.join('\r\n');
+  }
+
+  /**
+   * Send calendar invitation email with ICS attachment
+   */
+  async sendCalendarInvitation(input: {
+    to: string;
+    toName?: string;
+    eventTitle: string;
+    eventDescription?: string;
+    startTime: Date;
+    endTime: Date;
+    location?: string;
+    eventId?: string;
+  }) {
+    const organizerEmail = config.smtp.from || 'noreply@voicebridge.ai';
+    const uid = input.eventId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}@voicebridge`;
+
+    // Generate ICS content
+    const icsContent = this.generateIcsContent({
+      uid,
+      title: input.eventTitle,
+      description: input.eventDescription,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      location: input.location,
+      organizerEmail,
+      organizerName: 'VoiceBridge',
+      attendeeEmail: input.to,
+      attendeeName: input.toName,
+    });
+
+    // Format date for display
+    const formatDisplayDate = (date: Date): string => {
+      return date.toLocaleString('en-IN', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata',
+      });
+    };
+
+    const startDisplay = formatDisplayDate(input.startTime);
+    const endDisplay = formatDisplayDate(input.endTime);
+
+    const subject = `Calendar Invitation: ${input.eventTitle}`;
+    const body = `
+You have been invited to the following event:
+
+${input.eventTitle}
+
+When: ${startDisplay} - ${endDisplay}
+${input.location ? `Where: ${input.location}` : ''}
+${input.eventDescription ? `\nDetails:\n${input.eventDescription}` : ''}
+
+Please find the calendar invitation attached. You can add this event to your calendar by opening the attached .ics file.
+
+Best regards,
+VoiceBridge
+    `.trim();
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #3b82f6;">Calendar Invitation</h2>
+        <h3 style="color: #1f2937;">${input.eventTitle}</h3>
+
+        <table style="margin: 20px 0; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px 16px 8px 0; color: #6b7280; font-weight: bold;">When:</td>
+            <td style="padding: 8px 0;">${startDisplay}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 16px 8px 0; color: #6b7280; font-weight: bold;">Duration:</td>
+            <td style="padding: 8px 0;">${Math.round((input.endTime.getTime() - input.startTime.getTime()) / 60000)} minutes</td>
+          </tr>
+          ${input.location ? `
+          <tr>
+            <td style="padding: 8px 16px 8px 0; color: #6b7280; font-weight: bold;">Where:</td>
+            <td style="padding: 8px 0;">${input.location}</td>
+          </tr>
+          ` : ''}
+        </table>
+
+        ${input.eventDescription ? `
+        <div style="margin: 20px 0; padding: 16px; background-color: #f3f4f6; border-radius: 8px;">
+          <p style="margin: 0; color: #374151;">${input.eventDescription.replace(/\n/g, '<br>')}</p>
+        </div>
+        ` : ''}
+
+        <p style="margin-top: 24px; padding: 16px; background-color: #dbeafe; border-radius: 8px; color: #1e40af;">
+          <strong>Note:</strong> Please open the attached <code>invite.ics</code> file to add this event to your calendar.
+        </p>
+
+        <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;">
+        <p style="color: #9ca3af; font-size: 14px;">
+          This invitation was sent by VoiceBridge Voice AI System.
+        </p>
+      </div>
+    `;
+
+    try {
+      const info = await this.transporter.sendMail({
+        from: config.smtp.from,
+        to: input.to,
+        subject,
+        text: body,
+        html,
+        attachments: [
+          {
+            filename: 'invite.ics',
+            content: icsContent,
+            contentType: 'text/calendar; method=REQUEST',
+          },
+        ],
+        // Set content type for calendar invite
+        icalEvent: {
+          method: 'REQUEST',
+          content: icsContent,
+        },
+      });
+
+      console.log(`[Email] Calendar invitation sent to ${input.to}, messageId: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('[Email] Failed to send calendar invitation:', (error as Error).message);
+      throw error;
     }
   }
 }

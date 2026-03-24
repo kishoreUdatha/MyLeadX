@@ -887,6 +887,9 @@ router.post(
           const result = await exotelService.makeCall({
             to,
             callerId: from || process.env.EXOTEL_CALLER_ID || '',
+            record: true,
+            recordingChannels: 'dual', // Separate agent & customer channels
+            recordingFormat: 'mp3',
           });
 
           await prisma.outboundCall.update({

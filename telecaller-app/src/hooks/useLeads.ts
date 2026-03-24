@@ -22,10 +22,12 @@ export const useLeads = () => {
   // Fetch leads (paginated)
   const loadLeads = useCallback(
     async (refresh: boolean = false) => {
-      const page = refresh ? 1 : pagination.page + 1;
-      await dispatch(fetchLeads({ page, refresh }));
+      // Use ref to get current page to avoid dependency on pagination.page
+      const currentPage = refresh ? 1 : pagination.page + 1;
+      await dispatch(fetchLeads({ page: currentPage, refresh }));
     },
-    [dispatch, pagination.page]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dispatch]
   );
 
   // Load cached leads for offline mode

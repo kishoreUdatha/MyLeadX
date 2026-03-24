@@ -15,7 +15,13 @@ export type JobType =
   | 'WEBHOOK_DELIVERY'
   | 'CAMPAIGN_PROCESSING'
   | 'SCHEDULED_CALL'
-  | 'CHECK_SCHEDULED_CALLS';
+  | 'CHECK_SCHEDULED_CALLS'
+  | 'AD_INSIGHTS_SYNC'
+  | 'AD_INSIGHTS_SYNC_ALL'
+  | 'APIFY_SCRAPE_RUN'
+  | 'APIFY_SCRAPE_POLL'
+  | 'APIFY_SCRAPE_IMPORT'
+  | 'APIFY_SCHEDULED_CHECK';
 
 interface JobData {
   type: JobType;
@@ -216,6 +222,24 @@ class JobQueueService {
 
       case 'CHECK_SCHEDULED_CALLS':
         return this.checkScheduledCalls();
+
+      case 'AD_INSIGHTS_SYNC':
+        return this.processAdInsightsSync(data.payload, data.organizationId);
+
+      case 'AD_INSIGHTS_SYNC_ALL':
+        return this.processAdInsightsSyncAll();
+
+      case 'APIFY_SCRAPE_RUN':
+        return this.processApifyScrapeRun(data.payload, data.organizationId);
+
+      case 'APIFY_SCRAPE_POLL':
+        return this.processApifyScrapePoll(data.payload, data.organizationId);
+
+      case 'APIFY_SCRAPE_IMPORT':
+        return this.processApifyScrapeImport(data.payload, data.organizationId);
+
+      case 'APIFY_SCHEDULED_CHECK':
+        return this.processApifyScheduledCheck();
 
       default:
         throw new Error(`Unknown job type: ${data.type}`);
@@ -759,6 +783,387 @@ class JobQueueService {
   }
 
   /**
+   * Ad insights sync for a single organization
+   */
+  private async processAdInsightsSync(
+    payload: Record<string, any>,
+    organizationId?: string
+  ): Promise<JobResult> {
+    if (!organizationId) {
+      return { success: false, processed: 0, failed: 1, errors: ['Organization ID required'] };
+    }
+
+    try {
+      // Dynamic import to avoid circular dependency
+      const { adInsightsSyncService } = await import('./ad-insights-sync.service');
+      const result = await adInsightsSyncService.syncAllPlatforms(organizationId);
+
+      console.log(`[JobQueue] Ad insights sync completed for org ${organizationId}: ${result.totalSynced} synced, ${result.totalErrors} errors`);
+
+      return {
+        success: result.totalErrors === 0,
+        processed: result.totalSynced,
+        failed: result.totalErrors,
+        data: result,
+      };
+    } catch (error) {
+      console.error(`[JobQueue] Ad insights sync failed for org ${organizationId}:`, error);
+      return { success: false, processed: 0, failed: 1, errors: [(error as Error).message] };
+    }
+  }
+
+  /**
+   * Ad insights sync for all organizations
+   */
+  private async processAdInsightsSyncAll(): Promise<JobResult> {
+    try {
+      // Dynamic import to avoid circular dependency
+      const { adInsightsSyncService } = await import('./ad-insights-sync.service');
+      const result = await adInsightsSyncService.syncAllOrganizations();
+
+      console.log(`[JobQueue] Batch ad insights sync completed: ${result.totalSynced} campaigns synced across ${result.organizations} orgs`);
+
+      return {
+        success: result.totalErrors === 0,
+        processed: result.totalSynced,
+        failed: result.totalErrors,
+        data: result,
+      };
+    } catch (error) {
+      console.error('[JobQueue] Batch ad insights sync failed:', error);
+      return { success: false, processed: 0, failed: 1, errors: [(error as Error).message] };
+    }
+  }
+
+  /**
+   * Start an Apify scrape run
+   */
+  private async processApifyScrapeRun(
+    payload: Record<string, any>,
+    organizationId?: string
+  ): Promise<JobResult> {
+    try {
+      const { getApifyServiceForOrg } = await import('../integrations/apify.service');
+
+      if (!organizationId) {
+        throw new Error('Organization ID is required');
+      }
+
+      const service = await getApifyServiceForOrg(organizationId);
+      if (!service) {
+        throw new Error('Apify integration not configured');
+      }
+
+      const { configId, integrationId, actorId, inputConfig, fieldMapping, scraperType, extractEmails = false } = payload;
+
+      // Start the Apify run
+      const run = await service.startRun(actorId, inputConfig);
+
+      // Create job record in database
+      const job = await prisma.apifyScrapeJob.create({
+        data: {
+          integrationId,
+          configId,
+          apifyRunId: run.id,
+          actorId,
+          status: 'RUNNING',
+          startedAt: new Date(),
+          inputSnapshot: inputConfig,
+        },
+      });
+
+      // Update config last run info
+      if (configId) {
+        await prisma.apifyScraperConfig.update({
+          where: { id: configId },
+          data: {
+            lastRunAt: new Date(),
+            lastRunStatus: 'RUNNING',
+          },
+        });
+      }
+
+      // Queue a poll job to check status
+      await this.addJob(
+        'APIFY_SCRAPE_POLL',
+        {
+          jobId: job.id,
+          runId: run.id,
+          configId,
+          fieldMapping,
+          scraperType,
+          extractEmails,
+          pollCount: 0,
+        },
+        { organizationId, delay: 30000 } // Poll after 30 seconds
+      );
+
+      console.log(`[JobQueue] Started Apify run ${run.id} for config ${configId}`);
+
+      return {
+        success: true,
+        processed: 1,
+        failed: 0,
+        data: { runId: run.id, jobId: job.id },
+      };
+    } catch (error) {
+      console.error('[JobQueue] Apify scrape run failed:', error);
+      return { success: false, processed: 0, failed: 1, errors: [(error as Error).message] };
+    }
+  }
+
+  /**
+   * Poll an Apify run for completion
+   */
+  private async processApifyScrapePoll(
+    payload: Record<string, any>,
+    organizationId?: string
+  ): Promise<JobResult> {
+    try {
+      const { getApifyServiceForOrg } = await import('../integrations/apify.service');
+
+      if (!organizationId) {
+        throw new Error('Organization ID is required');
+      }
+
+      const service = await getApifyServiceForOrg(organizationId);
+      if (!service) {
+        throw new Error('Apify integration not configured');
+      }
+
+      const { jobId, runId, configId, fieldMapping, scraperType, extractEmails = false, pollCount = 0 } = payload;
+
+      // Get run status from Apify
+      const run = await service.getRunStatus(runId);
+
+      // Map Apify status to our status
+      const statusMap: Record<string, 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'> = {
+        READY: 'PENDING',
+        RUNNING: 'RUNNING',
+        SUCCEEDED: 'SUCCEEDED',
+        FAILED: 'FAILED',
+        ABORTED: 'CANCELLED',
+        ABORTING: 'RUNNING',
+        'TIMING-OUT': 'RUNNING',
+        'TIMED-OUT': 'FAILED',
+      };
+
+      const status = statusMap[run.status] || 'RUNNING';
+
+      // Update job status
+      await prisma.apifyScrapeJob.update({
+        where: { id: jobId },
+        data: {
+          status,
+          completedAt: run.finishedAt ? new Date(run.finishedAt) : null,
+        },
+      });
+
+      if (status === 'SUCCEEDED') {
+        // Queue import job
+        await this.addJob(
+          'APIFY_SCRAPE_IMPORT',
+          {
+            jobId,
+            runId,
+            configId,
+            fieldMapping,
+            scraperType,
+            extractEmails,
+          },
+          { organizationId }
+        );
+
+        console.log(`[JobQueue] Apify run ${runId} succeeded, queuing import`);
+
+        return {
+          success: true,
+          processed: 1,
+          failed: 0,
+          data: { status: 'SUCCEEDED' },
+        };
+      } else if (status === 'FAILED' || status === 'CANCELLED') {
+        // Update config status
+        if (configId) {
+          await prisma.apifyScraperConfig.update({
+            where: { id: configId },
+            data: { lastRunStatus: status },
+          });
+        }
+
+        console.log(`[JobQueue] Apify run ${runId} ${status}`);
+
+        return {
+          success: false,
+          processed: 0,
+          failed: 1,
+          data: { status },
+        };
+      } else {
+        // Still running - queue another poll if under limit
+        const maxPolls = 120; // 120 polls * 30s = 1 hour max
+        if (pollCount < maxPolls) {
+          await this.addJob(
+            'APIFY_SCRAPE_POLL',
+            {
+              jobId,
+              runId,
+              configId,
+              fieldMapping,
+              scraperType,
+              extractEmails,
+              pollCount: pollCount + 1,
+            },
+            { organizationId, delay: 30000 }
+          );
+        } else {
+          // Timeout - mark as failed
+          await prisma.apifyScrapeJob.update({
+            where: { id: jobId },
+            data: {
+              status: 'FAILED',
+              errorMessage: 'Polling timeout exceeded',
+              completedAt: new Date(),
+            },
+          });
+
+          return {
+            success: false,
+            processed: 0,
+            failed: 1,
+            errors: ['Polling timeout exceeded'],
+          };
+        }
+
+        return {
+          success: true,
+          processed: 0,
+          failed: 0,
+          data: { status: 'RUNNING', pollCount: pollCount + 1 },
+        };
+      }
+    } catch (error) {
+      console.error('[JobQueue] Apify scrape poll failed:', error);
+      return { success: false, processed: 0, failed: 1, errors: [(error as Error).message] };
+    }
+  }
+
+  /**
+   * Import results from a completed Apify run
+   */
+  private async processApifyScrapeImport(
+    payload: Record<string, any>,
+    organizationId?: string
+  ): Promise<JobResult> {
+    try {
+      const { getApifyServiceForOrg } = await import('../integrations/apify.service');
+
+      if (!organizationId) {
+        throw new Error('Organization ID is required');
+      }
+
+      const service = await getApifyServiceForOrg(organizationId);
+      if (!service) {
+        throw new Error('Apify integration not configured');
+      }
+
+      const { jobId, runId, configId, fieldMapping, scraperType, extractEmails = false } = payload;
+
+      // Process and import results
+      const result = await service.processAndImportResults(
+        organizationId,
+        runId,
+        fieldMapping,
+        scraperType
+      );
+
+      // Update job with import results
+      await prisma.apifyScrapeJob.update({
+        where: { id: jobId },
+        data: {
+          totalItems: result.totalItems,
+          importedItems: result.importedItems,
+          duplicateItems: result.duplicateItems,
+          failedItems: result.failedItems,
+          bulkImportId: result.bulkImportId,
+        },
+      });
+
+      // Update config stats
+      if (configId) {
+        await prisma.apifyScraperConfig.update({
+          where: { id: configId },
+          data: {
+            lastRunStatus: 'SUCCEEDED',
+            totalLeadsScraped: {
+              increment: result.importedItems,
+            },
+          },
+        });
+      }
+
+      console.log(`[JobQueue] Imported ${result.importedItems} leads from Apify run ${runId}`);
+
+      // If email extraction is enabled, enrich leads with emails from their websites
+      if (extractEmails && result.bulkImportId && result.importedItems > 0) {
+        console.log(`[JobQueue] Starting email extraction for ${result.importedItems} leads...`);
+        try {
+          const emailResult = await service.enrichLeadsWithEmails(
+            organizationId,
+            result.bulkImportId
+          );
+          console.log(`[JobQueue] Email extraction complete: ${emailResult.enriched}/${emailResult.total} enriched`);
+        } catch (emailError) {
+          console.error('[JobQueue] Email extraction failed:', emailError);
+          // Don't fail the whole job if email extraction fails
+        }
+      }
+
+      return {
+        success: true,
+        processed: result.importedItems,
+        failed: result.failedItems,
+        data: result,
+      };
+    } catch (error) {
+      console.error('[JobQueue] Apify scrape import failed:', error);
+
+      // Update job with error
+      if (payload.jobId) {
+        await prisma.apifyScrapeJob.update({
+          where: { id: payload.jobId },
+          data: {
+            status: 'FAILED',
+            errorMessage: (error as Error).message,
+            completedAt: new Date(),
+          },
+        });
+      }
+
+      return { success: false, processed: 0, failed: 1, errors: [(error as Error).message] };
+    }
+  }
+
+  /**
+   * Check for scheduled Apify scrapes
+   */
+  private async processApifyScheduledCheck(): Promise<JobResult> {
+    try {
+      const { apifySchedulerService } = await import('./apify-scheduler.service');
+      await apifySchedulerService.checkScheduledScrapes();
+
+      return {
+        success: true,
+        processed: 1,
+        failed: 0,
+      };
+    } catch (error) {
+      console.error('[JobQueue] Apify scheduled check failed:', error);
+      return { success: false, processed: 0, failed: 1, errors: [(error as Error).message] };
+    }
+  }
+
+  /**
    * Start the scheduled call checker (runs every minute)
    */
   startScheduledCallChecker(): void {
@@ -841,6 +1246,45 @@ class JobQueueService {
     } else {
       console.log('Score decay scheduling requires Redis');
     }
+  }
+
+  /**
+   * Schedule recurring ad insights sync job
+   * Runs every 4 hours by default to sync impressions, clicks, and spend from ad platforms
+   */
+  async scheduleAdInsightsSyncJob(cronExpression?: string): Promise<void> {
+    if (this.queue && this.isRedisAvailable) {
+      // Remove existing repeatable job
+      await this.queue.removeRepeatable('ad-insights-sync', {
+        cron: cronExpression || '0 */4 * * *', // Default: Every 4 hours
+      });
+
+      // Add new repeatable job
+      await this.queue.add(
+        { type: 'AD_INSIGHTS_SYNC_ALL', payload: {} },
+        {
+          repeat: { cron: cronExpression || '0 */4 * * *' },
+          jobId: 'ad-insights-sync',
+        }
+      );
+
+      console.log('[JobQueue] Ad insights sync job scheduled (every 4 hours)');
+    } else {
+      console.log('[JobQueue] Ad insights sync scheduling requires Redis');
+    }
+  }
+
+  /**
+   * Start the ad insights sync checker (fallback for in-memory queue)
+   * Runs every 4 hours
+   */
+  startAdInsightsSyncChecker(): void {
+    console.log('[JobQueue] Starting ad insights sync checker (runs every 4 hours)');
+
+    // Run every 4 hours
+    setInterval(() => {
+      this.addJob('AD_INSIGHTS_SYNC_ALL', {});
+    }, 4 * 60 * 60 * 1000); // Every 4 hours
   }
 
   /**

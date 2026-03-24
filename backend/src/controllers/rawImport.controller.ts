@@ -193,6 +193,36 @@ export class RawImportController {
       next(error);
     }
   }
+
+  // ==================== DELETE ====================
+
+  async deleteRecord(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await rawImportService.deleteRecord(req.params.id, req.organizationId!);
+      ApiResponse.success(res, 'Record deleted successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkDeleteRecords(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { recordIds } = req.body;
+      const result = await rawImportService.bulkDeleteRecords(recordIds, req.organizationId!);
+      ApiResponse.success(res, 'Records deleted successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteBulkImport(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await rawImportService.deleteBulkImport(req.params.id, req.organizationId!);
+      ApiResponse.success(res, 'Import and all records deleted successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const rawImportController = new RawImportController();

@@ -276,7 +276,7 @@ class VoiceTemplateService {
         temperature: temperature ?? 0.7,
         personality: personality || 'professional',
         responseSpeed: responseSpeed || 'normal',
-        maxDuration: maxDuration ?? 300,
+        maxDuration: maxDuration ?? 1800, // 30 minutes default for long conversations
 
         workingHoursEnabled: workingHoursEnabled ?? false,
         workingHoursStart: workingHoursStart || '09:00',

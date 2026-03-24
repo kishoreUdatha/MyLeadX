@@ -161,6 +161,9 @@ router.post('/make', async (req: Request, res: Response) => {
         to,
         statusCallback: `${baseUrl}/api/exotel/webhook/status`,
         customField: 'test-call-' + Date.now(),
+        record: true,
+        recordingChannels: 'dual', // Separate agent & customer channels
+        recordingFormat: 'mp3',
       });
 
       return res.json({
@@ -526,6 +529,9 @@ router.post('/agent-call', async (req: Request, res: Response) => {
         statusCallback: `${baseUrl}/api/exotel/webhook/status`,
         timeLimit: 600,
         timeOut: 30,
+        record: true,
+        recordingChannels: 'dual', // Separate agent & customer channels for AI analysis
+        recordingFormat: 'mp3',
       });
 
       if (result.success) {

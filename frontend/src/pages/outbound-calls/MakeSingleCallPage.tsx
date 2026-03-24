@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
-  Phone,
-  Bot,
-  User,
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  ChevronDown,
-  Search,
-  Clock,
-  FileText,
-  Headphones,
-} from 'lucide-react';
+  ArrowLeftIcon,
+  PhoneIcon,
+  CpuChipIcon,
+  UserIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ChevronDownIcon,
+  MagnifyingGlassIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  SpeakerWaveIcon,
+  ArrowPathIcon,
+} from '@heroicons/react/24/outline';
 import api from '../../services/api';
 
 interface VoiceAgent {
@@ -136,317 +136,294 @@ export const MakeSingleCallPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-gray-500">
-          <Loader2 className="animate-spin" size={20} />
-          <span>Loading...</span>
-        </div>
+      <div className="flex items-center justify-center min-h-[300px]">
+        <ArrowPathIcon className="h-5 w-5 text-gray-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div>
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/outbound-calls')}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <h1 className="text-base font-semibold text-gray-900">New Outbound Call</h1>
-            </div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/outbound-calls')}
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+          >
+            <ArrowLeftIcon className="h-4 w-4" />
+          </button>
+          <div>
+            <h1 className="text-sm font-semibold text-gray-900">Make Single Call</h1>
+            <p className="text-[10px] text-gray-500">Initiate an AI-powered outbound call</p>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Form Section */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-base font-semibold text-gray-900">Call Configuration</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Configure the AI agent and recipient details</p>
-              </div>
-
-              {/* Alerts */}
-              {error && (
-                <div className="mx-6 mt-6 flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-red-800">Error</p>
-                    <p className="text-sm text-red-700 mt-0.5">{error}</p>
-                  </div>
-                </div>
-              )}
-
-              {success && (
-                <div className="mx-6 mt-6 flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <CheckCircle size={18} className="text-green-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-green-800">Success</p>
-                    <p className="text-sm text-green-700 mt-0.5">{success}</p>
-                  </div>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                {/* Agent Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    AI Agent <span className="text-red-500">*</span>
-                  </label>
-                  {agents.length === 0 ? (
-                    <div className="border border-dashed border-gray-300 rounded-lg p-6 text-center">
-                      <Bot size={32} className="text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500 mb-3">No active agents available</p>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/voice-ai/create')}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                      >
-                        Create an agent
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative agent-dropdown">
-                      <button
-                        type="button"
-                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                        className="w-full flex items-center justify-between px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-left hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                      >
-                        {selectedAgent ? (
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                              <Bot size={16} className="text-blue-600" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">{selectedAgent.name}</p>
-                              <p className="text-xs text-gray-500">{industryLabels[selectedAgent.industry]}</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-500 text-sm">Select an agent</span>
-                        )}
-                        <ChevronDown size={18} className={`text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {isDropdownOpen && (
-                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
-                          <div className="p-2 border-b border-gray-100">
-                            <div className="relative">
-                              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                              <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search agents..."
-                                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            </div>
-                          </div>
-                          <div className="max-h-64 overflow-y-auto py-1">
-                            {filteredAgents.length === 0 ? (
-                              <p className="px-4 py-3 text-sm text-gray-500 text-center">No agents found</p>
-                            ) : (
-                              filteredAgents.map((agent) => (
-                                <button
-                                  key={agent.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setFormData({ ...formData, agentId: agent.id });
-                                    setIsDropdownOpen(false);
-                                    setSearchQuery('');
-                                  }}
-                                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${
-                                    formData.agentId === agent.id ? 'bg-blue-50' : ''
-                                  }`}
-                                >
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                    formData.agentId === agent.id ? 'bg-blue-100' : 'bg-gray-100'
-                                  }`}>
-                                    <Bot size={16} className={formData.agentId === agent.id ? 'text-blue-600' : 'text-gray-500'} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 truncate">{agent.name}</p>
-                                    <p className="text-xs text-gray-500">{industryLabels[agent.industry]}</p>
-                                  </div>
-                                  {formData.agentId === agent.id && (
-                                    <CheckCircle size={16} className="text-blue-600 flex-shrink-0" />
-                                  )}
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Divider */}
-                <div className="border-t border-gray-200"></div>
-
-                {/* Phone Number */}
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Phone Number <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Phone size={16} className="text-gray-400" />
-                    </div>
-                    <input
-                      type="tel"
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+91 98765 43210"
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    />
-                  </div>
-                  <p className="mt-1.5 text-xs text-gray-500">Enter phone number with country code</p>
-                </div>
-
-                {/* Contact Name */}
-                <div>
-                  <label htmlFor="contactName" className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Contact Name <span className="text-gray-400 font-normal">(Optional)</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User size={16} className="text-gray-400" />
-                    </div>
-                    <input
-                      type="text"
-                      id="contactName"
-                      value={formData.contactName}
-                      onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
-                      placeholder="Enter contact name"
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/outbound-calls')}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting || agents.length === 0}
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="animate-spin" size={16} />
-                        <span>Initiating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Phone size={16} />
-                        <span>Start Call</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Form Section */}
+        <div className="lg:col-span-2">
+          <div className="card">
+            <div className="px-3 py-2 border-b border-gray-200">
+              <h2 className="text-xs font-medium text-gray-900">Call Configuration</h2>
             </div>
-          </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Selected Agent Info */}
-            {selectedAgent && (
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-                <div className="px-4 py-3 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-900">Selected Agent</h3>
-                </div>
-                <div className="p-4">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Bot size={20} className="text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{selectedAgent.name}</p>
-                      <p className="text-xs text-gray-500">{industryLabels[selectedAgent.industry]}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100 text-green-700 text-xs font-medium">
-                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
-                      Active
-                    </span>
-                    {selectedAgent.language && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-600 text-xs">
-                        {selectedAgent.language}
-                      </span>
-                    )}
-                  </div>
-                </div>
+            {/* Alerts */}
+            {error && (
+              <div className="mx-3 mt-3 flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                <ExclamationCircleIcon className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <span className="text-red-700">{error}</span>
               </div>
             )}
 
-            {/* Call Features */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-              <div className="px-4 py-3 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900">Call Features</h3>
+            {success && (
+              <div className="mx-3 mt-3 flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded text-xs">
+                <CheckCircleIcon className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <span className="text-green-700">{success}</span>
               </div>
-              <div className="p-4 space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Headphones size={16} className="text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Natural Conversation</p>
-                    <p className="text-xs text-gray-500">AI understands and responds naturally</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <FileText size={16} className="text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Auto Transcription</p>
-                    <p className="text-xs text-gray-500">Complete call transcript saved</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Clock size={16} className="text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Real-time Response</p>
-                    <p className="text-xs text-gray-500">Less than 1 second latency</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
 
-            {/* Help */}
-            <div className="bg-blue-50 rounded-lg border border-blue-100 p-4">
-              <h4 className="text-sm font-medium text-blue-900 mb-1">Need help?</h4>
-              <p className="text-xs text-blue-700 mb-3">
-                Make sure the phone number includes the country code and the contact is available to receive calls.
-              </p>
-              <a href="#" className="text-xs font-medium text-blue-600 hover:text-blue-700">
-                View documentation &rarr;
-              </a>
-            </div>
+            <form onSubmit={handleSubmit} className="p-3 space-y-4">
+              {/* Agent Selection */}
+              <div>
+                <label className="block text-[10px] font-medium text-gray-500 uppercase mb-1">
+                  AI Agent <span className="text-red-500">*</span>
+                </label>
+                {agents.length === 0 ? (
+                  <div className="border border-dashed border-gray-300 rounded p-4 text-center">
+                    <CpuChipIcon className="h-6 w-6 text-gray-300 mx-auto mb-1" />
+                    <p className="text-xs text-gray-500 mb-2">No active agents</p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/voice-ai/create')}
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                    >
+                      Create an agent
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative agent-dropdown">
+                    <button
+                      type="button"
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      className="w-full flex items-center justify-between px-2.5 py-2 bg-white border border-gray-300 rounded text-left hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-xs"
+                    >
+                      {selectedAgent ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-primary-100 rounded flex items-center justify-center">
+                            <CpuChipIcon className="h-3.5 w-3.5 text-primary-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-900">{selectedAgent.name}</p>
+                            <p className="text-[10px] text-gray-500">{industryLabels[selectedAgent.industry]}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">Select an agent</span>
+                      )}
+                      <ChevronDownIcon className={`h-4 w-4 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isDropdownOpen && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg">
+                        <div className="p-1.5 border-b border-gray-100">
+                          <div className="relative">
+                            <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder="Search agents..."
+                              className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto py-1">
+                          {filteredAgents.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-gray-500 text-center">No agents found</p>
+                          ) : (
+                            filteredAgents.map((agent) => (
+                              <button
+                                key={agent.id}
+                                type="button"
+                                onClick={() => {
+                                  setFormData({ ...formData, agentId: agent.id });
+                                  setIsDropdownOpen(false);
+                                  setSearchQuery('');
+                                }}
+                                className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-gray-50 ${
+                                  formData.agentId === agent.id ? 'bg-primary-50' : ''
+                                }`}
+                              >
+                                <div className={`w-5 h-5 rounded flex items-center justify-center ${
+                                  formData.agentId === agent.id ? 'bg-primary-100' : 'bg-gray-100'
+                                }`}>
+                                  <CpuChipIcon className={`h-3 w-3 ${formData.agentId === agent.id ? 'text-primary-600' : 'text-gray-500'}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-gray-900 truncate">{agent.name}</p>
+                                  <p className="text-[10px] text-gray-500">{industryLabels[agent.industry]}</p>
+                                </div>
+                                {formData.agentId === agent.id && (
+                                  <CheckCircleIcon className="h-3.5 w-3.5 text-primary-600 flex-shrink-0" />
+                                )}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label htmlFor="phone" className="block text-[10px] font-medium text-gray-500 uppercase mb-1">
+                  Phone Number <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <PhoneIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    type="tel"
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+91 98765 43210"
+                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-gray-400">Include country code (e.g., +91 for India)</p>
+              </div>
+
+              {/* Contact Name */}
+              <div>
+                <label htmlFor="contactName" className="block text-[10px] font-medium text-gray-500 uppercase mb-1">
+                  Contact Name <span className="text-gray-400 font-normal">(Optional)</span>
+                </label>
+                <div className="relative">
+                  <UserIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    type="text"
+                    id="contactName"
+                    value={formData.contactName}
+                    onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                    placeholder="Enter contact name"
+                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => navigate('/outbound-calls')}
+                  className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || agents.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <>
+                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                      <span>Initiating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <PhoneIcon className="h-3.5 w-3.5" />
+                      <span>Start Call</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </main>
+
+        {/* Sidebar */}
+        <div className="space-y-3">
+          {/* Selected Agent Info */}
+          {selectedAgent && (
+            <div className="card">
+              <div className="px-3 py-2 border-b border-gray-200">
+                <h3 className="text-xs font-medium text-gray-900">Selected Agent</h3>
+              </div>
+              <div className="p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 bg-primary-100 rounded flex items-center justify-center">
+                    <CpuChipIcon className="h-4 w-4 text-primary-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-900">{selectedAgent.name}</p>
+                    <p className="text-[10px] text-gray-500">{industryLabels[selectedAgent.industry]}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-medium">
+                    <span className="w-1 h-1 bg-green-500 rounded-full mr-1"></span>
+                    Active
+                  </span>
+                  {selectedAgent.language && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px]">
+                      {selectedAgent.language}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Call Features */}
+          <div className="card">
+            <div className="px-3 py-2 border-b border-gray-200">
+              <h3 className="text-xs font-medium text-gray-900">Call Features</h3>
+            </div>
+            <div className="p-3 space-y-2.5">
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
+                  <SpeakerWaveIcon className="h-3.5 w-3.5 text-gray-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-900">Natural Conversation</p>
+                  <p className="text-[10px] text-gray-500">AI understands context</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
+                  <DocumentTextIcon className="h-3.5 w-3.5 text-gray-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-900">Auto Transcription</p>
+                  <p className="text-[10px] text-gray-500">Full transcript saved</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
+                  <ClockIcon className="h-3.5 w-3.5 text-gray-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-900">Real-time Response</p>
+                  <p className="text-[10px] text-gray-500">&lt;1 second latency</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Help */}
+          <div className="bg-primary-50 rounded border border-primary-100 p-3">
+            <h4 className="text-xs font-medium text-primary-900 mb-0.5">Tips</h4>
+            <p className="text-[10px] text-primary-700">
+              Include country code in the phone number. Ensure the contact is available to receive calls.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

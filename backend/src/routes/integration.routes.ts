@@ -571,4 +571,444 @@ router.post('/agent/:voiceAgentId/link', async (req: Request, res: Response) => 
   }
 });
 
+// ==================== GOOGLE OAUTH FOR AGENT TOOLS ====================
+
+// Google OAuth initiation for agent tools (calendar, sheets, etc.)
+router.get('/google/auth', async (req: Request, res: Response) => {
+  try {
+    const { tool, agentId } = req.query;
+    const organizationId = getOrgId(req);
+
+    if (!tool || !agentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameters: tool and agentId'
+      });
+    }
+
+    // Define scopes based on tool type
+    const scopesByTool: Record<string, string[]> = {
+      calendar: [
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/calendar.events',
+      ],
+      sheets: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file',
+      ],
+    };
+
+    const scopes = scopesByTool[tool as string] || scopesByTool.calendar;
+
+    // Google OAuth configuration
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/api/integrations/google/callback`;
+
+    if (!clientId) {
+      return res.status(500).json({
+        success: false,
+        message: 'Google OAuth not configured. Please set GOOGLE_CLIENT_ID environment variable.'
+      });
+    }
+
+    // Create state with tool, agentId, and organizationId for callback
+    const state = Buffer.from(JSON.stringify({
+      tool,
+      agentId,
+      organizationId,
+    })).toString('base64');
+
+    // Build Google OAuth URL
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', scopes.join(' '));
+    authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'consent');
+
+    // Redirect to Google OAuth page
+    res.redirect(authUrl.toString());
+  } catch (error: any) {
+    console.error('Google OAuth initiation error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Google OAuth callback for agent tools
+router.get('/google/callback', async (req: Request, res: Response) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+  try {
+    const { code, state, error } = req.query;
+
+    // Handle OAuth errors
+    if (error) {
+      console.error('Google OAuth error:', error);
+      return res.redirect(`${frontendUrl}/voice-ai/agents?error=oauth_denied`);
+    }
+
+    if (!code || !state) {
+      return res.redirect(`${frontendUrl}/voice-ai/agents?error=missing_params`);
+    }
+
+    // Decode state
+    const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    const { tool, agentId } = stateData;
+    let { organizationId } = stateData;
+
+    // If organizationId is missing, get it from the agent
+    if (!organizationId && agentId) {
+      const agent = await prisma.voiceAgent.findUnique({
+        where: { id: agentId },
+        select: { organizationId: true },
+      });
+      organizationId = agent?.organizationId;
+    }
+
+    if (!organizationId) {
+      console.error('[GoogleOAuth] Could not determine organizationId');
+      return res.redirect(`${frontendUrl}/voice-ai/agents?error=missing_org`);
+    }
+
+    // Exchange code for tokens
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = `${process.env.APP_URL || 'http://localhost:3000'}/api/integrations/google/callback`;
+
+    if (!clientId || !clientSecret) {
+      return res.redirect(`${frontendUrl}/voice-ai/agents?error=oauth_not_configured`);
+    }
+
+    // Exchange authorization code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: code as string,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    const tokens = await tokenResponse.json();
+
+    if (tokens.error) {
+      console.error('Token exchange error:', tokens);
+      return res.redirect(`${frontendUrl}/voice-ai/agents?error=token_exchange_failed`);
+    }
+
+    // Store integration based on tool type
+    if (tool === 'calendar') {
+      // Get user's calendar info
+      const calendarResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList/primary', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      const calendarInfo = await calendarResponse.json();
+
+      // Create or update calendar integration
+      const existingCalendar = await prisma.calendarIntegration.findFirst({
+        where: {
+          organizationId,
+          provider: 'GOOGLE',
+        },
+      });
+
+      if (existingCalendar) {
+        await prisma.calendarIntegration.update({
+          where: { id: existingCalendar.id },
+          data: {
+            accessToken: integrationService.encrypt(tokens.access_token),
+            refreshToken: tokens.refresh_token ? integrationService.encrypt(tokens.refresh_token) : undefined,
+            tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000),
+            calendarId: calendarInfo.id || 'primary',
+            isActive: true,
+            lastSyncAt: new Date(),
+          },
+        });
+      } else {
+        await prisma.calendarIntegration.create({
+          data: {
+            organizationId,
+            provider: 'GOOGLE',
+            accessToken: integrationService.encrypt(tokens.access_token),
+            refreshToken: tokens.refresh_token ? integrationService.encrypt(tokens.refresh_token) : null,
+            tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000),
+            calendarId: calendarInfo.id || 'primary',
+            isActive: true,
+            syncEnabled: true,
+            autoCreateEvents: true,
+            checkAvailability: true,
+          },
+        });
+      }
+
+      // Link calendar integration to agent via AgentIntegration
+      // Check if an agent integration already exists
+      const existingIntegration = await prisma.agentIntegration.findFirst({
+        where: {
+          voiceAgentId: agentId,
+          integrationType: 'CALENDAR',
+        },
+      });
+
+      const calendarIntegration = await prisma.calendarIntegration.findFirst({
+        where: {
+          organizationId,
+          provider: 'GOOGLE',
+        },
+      });
+
+      if (calendarIntegration) {
+        if (existingIntegration) {
+          // Update existing
+          await prisma.agentIntegration.update({
+            where: { id: existingIntegration.id },
+            data: {
+              calendarIntegrationId: calendarIntegration.id,
+              isEnabled: true,
+              config: {
+                connected: true,
+                connectedAt: new Date().toISOString(),
+              },
+            },
+          });
+        } else {
+          // Create new
+          await prisma.agentIntegration.create({
+            data: {
+              voiceAgentId: agentId,
+              organizationId,
+              integrationType: 'CALENDAR',
+              calendarIntegrationId: calendarIntegration.id,
+              isEnabled: true,
+              config: {
+                connected: true,
+                connectedAt: new Date().toISOString(),
+              },
+            },
+          });
+        }
+      }
+
+      console.log('[GoogleOAuth] Calendar integration saved successfully for agent:', agentId);
+    } else if (tool === 'sheets') {
+      // Store sheets integration
+      const agent = await prisma.conversationalAIAgent.findUnique({
+        where: { id: agentId },
+      });
+
+      if (agent) {
+        const toolsConfig = (agent.toolsConfig as Record<string, any>) || {};
+        toolsConfig.sheets = {
+          enabled: true,
+          provider: 'google',
+          connected: true,
+          connectedAt: new Date().toISOString(),
+          accessToken: integrationService.encrypt(tokens.access_token),
+          refreshToken: tokens.refresh_token ? integrationService.encrypt(tokens.refresh_token) : null,
+        };
+
+        await prisma.conversationalAIAgent.update({
+          where: { id: agentId },
+          data: { toolsConfig },
+        });
+      }
+    }
+
+    // Send a page that closes the popup and notifies the parent window
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Connected!</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; }
+          .container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); color: #333; max-width: 400px; }
+          h2 { color: #22c55e; margin-bottom: 16px; }
+          p { color: #666; margin-bottom: 24px; }
+          .checkmark { width: 80px; height: 80px; background: #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+          .checkmark svg { width: 40px; height: 40px; fill: white; }
+          .btn { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+          .btn:hover { background: #2563eb; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="checkmark">
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+          <h2>Google Calendar Connected!</h2>
+          <p>Your calendar has been successfully linked to your AI agent.</p>
+          <button class="btn" onclick="closeWindow()">Close This Window</button>
+          <p style="font-size: 12px; color: #999; margin-top: 16px;">Window will close automatically in 3 seconds...</p>
+        </div>
+        <script>
+          function closeWindow() {
+            try {
+              // Notify parent window
+              if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({ type: 'oauth_success', tool: '${tool}' }, '${frontendUrl}');
+                // Refresh parent page to show connected status
+                window.opener.location.href = '${frontendUrl}/voice-ai/agents/${agentId}?tab=tools&tool_connected=${tool}';
+              }
+            } catch (e) {
+              console.log('Could not communicate with parent window:', e);
+            }
+            // Try to close the window
+            window.close();
+            // If window.close() didn't work, show a message
+            setTimeout(function() {
+              document.body.innerHTML = '<div class="container"><h2>You can close this window now</h2><p>The calendar has been connected successfully!</p></div>';
+            }, 500);
+          }
+          // Auto-close after 3 seconds
+          setTimeout(closeWindow, 3000);
+        </script>
+      </body>
+      </html>
+    `);
+  } catch (error: any) {
+    console.error('Google OAuth callback error:', error);
+    res.redirect(`${frontendUrl}/voice-ai/agents?error=oauth_failed`);
+  }
+});
+
+// Check Google OAuth connection status for a tool
+router.get('/google/status', async (req: Request, res: Response) => {
+  try {
+    const { tool, agentId } = req.query;
+    const organizationId = getOrgId(req);
+
+    if (!tool || !agentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameters: tool and agentId'
+      });
+    }
+
+    let connected = false;
+    let connectionInfo: any = null;
+
+    if (tool === 'calendar') {
+      const integration = await prisma.calendarIntegration.findFirst({
+        where: { organizationId, provider: 'GOOGLE', isActive: true },
+      });
+      connected = !!integration;
+      connectionInfo = integration ? {
+        calendarId: integration.calendarId,
+        lastSyncAt: integration.lastSyncAt,
+      } : null;
+    } else if (tool === 'sheets') {
+      const agent = await prisma.conversationalAIAgent.findUnique({
+        where: { id: agentId as string },
+      });
+      const toolsConfig = (agent?.toolsConfig as Record<string, any>) || {};
+      connected = toolsConfig.sheets?.connected || false;
+      connectionInfo = toolsConfig.sheets || null;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        connected,
+        connectionInfo,
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Force reset calendar integration (completely delete for fresh OAuth)
+router.delete('/google/reset', async (req: Request, res: Response) => {
+  try {
+    const { tool, agentId } = req.query;
+    const organizationId = getOrgId(req);
+
+    if (!tool) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameter: tool'
+      });
+    }
+
+    if (tool === 'calendar') {
+      // Get the calendar integration first
+      const calendarIntegration = await prisma.calendarIntegration.findFirst({
+        where: { organizationId, provider: 'GOOGLE' },
+      });
+
+      if (calendarIntegration) {
+        // Delete related agent integrations first
+        await prisma.agentIntegration.deleteMany({
+          where: { calendarIntegrationId: calendarIntegration.id },
+        });
+
+        // Then delete the calendar integration
+        await prisma.calendarIntegration.delete({
+          where: { id: calendarIntegration.id },
+        });
+      }
+
+      console.log('[GoogleOAuth] Calendar integration reset successfully for org:', organizationId);
+    }
+
+    res.json({ success: true, message: `${tool} integration has been completely reset. Please reconnect.` });
+  } catch (error: any) {
+    console.error('Google OAuth reset error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Disconnect Google OAuth for a tool
+router.delete('/google/disconnect', async (req: Request, res: Response) => {
+  try {
+    const { tool, agentId } = req.query;
+    const organizationId = getOrgId(req);
+
+    if (!tool || !agentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameters: tool and agentId'
+      });
+    }
+
+    if (tool === 'calendar') {
+      await prisma.calendarIntegration.updateMany({
+        where: { organizationId, provider: 'GOOGLE' },
+        data: { isActive: false },
+      });
+    }
+
+    // Update agent tools config
+    const agent = await prisma.conversationalAIAgent.findUnique({
+      where: { id: agentId as string },
+    });
+
+    if (agent) {
+      const toolsConfig = (agent.toolsConfig as Record<string, any>) || {};
+      if (toolsConfig[tool as string]) {
+        toolsConfig[tool as string] = {
+          ...toolsConfig[tool as string],
+          connected: false,
+          disconnectedAt: new Date().toISOString(),
+        };
+      }
+
+      await prisma.conversationalAIAgent.update({
+        where: { id: agentId as string },
+        data: { toolsConfig },
+      });
+    }
+
+    res.json({ success: true, message: `${tool} disconnected successfully` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;

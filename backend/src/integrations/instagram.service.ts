@@ -63,11 +63,28 @@ export class InstagramService {
   }
 
   /**
-   * Verify webhook signature (same as Facebook)
+   * Verify signature with organization-specific app secret
+   */
+  verifySignatureWithSecret(payload: string, signature: string, appSecret: string): boolean {
+    if (!appSecret) return false;
+    const expectedSignature = crypto
+      .createHmac('sha256', appSecret)
+      .update(payload)
+      .digest('hex');
+    return `sha256=${expectedSignature}` === signature;
+  }
+
+  /**
+   * Verify webhook signature (same as Facebook) - fallback to env
    */
   verifySignature(payload: string, signature: string): boolean {
+    const secret = config.facebook.appSecret || '';
+    if (!secret) {
+      console.warn('[Instagram] No app secret configured for signature verification');
+      return false;
+    }
     const expectedSignature = crypto
-      .createHmac('sha256', config.facebook.appSecret || '')
+      .createHmac('sha256', secret)
       .update(payload)
       .digest('hex');
     return `sha256=${expectedSignature}` === signature;
@@ -83,7 +100,14 @@ export class InstagramService {
     // Check if it's from Instagram
     if (changes?.field === 'leadgen') {
       const leadgenId = changes.value?.leadgen_id;
+      const inlineFieldData = changes.value?.field_data;
       const platform = changes.value?.page_id ? 'instagram' : 'facebook';
+
+      // If field_data is provided directly in webhook (for testing), process inline
+      if (inlineFieldData && Array.isArray(inlineFieldData)) {
+        console.info(`[Instagram] Processing inline field_data for org: ${organizationId}`);
+        return this.processInlineLeadData(inlineFieldData, organizationId, changes.value?.campaign_name);
+      }
 
       if (leadgenId && platform === 'instagram') {
         console.info(`[Instagram] Processing leadgen event: ${leadgenId} for org: ${organizationId}`);
@@ -100,6 +124,30 @@ export class InstagramService {
     }
 
     return null;
+  }
+
+  /**
+   * Process inline lead data for testing without Instagram API
+   */
+  async processInlineLeadData(fieldData: any[], organizationId: string, campaignName?: string) {
+    const fields = this.parseFieldData(fieldData);
+
+    const result = await externalLeadImportService.importExternalLead(organizationId, {
+      firstName: fields.first_name || fields.full_name?.split(' ')[0] || 'Unknown',
+      lastName: fields.last_name || fields.full_name?.split(' ').slice(1).join(' '),
+      email: fields.email,
+      phone: fields.phone_number || 'N/A',
+      source: 'AD_INSTAGRAM',
+      sourceDetails: `Campaign: ${campaignName || 'Instagram Test Campaign'}`,
+      campaignName: campaignName,
+      customFields: {
+        inlineData: true,
+        processedAt: new Date().toISOString(),
+      },
+    });
+
+    console.info(`[Instagram] Inline lead processed: ${result.rawImportRecord.id}, duplicate: ${result.isDuplicate}`);
+    return result;
   }
 
   /**
@@ -200,7 +248,9 @@ export class InstagramService {
   private parseFieldData(fieldData: Array<{ name: string; values: string[] }>): Record<string, string> {
     const result: Record<string, string> = {};
     for (const field of fieldData) {
-      result[field.name] = field.values[0];
+      // Normalize field name to lowercase with underscore
+      const normalizedName = field.name.toLowerCase().replace(/-/g, '_');
+      result[normalizedName] = field.values[0];
     }
     return result;
   }

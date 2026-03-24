@@ -1586,7 +1586,7 @@ router.post('/connect', async (req: TenantRequest, res: Response) => {
       to, // Customer's number (called second)
       callType: callType || 'trans',
       record: record !== false, // Default to true
-      recordingChannels: recordingChannels || 'single',
+      recordingChannels: recordingChannels || 'dual', // Dual channel for separate agent/customer analysis
       recordingFormat: recordingFormat || 'mp3',
       waitUrl,
       timeLimit: 1800, // 30 minutes max

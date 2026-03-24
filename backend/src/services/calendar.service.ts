@@ -1,11 +1,13 @@
 import { PrismaClient, CalendarProvider } from '@prisma/client';
 import { google, calendar_v3 } from 'googleapis';
+import integrationService from './integration.service';
+import { emailService } from '../integrations/email.service';
 
 const prisma = new PrismaClient();
 
-// Environment variables for Google OAuth
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CALENDAR_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
+// Environment variables for Google OAuth (use same as integration service)
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 // GOOGLE_CALENDAR_REDIRECT_URI must be set in production - no localhost fallback
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_CALENDAR_REDIRECT_URI ||
   (process.env.BASE_URL ? `${process.env.BASE_URL}/api/calendar/oauth/callback` : 'http://localhost:3000/api/calendar/oauth/callback');
@@ -137,33 +139,49 @@ class CalendarService {
       throw new Error('Google Calendar not configured');
     }
 
+    // Decrypt tokens (they are stored encrypted)
+    let accessToken = integration.accessToken;
+    let refreshToken = integration.refreshToken;
+
+    try {
+      accessToken = integrationService.decrypt(integration.accessToken);
+      refreshToken = integration.refreshToken ? integrationService.decrypt(integration.refreshToken) : null;
+      console.log('[Calendar] Tokens decrypted successfully');
+    } catch (e) {
+      // Tokens might not be encrypted (legacy data)
+      console.log('[Calendar] Using tokens as-is (not encrypted or decryption failed)');
+    }
+
     // Check if token needs refresh
     if (integration.tokenExpiry && new Date(integration.tokenExpiry) < new Date()) {
       try {
+        console.log('[Calendar] Token expired, refreshing...');
         this.oauth2Client.setCredentials({
-          refresh_token: integration.refreshToken,
+          refresh_token: refreshToken,
         });
 
         const { credentials } = await this.oauth2Client.refreshAccessToken();
 
-        // Update stored tokens
+        // Update stored tokens (encrypted)
         await prisma.calendarIntegration.update({
           where: { id: integration.id },
           data: {
-            accessToken: credentials.access_token,
+            accessToken: integrationService.encrypt(credentials.access_token!),
             tokenExpiry: credentials.expiry_date ? new Date(credentials.expiry_date) : null,
           },
         });
 
         this.oauth2Client.setCredentials(credentials);
+        console.log('[Calendar] Token refreshed successfully');
       } catch (error) {
         console.error('[Calendar] Token refresh failed:', error);
         throw new Error('Calendar authentication expired. Please reconnect.');
       }
     } else {
+      console.log('[Calendar] Using existing token');
       this.oauth2Client.setCredentials({
-        access_token: integration.accessToken,
-        refresh_token: integration.refreshToken,
+        access_token: accessToken,
+        refresh_token: refreshToken,
       });
     }
 
@@ -175,10 +193,11 @@ class CalendarService {
    */
   async createEvent(organizationId: string, data: CreateEventData): Promise<{ eventId: string; eventLink: string } | null> {
     const integration = await this.getIntegration(organizationId);
-    if (!integration || !integration.autoCreateEvents) {
-      console.log('[Calendar] No active calendar integration or auto-create disabled');
+    if (!integration) {
+      console.log('[Calendar] No active calendar integration found');
       return null;
     }
+    console.log('[Calendar] Found integration, creating event...');
 
     try {
       const calendar = await this.getCalendarClient(integration);
@@ -195,7 +214,16 @@ class CalendarService {
           timeZone: 'Asia/Kolkata',
         },
         location: data.location,
-        attendees: data.attendees?.map(a => ({ email: a.email, displayName: a.name })),
+        // Explicitly set attendees with notification preferences
+        attendees: data.attendees?.map(a => ({
+          email: a.email,
+          displayName: a.name,
+          responseStatus: 'needsAction',
+        })),
+        // Allow guests to see other guests and modify event
+        guestsCanSeeOtherGuests: true,
+        guestsCanInviteOthers: false,
+        guestsCanModify: false,
         reminders: {
           useDefault: false,
           overrides: data.reminders?.map(r => ({
@@ -208,10 +236,14 @@ class CalendarService {
         },
       };
 
+      console.log('[Calendar] Inserting event with sendUpdates=all, sendNotifications=true');
+      console.log('[Calendar] Attendees to notify:', JSON.stringify(event.attendees));
+
       const response = await calendar.events.insert({
         calendarId: integration.calendarId || 'primary',
         requestBody: event,
         sendUpdates: 'all',
+        sendNotifications: true, // Explicitly send email notifications
       });
 
       // Update last sync
@@ -221,6 +253,34 @@ class CalendarService {
       });
 
       console.log(`[Calendar] Created event: ${response.data.id}`);
+      console.log(`[Calendar] Event details:`, {
+        id: response.data.id,
+        htmlLink: response.data.htmlLink,
+        attendees: response.data.attendees,
+        status: response.data.status,
+      });
+
+      // Also send email invitation with ICS attachment (as backup for Google's invitation system)
+      if (data.attendees && data.attendees.length > 0) {
+        for (const attendee of data.attendees) {
+          try {
+            await emailService.sendCalendarInvitation({
+              to: attendee.email,
+              toName: attendee.name,
+              eventTitle: data.title,
+              eventDescription: data.description,
+              startTime: data.startTime,
+              endTime: data.endTime,
+              location: data.location,
+              eventId: response.data.id!,
+            });
+            console.log(`[Calendar] Email invitation sent to ${attendee.email}`);
+          } catch (emailError: any) {
+            console.error(`[Calendar] Failed to send email invitation to ${attendee.email}:`, emailError.message);
+            // Don't fail the whole operation if email fails
+          }
+        }
+      }
 
       return {
         eventId: response.data.id!,

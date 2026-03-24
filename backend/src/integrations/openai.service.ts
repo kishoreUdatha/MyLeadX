@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 import { ConversationStatus, LeadSource, LeadPriority } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { circuitBreakers, CircuitBreakerError } from '../utils/circuitBreaker';
+import { withOpenAIRetry, isRetryableError } from '../utils/retry';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -77,16 +78,18 @@ export class OpenAIService {
       { role: 'user', content: userMessage },
     ];
 
-    // Get AI response with circuit breaker protection
+    // Get AI response with retry logic and circuit breaker protection
     let assistantMessage: string;
     try {
-      const completion = await circuitBreakers.openai.execute(() =>
-        this.client!.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
-          messages,
-          max_tokens: 500,
-          temperature: 0.7,
-        })
+      const completion = await withOpenAIRetry(() =>
+        circuitBreakers.openai.execute(() =>
+          this.client!.chat.completions.create({
+            model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+            messages,
+            max_tokens: 500,
+            temperature: 0.7,
+          })
+        )
       );
       assistantMessage = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that. Could you please try again?";
     } catch (error) {
@@ -94,6 +97,7 @@ export class OpenAIService {
         console.warn(`[OpenAI] Circuit breaker OPEN for chat, returning fallback response`);
         assistantMessage = "I'm currently experiencing high demand. Please try again in a moment, or leave your contact information and we'll reach out to you.";
       } else {
+        console.error(`[OpenAI] Chat failed after retries:`, error);
         throw error;
       }
     }
@@ -149,13 +153,15 @@ ${messages.filter((m) => m.role !== 'system').map((m) => `${m.role}: ${m.content
 Return only valid JSON, no explanations.`;
 
     try {
-      const completion = await circuitBreakers.openai.execute(() =>
-        this.client!.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
-          messages: [{ role: 'user', content: extractionPrompt }],
-          max_tokens: 200,
-          temperature: 0,
-        })
+      const completion = await withOpenAIRetry(() =>
+        circuitBreakers.openai.execute(() =>
+          this.client!.chat.completions.create({
+            model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+            messages: [{ role: 'user', content: extractionPrompt }],
+            max_tokens: 200,
+            temperature: 0,
+          })
+        )
       );
 
       const content = completion.choices[0]?.message?.content || '{}';
@@ -164,7 +170,7 @@ Return only valid JSON, no explanations.`;
       if (error instanceof CircuitBreakerError) {
         console.warn('[OpenAI] Circuit breaker OPEN for extractLeadData, returning empty data');
       } else {
-        console.error('Failed to extract lead data:', error);
+        console.error('[OpenAI] Failed to extract lead data after retries:', error);
       }
       return {};
     }
@@ -232,11 +238,13 @@ Return only valid JSON, no explanations.`;
     });
 
     try {
-      const transcription = await circuitBreakers.openai.execute(() =>
-        this.client!.audio.transcriptions.create({
-          file,
-          model: process.env.OPENAI_STT_MODEL || 'whisper-1',
-        })
+      const transcription = await withOpenAIRetry(() =>
+        circuitBreakers.openai.execute(() =>
+          this.client!.audio.transcriptions.create({
+            file,
+            model: process.env.OPENAI_STT_MODEL || 'whisper-1',
+          })
+        )
       );
       return transcription.text;
     } catch (error) {
@@ -244,6 +252,7 @@ Return only valid JSON, no explanations.`;
         console.warn('[OpenAI] Circuit breaker OPEN for transcribeAudio');
         throw new Error('Speech-to-text service is temporarily unavailable. Please try again later.');
       }
+      console.error('[OpenAI] Transcription failed after retries:', error);
       throw error;
     }
   }
@@ -254,12 +263,14 @@ Return only valid JSON, no explanations.`;
     }
 
     try {
-      const mp3 = await circuitBreakers.openai.execute(() =>
-        this.client!.audio.speech.create({
-          model: process.env.TTS_MODEL || 'tts-1-hd',
-          voice: 'alloy',
-          input: text,
-        })
+      const mp3 = await withOpenAIRetry(() =>
+        circuitBreakers.openai.execute(() =>
+          this.client!.audio.speech.create({
+            model: process.env.TTS_MODEL || 'tts-1-hd',
+            voice: 'alloy',
+            input: text,
+          })
+        )
       );
       const arrayBuffer = await mp3.arrayBuffer();
       return Buffer.from(arrayBuffer);
@@ -268,8 +279,82 @@ Return only valid JSON, no explanations.`;
         console.warn('[OpenAI] Circuit breaker OPEN for textToSpeech');
         throw new Error('Text-to-speech service is temporarily unavailable. Please try again later.');
       }
+      console.error('[OpenAI] Text-to-speech failed after retries:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generate embedding vector for a single text
+   */
+  async generateEmbedding(text: string, model = 'text-embedding-3-small'): Promise<number[]> {
+    if (!this.client) {
+      throw new Error('OpenAI is not configured. Please set OPENAI_API_KEY in environment variables.');
+    }
+
+    try {
+      const response = await withOpenAIRetry(() =>
+        circuitBreakers.openai.execute(() =>
+          this.client!.embeddings.create({
+            model,
+            input: text,
+          })
+        )
+      );
+      return response.data[0].embedding;
+    } catch (error) {
+      if (error instanceof CircuitBreakerError) {
+        console.warn('[OpenAI] Circuit breaker OPEN for generateEmbedding');
+        throw new Error('Embedding service is temporarily unavailable. Please try again later.');
+      }
+      console.error('[OpenAI] Embedding generation failed after retries:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate embedding vectors for multiple texts (batch processing)
+   */
+  async generateEmbeddings(texts: string[], model = 'text-embedding-3-small'): Promise<number[][]> {
+    if (!this.client) {
+      throw new Error('OpenAI is not configured. Please set OPENAI_API_KEY in environment variables.');
+    }
+
+    if (texts.length === 0) {
+      return [];
+    }
+
+    // OpenAI has a limit on batch size, so we process in chunks of 100
+    const BATCH_SIZE = 100;
+    const allEmbeddings: number[][] = [];
+
+    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+      const batch = texts.slice(i, i + BATCH_SIZE);
+
+      try {
+        const response = await withOpenAIRetry(() =>
+          circuitBreakers.openai.execute(() =>
+            this.client!.embeddings.create({
+              model,
+              input: batch,
+            })
+          )
+        );
+
+        // Sort by index to ensure correct order
+        const sortedData = response.data.sort((a, b) => a.index - b.index);
+        allEmbeddings.push(...sortedData.map(d => d.embedding));
+      } catch (error) {
+        if (error instanceof CircuitBreakerError) {
+          console.warn('[OpenAI] Circuit breaker OPEN for generateEmbeddings');
+          throw new Error('Embedding service is temporarily unavailable. Please try again later.');
+        }
+        console.error('[OpenAI] Batch embedding generation failed after retries:', error);
+        throw error;
+      }
+    }
+
+    return allEmbeddings;
   }
 
   async voiceChat(sessionId: string, audioBuffer: Buffer, organizationId: string) {
@@ -313,12 +398,14 @@ The script should:
 Keep it conversational and under 200 words.`;
 
     try {
-      const completion = await circuitBreakers.openai.execute(() =>
-        this.client!.chat.completions.create({
-          model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 400,
-        })
+      const completion = await withOpenAIRetry(() =>
+        circuitBreakers.openai.execute(() =>
+          this.client!.chat.completions.create({
+            model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 400,
+          })
+        )
       );
       return completion.choices[0]?.message?.content || '';
     } catch (error) {
@@ -326,6 +413,7 @@ Keep it conversational and under 200 words.`;
         console.warn('[OpenAI] Circuit breaker OPEN for generateAICallScript, returning default script');
         return `Hello ${leadInfo.name}! This is a counselor calling about your study abroad inquiry. How can I assist you today?`;
       }
+      console.error('[OpenAI] Call script generation failed after retries:', error);
       throw error;
     }
   }

@@ -12,7 +12,6 @@ import {
   formatPhoneNumber,
   formatLeadStatus,
   getLeadStatusColor,
-  formatRelativeTime,
 } from '../utils/formatters';
 
 interface LeadCardProps {
@@ -31,44 +30,23 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onCall, onPress, style }) => 
       onPress={() => onPress?.(lead)}
       activeOpacity={onPress ? 0.7 : 1}
     >
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.nameContainer}>
-            <Text style={styles.name} numberOfLines={1}>
-              {lead.name}
-            </Text>
-            {lead.company && (
-              <Text style={styles.company} numberOfLines={1}>
-                {lead.company}
-              </Text>
-            )}
-          </View>
-          <TouchableOpacity
-            style={styles.callButton}
-            onPress={() => onCall(lead)}
-            activeOpacity={0.7}
-          >
-            <Icon name="phone" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
+      <View style={styles.left}>
+        <Text style={styles.name} numberOfLines={1}>{lead.name}</Text>
+        <Text style={styles.phone}>{formatPhoneNumber(lead.phone)}</Text>
+      </View>
+      <View style={styles.right}>
+        <View style={[styles.status, { backgroundColor: statusColor + '15' }]}>
+          <Text style={[styles.statusText, { color: statusColor }]}>
+            {formatLeadStatus(lead.status)}
+          </Text>
         </View>
-
-        <View style={styles.phoneRow}>
-          <Icon name="phone-outline" size={16} color="#6B7280" />
-          <Text style={styles.phone}>{formatPhoneNumber(lead.phone)}</Text>
-        </View>
-
-        <View style={styles.footer}>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-            <Text style={[styles.statusText, { color: statusColor }]}>
-              {formatLeadStatus(lead.status)}
-            </Text>
-          </View>
-          {lead.lastContactedAt && (
-            <Text style={styles.lastContact}>
-              Last contact: {formatRelativeTime(lead.lastContactedAt)}
-            </Text>
-          )}
-        </View>
+        <TouchableOpacity
+          style={styles.callBtn}
+          onPress={() => onCall(lead)}
+          activeOpacity={0.7}
+        >
+          <Icon name="phone" size={16} color="#FFF" />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -76,74 +54,48 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onCall, onPress, style }) => 
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  content: {
-    padding: 16,
-  },
-  header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  nameContainer: {
+  left: {
     flex: 1,
-    marginRight: 12,
   },
   name: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  company: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  callButton: {
-    backgroundColor: '#3B82F6',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1E293B',
   },
   phone: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginLeft: 6,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
   },
-  footer: {
+  right: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  status: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '500',
   },
-  lastContact: {
-    fontSize: 12,
-    color: '#9CA3AF',
+  callBtn: {
+    backgroundColor: '#2563EB',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

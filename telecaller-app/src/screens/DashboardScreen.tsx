@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppDispatch, useAppSelector } from '../store';
 import { fetchStats } from '../store/slices/callsSlice';
-import StatsCard from '../components/StatsCard';
-import { getGreeting, formatPercentage, formatDuration } from '../utils/formatters';
+import { getGreeting, formatDuration } from '../utils/formatters';
 import { MainTabParamList, RootStackParamList } from '../types';
 
 type NavigationProp = CompositeNavigationProp<
@@ -27,151 +26,124 @@ const DashboardScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
   const { stats, isLoading } = useAppSelector((state) => state.calls);
+  const hasInitializedRef = useRef(false);
+  const isLoadingRef = useRef(false);
 
   const loadStats = useCallback(() => {
-    dispatch(fetchStats());
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
+    dispatch(fetchStats()).finally(() => {
+      isLoadingRef.current = false;
+    });
   }, [dispatch]);
 
   useEffect(() => {
-    loadStats();
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      loadStats();
+    }
   }, [loadStats]);
-
-  const handleStartCalling = () => {
-    navigation.navigate('Leads');
-  };
-
-  const handleViewHistory = () => {
-    navigation.navigate('History');
-  };
 
   const firstName = user?.name?.split(' ')[0] || 'User';
 
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={isLoading} onRefresh={loadStats} />
+        <RefreshControl
+          refreshing={isLoading}
+          onRefresh={() => {
+            isLoadingRef.current = false;
+            loadStats();
+          }}
+          colors={['#2563EB']}
+        />
       }
     >
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>{getGreeting()},</Text>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
           <Text style={styles.userName}>{firstName}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Icon name="account-circle" size={40} color="#3B82F6" />
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{firstName.charAt(0)}</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* Stats Grid */}
-      <View style={styles.statsGrid}>
-        <View style={styles.statsRow}>
-          <StatsCard
-            title="Today's Calls"
-            value={stats?.todayCalls ?? 0}
-            icon="phone-outgoing"
-            iconColor="#3B82F6"
-            style={styles.statsCard}
-          />
-          <StatsCard
-            title="Conversion"
-            value={formatPercentage(stats?.conversionRate ?? 0)}
-            icon="chart-line"
-            iconColor="#10B981"
-            style={styles.statsCard}
-          />
+      {/* Start Calling */}
+      <TouchableOpacity
+        style={styles.ctaButton}
+        onPress={() => navigation.navigate('Leads')}
+        activeOpacity={0.8}
+      >
+        <Icon name="phone-outline" size={20} color="#FFF" />
+        <Text style={styles.ctaText}>Start Calling</Text>
+        <View style={styles.ctaBadge}>
+          <Text style={styles.ctaBadgeText}>{stats?.assignedLeads ?? 0}</Text>
         </View>
-        <View style={styles.statsRow}>
-          <StatsCard
-            title="Assigned Leads"
-            value={stats?.assignedLeads ?? 0}
-            icon="account-multiple"
-            iconColor="#8B5CF6"
-            style={styles.statsCard}
-          />
-          <StatsCard
-            title="Total Calls"
-            value={stats?.totalCalls ?? 0}
-            icon="phone-check"
-            iconColor="#F59E0B"
-            style={styles.statsCard}
-          />
+      </TouchableOpacity>
+
+      {/* Stats */}
+      <View style={styles.statsGrid}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{stats?.todayCalls ?? 0}</Text>
+          <Text style={styles.statLabel}>Today</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{stats?.conversionRate ?? 0}%</Text>
+          <Text style={styles.statLabel}>Conversion</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{stats?.totalCalls ?? 0}</Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>
+            {stats?.averageCallDuration ? formatDuration(Math.round(stats.averageCallDuration)) : '-'}
+          </Text>
+          <Text style={styles.statLabel}>Avg</Text>
         </View>
       </View>
 
-      {/* Average Call Duration */}
-      {stats?.averageCallDuration !== undefined && (
-        <View style={styles.avgDurationCard}>
-          <Icon name="timer-outline" size={24} color="#6B7280" />
-          <View style={styles.avgDurationText}>
-            <Text style={styles.avgDurationValue}>
-              {formatDuration(Math.round(stats.averageCallDuration))}
-            </Text>
-            <Text style={styles.avgDurationLabel}>Avg. Call Duration</Text>
-          </View>
-        </View>
-      )}
-
       {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('History')}>
+          <Icon name="history" size={20} color="#64748B" />
+          <Text style={styles.actionText}>History</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Analytics')}>
+          <Icon name="chart-line" size={20} color="#64748B" />
+          <Text style={styles.actionText}>Analytics</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Leads')}>
+          <Icon name="account-group-outline" size={20} color="#64748B" />
+          <Text style={styles.actionText}>Leads</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Settings')}>
+          <Icon name="cog-outline" size={20} color="#64748B" />
+          <Text style={styles.actionText}>Settings</Text>
+        </TouchableOpacity>
+      </View>
 
-      <TouchableOpacity
-        style={[styles.actionButton, styles.primaryAction]}
-        onPress={handleStartCalling}
-        activeOpacity={0.8}
-      >
-        <Icon name="phone" size={24} color="#FFFFFF" />
-        <Text style={styles.primaryActionText}>Start Calling</Text>
-        <Icon name="chevron-right" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.actionButton}
-        onPress={handleViewHistory}
-        activeOpacity={0.7}
-      >
-        <Icon name="history" size={24} color="#3B82F6" />
-        <Text style={styles.actionButtonText}>View Call History</Text>
-        <Icon name="chevron-right" size={24} color="#9CA3AF" />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.actionButton}
-        onPress={() => navigation.navigate('Analytics')}
-        activeOpacity={0.7}
-      >
-        <Icon name="chart-bar" size={24} color="#8B5CF6" />
-        <Text style={styles.actionButtonText}>View Analytics</Text>
-        <Icon name="chevron-right" size={24} color="#9CA3AF" />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.actionButton}
-        onPress={() => navigation.navigate('Settings')}
-        activeOpacity={0.7}
-      >
-        <Icon name="cog" size={24} color="#3B82F6" />
-        <Text style={styles.actionButtonText}>Settings</Text>
-        <Icon name="chevron-right" size={24} color="#9CA3AF" />
-      </TouchableOpacity>
-
-      {/* Today's Summary */}
+      {/* Performance */}
       {stats?.callsByOutcome && Object.keys(stats.callsByOutcome).length > 0 && (
-        <View style={styles.summarySection}>
-          <Text style={styles.sectionTitle}>Today's Summary</Text>
-          <View style={styles.summaryCard}>
-            {Object.entries(stats.callsByOutcome).map(([outcome, count]) => (
-              <View key={outcome} style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{outcome.replace('_', ' ')}</Text>
-                <Text style={styles.summaryValue}>{count}</Text>
-              </View>
-            ))}
-          </View>
+        <View style={styles.performance}>
+          <Text style={styles.sectionLabel}>Today's Outcomes</Text>
+          {Object.entries(stats.callsByOutcome).map(([outcome, count]) => (
+            <View key={outcome} style={styles.outcomeRow}>
+              <Text style={styles.outcomeName}>
+                {outcome.replace('_', ' ').toLowerCase()}
+              </Text>
+              <Text style={styles.outcomeCount}>{count}</Text>
+            </View>
+          ))}
         </View>
       )}
     </ScrollView>
@@ -181,130 +153,137 @@ const DashboardScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   greeting: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: 13,
+    color: '#94A3B8',
   },
   userName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  profileButton: {
-    padding: 4,
-  },
-  statsGrid: {
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  statsCard: {
-    flex: 1,
-  },
-  avgDurationCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  avgDurationText: {
-    marginLeft: 12,
-  },
-  avgDurationValue: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#1E293B',
   },
-  avgDurationLabel: {
-    fontSize: 12,
-    color: '#6B7280',
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2563EB',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sectionTitle: {
-    fontSize: 16,
+  avatarText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
+    color: '#FFF',
   },
-  actionButton: {
+  ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
+    marginHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 8,
   },
-  primaryAction: {
-    backgroundColor: '#3B82F6',
-  },
-  actionButtonText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  primaryActionText: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
+  ctaText: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#FFF',
   },
-  summarySection: {
-    marginTop: 12,
+  ctaBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
-  summaryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+  ctaBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFF',
   },
-  summaryRow: {
+  statsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 20,
+    paddingVertical: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E2E8F0',
+  },
+  actions: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 20,
+    gap: 12,
+  },
+  actionItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+  },
+  actionText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
+  },
+  performance: {
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 12,
+  },
+  outcomeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#F1F5F9',
   },
-  summaryLabel: {
+  outcomeName: {
     fontSize: 14,
-    color: '#4B5563',
+    color: '#475569',
     textTransform: 'capitalize',
   },
-  summaryValue: {
+  outcomeCount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#1E293B',
   },
 });
 

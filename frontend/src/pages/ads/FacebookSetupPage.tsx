@@ -66,6 +66,11 @@ export default function FacebookSetupPage() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
 
+  // App Credentials (per-organization)
+  const [appId, setAppId] = useState('');
+  const [appSecret, setAppSecret] = useState('');
+  const [verifyToken, setVerifyToken] = useState('');
+
   const [accessToken, setAccessToken] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionValid, setConnectionValid] = useState(false);
@@ -81,6 +86,75 @@ export default function FacebookSetupPage() {
 
   const [webhookInfo, setWebhookInfo] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [credentialsSaved, setCredentialsSaved] = useState(false);
+  const [isSavingCredentials, setIsSavingCredentials] = useState(false);
+  const [existingIntegrationId, setExistingIntegrationId] = useState<string | null>(null);
+
+  // Load existing integration on mount
+  useEffect(() => {
+    const loadExistingIntegration = async () => {
+      try {
+        const response = await api.get('/facebook/integrations');
+        const integrations = response.data.data;
+        if (integrations && integrations.length > 0) {
+          const existing = integrations[0]; // Get the most recent one
+          setExistingIntegrationId(existing.id);
+          if (existing.appId) setAppId(existing.appId);
+          if (existing.appSecret) setAppSecret(existing.appSecret);
+          if (existing.verifyToken) setVerifyToken(existing.verifyToken);
+          if (existing.accessToken) setAccessToken(existing.accessToken);
+          if (existing.pageId && existing.pageId !== 'pending-webhook-setup') {
+            const page = { id: existing.pageId, name: existing.pageName || 'Unknown Page' };
+            setSelectedPage(page);
+            setConnectionValid(true); // Mark as valid since we have a saved page
+            setPages([page]);
+
+            // Load forms directly with the token (don't rely on state)
+            if (existing.accessToken) {
+              try {
+                const formsResponse = await api.get(`/facebook/pages/${existing.pageId}/forms`, {
+                  params: { accessToken: existing.accessToken },
+                });
+                const loadedForms = formsResponse.data.data || [];
+                setForms(loadedForms);
+
+                // Also restore saved selectedLeadForms as form objects for display
+                if (existing.selectedLeadForms && Array.isArray(existing.selectedLeadForms)) {
+                  // Merge saved form info with loaded forms for proper display
+                  const savedForms = existing.selectedLeadForms.map((f: any) =>
+                    typeof f === 'string' ? { id: f, name: f } : f
+                  );
+                  // If API didn't return forms, use saved ones for display
+                  if (loadedForms.length === 0 && savedForms.length > 0) {
+                    setForms(savedForms);
+                  }
+                }
+              } catch (err) {
+                console.log('Could not load forms from API:', err);
+                // Use saved forms as fallback
+                if (existing.selectedLeadForms && Array.isArray(existing.selectedLeadForms)) {
+                  const savedForms = existing.selectedLeadForms.map((f: any) =>
+                    typeof f === 'string' ? { id: f, name: f } : f
+                  );
+                  setForms(savedForms);
+                }
+              }
+            }
+          }
+          if (existing.selectedLeadForms && Array.isArray(existing.selectedLeadForms)) {
+            // Extract IDs from objects if stored as [{id, name}] format
+            const formIds = existing.selectedLeadForms.map((f: any) => typeof f === 'string' ? f : f.id);
+            setSelectedForms(formIds.filter(Boolean));
+          }
+          if (existing.fieldMapping) setFieldMapping(existing.fieldMapping);
+          setCredentialsSaved(true);
+        }
+      } catch (error) {
+        console.error('Error loading existing integration:', error);
+      }
+    };
+    loadExistingIntegration();
+  }, []);
 
   const testConnection = async () => {
     if (!accessToken.trim()) {
@@ -109,15 +183,54 @@ export default function FacebookSetupPage() {
     }
   };
 
-  const loadForms = async (pageId: string) => {
+  // Save credentials for webhook setup (before testing connection)
+  const saveCredentialsForWebhook = async () => {
+    if (!verifyToken.trim()) {
+      toast.error('Please enter a Verify Token first');
+      return;
+    }
+
+    setIsSavingCredentials(true);
+    try {
+      // Use dedicated endpoint for webhook credentials
+      await api.post('/facebook/webhook-credentials', {
+        appId: appId || undefined,
+        appSecret: appSecret || undefined,
+        verifyToken: verifyToken,
+      });
+
+      setCredentialsSaved(true);
+      toast.success('Credentials saved! Now configure webhook in Facebook Developer Console');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to save credentials');
+    } finally {
+      setIsSavingCredentials(false);
+    }
+  };
+
+  const loadForms = async (pageId: string, token?: string) => {
+    const tokenToUse = token || accessToken;
+    if (!tokenToUse) {
+      console.log('No access token available, skipping forms load');
+      return;
+    }
     setIsLoadingForms(true);
     try {
       const response = await api.get(`/facebook/pages/${pageId}/forms`, {
-        params: { accessToken },
+        params: { accessToken: tokenToUse },
       });
-      setForms(response.data.data || []);
-    } catch (error) {
-      toast.error('Failed to load lead forms');
+      const loadedForms = response.data.data || [];
+      setForms(loadedForms);
+      console.log(`Loaded ${loadedForms.length} forms for page ${pageId}`);
+    } catch (error: any) {
+      console.error('Error loading forms:', error.response?.data || error.message);
+      // 403 means no forms exist yet or page needs to be linked - this is okay
+      if (error.response?.status === 500 || error.response?.status === 403) {
+        setForms([]);
+        console.log('No lead forms found - this is normal for new pages');
+      } else {
+        toast.error('Failed to load lead forms');
+      }
     } finally {
       setIsLoadingForms(false);
     }
@@ -158,16 +271,27 @@ export default function FacebookSetupPage() {
 
     setIsSaving(true);
     try {
-      await api.post('/facebook/integrations', {
+      const payload = {
         pageId: selectedPage.id,
         pageName: selectedPage.name,
+        // App credentials (per-organization)
+        appId: appId || undefined,
+        appSecret: appSecret || undefined,
+        verifyToken: verifyToken || undefined,
         accessToken,
         selectedLeadForms: selectedForms.map((id) => {
           const form = forms.find((f) => f.id === id);
           return { id, name: form?.name };
         }),
         fieldMapping,
-      });
+      };
+
+      // Update existing or create new
+      if (existingIntegrationId) {
+        await api.put(`/facebook/integrations/${existingIntegrationId}`, payload);
+      } else {
+        await api.post('/facebook/integrations', payload);
+      }
 
       toast.success('Facebook integration saved!');
       navigate('/ad-integrations');
@@ -179,8 +303,11 @@ export default function FacebookSetupPage() {
   };
 
   useEffect(() => {
-    if (selectedPage) loadForms(selectedPage.id);
-  }, [selectedPage]);
+    // Load forms when page is selected and we have an access token
+    if (selectedPage && accessToken) {
+      loadForms(selectedPage.id, accessToken);
+    }
+  }, [selectedPage, accessToken]);
 
   useEffect(() => {
     if (currentStep === 3) loadFormFields();
@@ -193,8 +320,8 @@ export default function FacebookSetupPage() {
   const canProceed = () => {
     switch (currentStep) {
       case 1: return connectionValid;
-      case 2: return selectedPage && selectedForms.length > 0;
-      case 3: return Object.keys(fieldMapping).length > 0;
+      case 2: return selectedPage !== null; // Allow proceeding without forms (forms are optional)
+      case 3: return true; // Field mapping is optional if no forms
       case 4: return true;
       default: return false;
     }
@@ -251,8 +378,68 @@ export default function FacebookSetupPage() {
       <div className="card">
         <div className="card-body">
           {currentStep === 1 && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               <h3 className="text-lg font-semibold text-slate-900">Connect Your Facebook Account</h3>
+
+              {/* App Credentials Section */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-blue-800 mb-3">Facebook App Credentials (from developers.facebook.com)</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">App ID</label>
+                    <input
+                      type="text"
+                      value={appId}
+                      onChange={(e) => setAppId(e.target.value)}
+                      className="input w-full text-sm"
+                      placeholder="Your Facebook App ID"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">App Secret</label>
+                    <input
+                      type="password"
+                      value={appSecret}
+                      onChange={(e) => setAppSecret(e.target.value)}
+                      className="input w-full text-sm"
+                      placeholder="Your Facebook App Secret"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Webhook Verify Token (create your own)</label>
+                  <input
+                    type="text"
+                    value={verifyToken}
+                    onChange={(e) => setVerifyToken(e.target.value)}
+                    className="input w-full text-sm"
+                    placeholder="e.g., my-secret-verify-token-123"
+                  />
+                  <p className="text-xs text-blue-600 mt-1">This token is used when setting up webhooks in Facebook Developer Console</p>
+                </div>
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    onClick={saveCredentialsForWebhook}
+                    disabled={isSavingCredentials || !verifyToken.trim()}
+                    className="btn btn-secondary text-sm"
+                  >
+                    {isSavingCredentials ? (
+                      <span className="spinner"></span>
+                    ) : credentialsSaved ? (
+                      <>
+                        <CheckIcon className="w-4 h-4 text-green-600" />
+                        <span className="text-green-700">Saved for Webhook</span>
+                      </>
+                    ) : (
+                      'Save for Webhook Setup'
+                    )}
+                  </button>
+                  {credentialsSaved && (
+                    <span className="text-xs text-green-600">Now verify webhook in Facebook Developer Console</span>
+                  )}
+                </div>
+              </div>
+
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 mt-0.5" />
@@ -266,8 +453,9 @@ export default function FacebookSetupPage() {
                   </div>
                 </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Access Token</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Page Access Token</label>
                 <div className="flex gap-3">
                   <input
                     type="password"
@@ -338,7 +526,13 @@ export default function FacebookSetupPage() {
           {currentStep === 3 && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-slate-900">Map Form Fields to CRM</h3>
-              {formFields.length === 0 ? (
+              {selectedForms.length === 0 ? (
+                <div className="text-center py-8 bg-slate-50 rounded-lg">
+                  <Cog6ToothIcon className="w-12 h-12 mx-auto text-slate-300" />
+                  <p className="text-slate-600 mt-2">No lead forms selected</p>
+                  <p className="text-sm text-slate-500 mt-1">You can skip this step and configure field mapping later when you create Lead Forms on Facebook.</p>
+                </div>
+              ) : formFields.length === 0 ? (
                 <div className="text-center py-8 bg-slate-50 rounded-lg">
                   <Cog6ToothIcon className="w-12 h-12 mx-auto text-slate-300" />
                   <p className="text-slate-600 mt-2">Loading form fields...</p>

@@ -22,6 +22,7 @@ interface AuthenticatedSocket extends Socket {
 class WebSocketService {
   private io: Server | null = null;
   private connectedUsers: Map<string, Set<string>> = new Map(); // orgId -> Set of socket ids
+  private agentSubscriptions: Map<string, Set<string>> = new Map(); // agentId -> Set of socket ids
 
   initialize(httpServer: HttpServer) {
     this.io = new Server(httpServer, {
@@ -30,7 +31,14 @@ class WebSocketService {
         methods: ['GET', 'POST'],
         credentials: true,
       },
+      // Allow both transports
+      transports: ['polling', 'websocket'],
+      allowUpgrades: true,
+      // Explicit path to avoid conflicts
+      path: '/socket.io/',
     });
+
+    console.log('[WebSocket] Socket.IO server configured on /socket.io/');
 
     // Authentication middleware
     this.io.use(async (socket: AuthenticatedSocket, next) => {
@@ -113,6 +121,65 @@ class WebSocketService {
         if (socket.organizationId) {
           this.emitToOrg(socket.organizationId, 'lead:updated', data);
         }
+      });
+
+      // ==================== AGENT REAL-TIME SYNC EVENTS ====================
+
+      // Subscribe to agent updates (for real-time sync across tabs)
+      socket.on('agent:subscribe', (data: { agentId: string }) => {
+        const { agentId } = data;
+        if (!agentId) return;
+
+        // Join agent-specific room
+        socket.join(`agent:${agentId}`);
+
+        // Track subscription
+        if (!this.agentSubscriptions.has(agentId)) {
+          this.agentSubscriptions.set(agentId, new Set());
+        }
+        this.agentSubscriptions.get(agentId)?.add(socket.id);
+
+        console.log(`[WebSocket] User ${socket.userId} subscribed to agent ${agentId}`);
+
+        // Notify about current viewers count
+        const viewerCount = this.agentSubscriptions.get(agentId)?.size || 0;
+        this.io?.to(`agent:${agentId}`).emit('agent:viewers', {
+          agentId,
+          viewerCount,
+        });
+      });
+
+      // Unsubscribe from agent updates
+      socket.on('agent:unsubscribe', (data: { agentId: string }) => {
+        const { agentId } = data;
+        if (!agentId) return;
+
+        socket.leave(`agent:${agentId}`);
+        this.agentSubscriptions.get(agentId)?.delete(socket.id);
+
+        console.log(`[WebSocket] User ${socket.userId} unsubscribed from agent ${agentId}`);
+
+        // Notify about updated viewers count
+        const viewerCount = this.agentSubscriptions.get(agentId)?.size || 0;
+        this.io?.to(`agent:${agentId}`).emit('agent:viewers', {
+          agentId,
+          viewerCount,
+        });
+      });
+
+      // Handle agent field updates (broadcast to other subscribers)
+      socket.on('agent:update', (data: { agentId: string; field: string; value: any; updatedBy: string }) => {
+        const { agentId, field, value, updatedBy } = data;
+        if (!agentId || !socket.organizationId) return;
+
+        // Broadcast to all other subscribers of this agent (excluding sender)
+        socket.to(`agent:${agentId}`).emit('agent:updated', {
+          agentId,
+          field,
+          value,
+          updatedBy,
+          timestamp: new Date().toISOString(),
+        });
       });
 
       // ==================== REALTIME VOICE EVENTS ====================
@@ -221,6 +288,18 @@ class WebSocketService {
         // Clean up WebRTC peers
         webrtcSignalingService.handleDisconnect(socket.id);
 
+        // Clean up agent subscriptions
+        for (const [agentId, subscribers] of this.agentSubscriptions.entries()) {
+          if (subscribers.has(socket.id)) {
+            subscribers.delete(socket.id);
+            // Notify remaining subscribers about viewer count
+            this.io?.to(`agent:${agentId}`).emit('agent:viewers', {
+              agentId,
+              viewerCount: subscribers.size,
+            });
+          }
+        }
+
         if (socket.organizationId) {
           this.connectedUsers.get(socket.organizationId)?.delete(socket.id);
           this.emitToOrg(socket.organizationId, 'user:disconnected', {
@@ -308,6 +387,55 @@ class WebSocketService {
   // Get active connections count for org
   getActiveConnections(organizationId: string): number {
     return this.connectedUsers.get(organizationId)?.size || 0;
+  }
+
+  // ==================== AGENT REAL-TIME SYNC METHODS ====================
+
+  // Emit agent update from server (e.g., when API updates agent)
+  emitAgentUpdate(agentId: string, updates: {
+    field?: string;
+    value?: any;
+    fullAgent?: any;
+    updatedBy?: string;
+  }) {
+    if (this.io) {
+      this.io.to(`agent:${agentId}`).emit('agent:updated', {
+        agentId,
+        ...updates,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Emit full agent reload (when major changes require full refresh)
+  emitAgentReload(agentId: string, agent: any) {
+    if (this.io) {
+      this.io.to(`agent:${agentId}`).emit('agent:reload', {
+        agentId,
+        agent,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Get count of users viewing an agent
+  getAgentViewerCount(agentId: string): number {
+    return this.agentSubscriptions.get(agentId)?.size || 0;
+  }
+
+  // Notify agent subscribers about status changes (e.g., RAG indexing)
+  emitAgentStatus(agentId: string, status: {
+    type: 'rag_indexing' | 'rag_complete' | 'error' | 'info';
+    message: string;
+    data?: any;
+  }) {
+    if (this.io) {
+      this.io.to(`agent:${agentId}`).emit('agent:status', {
+        agentId,
+        ...status,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 }
 

@@ -412,6 +412,9 @@ class ExotelService {
     customField?: string;
     timeLimit?: number;
     timeOut?: number;
+    record?: boolean;
+    recordingChannels?: 'single' | 'dual';
+    recordingFormat?: 'mp3' | 'mp3-hq';
   }): Promise<CallResponse> {
     if (!this.isConfigured()) {
       return {
@@ -445,11 +448,28 @@ class ExotelService {
         formData.append('TimeOut', params.timeOut.toString());
       }
 
+      // Recording options - default to dual channel for AI analysis
+      if (params.record !== false) {
+        formData.append('Record', 'true');
+      }
+
+      if (params.recordingChannels) {
+        formData.append('RecordingChannels', params.recordingChannels);
+      } else {
+        formData.append('RecordingChannels', 'dual'); // Default to dual for AI analysis
+      }
+
+      if (params.recordingFormat) {
+        formData.append('RecordingFormat', params.recordingFormat);
+      }
+
       console.log('Exotel makeAICall request:', {
         to: toNumber,
         callerId,
         answerUrl: params.answerUrl,
         statusCallback: params.statusCallback,
+        record: params.record !== false,
+        recordingChannels: params.recordingChannels || 'dual',
       });
 
       const response = await this.client.post('/Calls/connect.json', formData);

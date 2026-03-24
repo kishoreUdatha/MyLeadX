@@ -61,8 +61,9 @@ export function RealtimeVoiceWidget({
   position = 'bottom-right',
   theme = {},
   visitorInfo,
-}: RealtimeVoiceWidgetProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  startExpanded = false,
+}: RealtimeVoiceWidgetProps & { startExpanded?: boolean }) {
+  const [isExpanded, setIsExpanded] = useState(startExpanded);
   const [selectedMode, setSelectedMode] = useState<VoiceSessionMode>(defaultMode);
   const [showSettings, setShowSettings] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);

@@ -1,8 +1,14 @@
 import { Router } from 'express';
 import { leadTrackingService, LEAD_SOURCES } from '../services/lead-tracking.service';
+import { adInteractionService } from '../services/ad-interaction.service';
+import { linkedinService } from '../integrations/linkedin.service';
+import { twitterAdsService } from '../integrations/twitter-ads.service';
+import { tiktokAdsService } from '../integrations/tiktok-ads.service';
+import { youtubeAdsService } from '../integrations/youtube-ads.service';
 import { authenticate } from '../middlewares/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/errors';
+import { prisma } from '../config/database';
 
 const router = Router();
 
@@ -31,6 +37,9 @@ router.get(
           campaign: data.campaign,
           content: data.content,
           term: data.term,
+          gclid: data.gclid,
+          fbclid: data.fbclid,
+          utmId: data.utmId,
           referrer: data.referrer,
           landingPage: data.landingPage,
           userAgent: data.userAgent || req.headers['user-agent'],
@@ -78,6 +87,9 @@ router.post(
       landingPage,
       formId,
       customFields,
+      visitorId,
+      gclid,
+      fbclid,
     } = req.body;
 
     if (!organizationId) {
@@ -104,6 +116,9 @@ router.post(
       landingPage,
       formId,
       customFields,
+      visitorId,
+      gclid,
+      fbclid,
       ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -225,6 +240,393 @@ router.post(
 );
 
 /**
+ * @api {post} /tracking/impression Track Impression/Engagement
+ * Receives engagement data from enhanced tracking pixel
+ */
+router.post(
+  '/impression',
+  asyncHandler(async (req, res) => {
+    try {
+      const {
+        organizationId,
+        visitorId,
+        sessionId,
+        scrollDepth,
+        timeOnPage,
+        videoWatchTime,
+        videoPercentage,
+        videoEvent,
+        type,
+        utmSource,
+        utmMedium,
+        utmCampaign,
+        landingPage,
+        userAgent,
+      } = req.body;
+
+      if (!organizationId || !visitorId) {
+        res.sendStatus(400);
+        return;
+      }
+
+      const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
+
+      // Handle different types of tracking events
+      if (scrollDepth !== undefined || timeOnPage !== undefined || videoWatchTime !== undefined) {
+        // Engagement tracking
+        await adInteractionService.trackEngagement({
+          organizationId,
+          visitorId,
+          sessionId,
+          scrollDepth,
+          timeOnPage,
+          videoWatchTime,
+          videoPercentage,
+        });
+      } else if (type === 'session_end') {
+        // Final session data
+        await adInteractionService.trackEngagement({
+          organizationId,
+          visitorId,
+          sessionId,
+          scrollDepth,
+          timeOnPage,
+        });
+      } else {
+        // Impression tracking
+        await adInteractionService.trackImpression({
+          organizationId,
+          visitorId,
+          sessionId,
+          utmSource,
+          utmMedium,
+          utmCampaign,
+          landingPage,
+          userAgent,
+          ipAddress,
+        });
+      }
+
+      res.sendStatus(200);
+    } catch (error) {
+      console.error('Impression tracking error:', error);
+      res.sendStatus(200); // Don't fail the tracking pixel
+    }
+  })
+);
+
+/**
+ * @api {post} /tracking/webhooks/linkedin LinkedIn Lead Gen Webhook
+ * Receives lead form submissions from LinkedIn Lead Gen Forms
+ */
+router.post(
+  '/webhooks/linkedin',
+  asyncHandler(async (req, res) => {
+    const organizationId = req.headers['x-organization-id'] as string;
+    const signature = req.headers['x-linkedin-signature'] as string;
+
+    // Verify signature if provided
+    if (signature) {
+      const isValid = linkedinService.verifyWebhookSignature(
+        JSON.stringify(req.body),
+        signature
+      );
+      if (!isValid) {
+        console.warn('[LinkedIn Webhook] Invalid signature');
+        res.sendStatus(403);
+        return;
+      }
+    }
+
+    // If no organization header, try to find from integration mapping
+    let orgId = organizationId;
+    if (!orgId && req.body.associatedEntityUrn) {
+      const campaignId = req.body.associatedEntityUrn.split(':').pop();
+      const campaign = await prisma.adCampaign.findFirst({
+        where: { externalId: campaignId, platform: 'LINKEDIN' },
+        select: { organizationId: true },
+      });
+      orgId = campaign?.organizationId || '';
+    }
+
+    if (!orgId) {
+      console.warn('[LinkedIn Webhook] No organization ID found');
+      res.sendStatus(400);
+      return;
+    }
+
+    await linkedinService.handleWebhook(req.body, orgId);
+    res.sendStatus(200);
+  })
+);
+
+/**
+ * @api {get} /tracking/webhooks/linkedin LinkedIn Webhook Verification
+ */
+router.get(
+  '/webhooks/linkedin',
+  (req, res) => {
+    const challenge = req.query.challenge as string;
+    if (challenge) {
+      res.send(challenge);
+    } else {
+      res.sendStatus(200);
+    }
+  }
+);
+
+/**
+ * @api {post} /tracking/webhooks/twitter Twitter/X Lead Gen Webhook
+ * Receives lead card submissions from Twitter Ads
+ */
+router.post(
+  '/webhooks/twitter',
+  asyncHandler(async (req, res) => {
+    const organizationId = req.headers['x-organization-id'] as string;
+    const signature = req.headers['x-twitter-webhooks-signature'] as string;
+
+    // Handle CRC challenge
+    if (req.body.crc_token) {
+      const integration = await prisma.twitterAdsIntegration.findFirst({
+        where: { organizationId, isActive: true },
+      });
+      if (integration?.webhookSecret) {
+        twitterAdsService.initialize({
+          accessToken: integration.accessToken,
+          adAccountId: integration.adAccountId,
+          webhookSecret: integration.webhookSecret,
+        });
+        const response = twitterAdsService.handleCrcChallenge(req.body.crc_token);
+        res.json({ response_token: response });
+        return;
+      }
+    }
+
+    // Verify signature if provided
+    if (signature && organizationId) {
+      const integration = await prisma.twitterAdsIntegration.findFirst({
+        where: { organizationId, isActive: true },
+      });
+      if (integration?.webhookSecret) {
+        twitterAdsService.initialize({
+          accessToken: integration.accessToken,
+          adAccountId: integration.adAccountId,
+          webhookSecret: integration.webhookSecret,
+        });
+        const isValid = twitterAdsService.verifyWebhookSignature(
+          JSON.stringify(req.body),
+          signature
+        );
+        if (!isValid) {
+          console.warn('[Twitter Webhook] Invalid signature');
+          res.sendStatus(403);
+          return;
+        }
+      }
+    }
+
+    // Find organization from integration if not provided
+    let orgId = organizationId;
+    if (!orgId && req.body.for_user_id) {
+      const integration = await prisma.twitterAdsIntegration.findFirst({
+        where: { isActive: true },
+        select: { organizationId: true, accessToken: true, adAccountId: true },
+      });
+      if (integration) {
+        orgId = integration.organizationId;
+        twitterAdsService.initialize({
+          accessToken: integration.accessToken,
+          adAccountId: integration.adAccountId,
+        });
+      }
+    }
+
+    if (!orgId) {
+      console.warn('[Twitter Webhook] No organization ID found');
+      res.sendStatus(400);
+      return;
+    }
+
+    await twitterAdsService.handleWebhook(req.body, orgId);
+    res.sendStatus(200);
+  })
+);
+
+/**
+ * @api {get} /tracking/webhooks/twitter Twitter CRC Verification
+ */
+router.get(
+  '/webhooks/twitter',
+  asyncHandler(async (req, res) => {
+    const crcToken = req.query.crc_token as string;
+    const organizationId = req.query.organization_id as string;
+
+    if (crcToken && organizationId) {
+      const integration = await prisma.twitterAdsIntegration.findFirst({
+        where: { organizationId, isActive: true },
+      });
+
+      if (integration?.webhookSecret) {
+        twitterAdsService.initialize({
+          accessToken: integration.accessToken,
+          adAccountId: integration.adAccountId,
+          webhookSecret: integration.webhookSecret,
+        });
+        const response = twitterAdsService.handleCrcChallenge(crcToken);
+        res.json({ response_token: response });
+        return;
+      }
+    }
+
+    res.sendStatus(200);
+  })
+);
+
+/**
+ * @api {post} /tracking/webhooks/tiktok TikTok Instant Form Webhook
+ * Receives lead form submissions from TikTok Ads
+ */
+router.post(
+  '/webhooks/tiktok',
+  asyncHandler(async (req, res) => {
+    const organizationId = req.headers['x-organization-id'] as string;
+    const signature = req.headers['x-tiktok-signature'] as string;
+    const timestamp = req.headers['x-tiktok-timestamp'] as string;
+
+    // Verify signature if provided
+    if (signature && timestamp && organizationId) {
+      const integration = await prisma.tikTokAdsIntegration.findFirst({
+        where: { organizationId, isActive: true },
+      });
+
+      if (integration?.webhookSecret) {
+        tiktokAdsService.initialize({
+          accessToken: integration.accessToken,
+          advertiserId: integration.advertiserId,
+          webhookSecret: integration.webhookSecret,
+        });
+
+        const isValid = tiktokAdsService.verifyWebhookSignature(
+          JSON.stringify(req.body),
+          signature,
+          timestamp
+        );
+
+        if (!isValid) {
+          console.warn('[TikTok Webhook] Invalid signature');
+          res.sendStatus(403);
+          return;
+        }
+      }
+    }
+
+    // Find organization from integration if not provided
+    let orgId = organizationId;
+    if (!orgId && req.body.advertiser_id) {
+      const integration = await prisma.tikTokAdsIntegration.findFirst({
+        where: { advertiserId: req.body.advertiser_id, isActive: true },
+        select: { organizationId: true, accessToken: true, advertiserId: true },
+      });
+
+      if (integration) {
+        orgId = integration.organizationId;
+        tiktokAdsService.initialize({
+          accessToken: integration.accessToken,
+          advertiserId: integration.advertiserId,
+        });
+      }
+    }
+
+    if (!orgId) {
+      console.warn('[TikTok Webhook] No organization ID found');
+      res.sendStatus(400);
+      return;
+    }
+
+    await tiktokAdsService.handleWebhook(req.body, orgId);
+    res.sendStatus(200);
+  })
+);
+
+/**
+ * @api {get} /tracking/webhooks/tiktok TikTok Webhook Verification
+ */
+router.get(
+  '/webhooks/tiktok',
+  (req, res) => {
+    // TikTok uses a simple GET request to verify the endpoint
+    const challenge = req.query.challenge as string;
+    if (challenge) {
+      res.send(challenge);
+    } else {
+      res.json({ status: 'ok' });
+    }
+  }
+);
+
+/**
+ * @api {post} /tracking/webhooks/youtube YouTube TrueView Lead Webhook
+ * Receives lead form submissions from YouTube video campaigns
+ */
+router.post(
+  '/webhooks/youtube',
+  asyncHandler(async (req, res) => {
+    const organizationId = req.headers['x-organization-id'] as string;
+
+    // Find organization from integration if not provided
+    let orgId = organizationId;
+    if (!orgId && req.body.campaign_id) {
+      const campaign = await prisma.adCampaign.findFirst({
+        where: { externalId: req.body.campaign_id, platform: 'YOUTUBE' },
+        select: { organizationId: true },
+      });
+      orgId = campaign?.organizationId || '';
+    }
+
+    if (!orgId) {
+      // Try to find any active YouTube integration
+      const integration = await prisma.youTubeAdsIntegration.findFirst({
+        where: { isActive: true },
+        select: { organizationId: true, accessToken: true, channelId: true, customerId: true },
+      });
+
+      if (integration) {
+        orgId = integration.organizationId;
+        youtubeAdsService.initialize({
+          accessToken: integration.accessToken,
+          channelId: integration.channelId,
+          customerId: integration.customerId || undefined,
+        });
+      }
+    }
+
+    if (!orgId) {
+      console.warn('[YouTube Webhook] No organization ID found');
+      res.sendStatus(400);
+      return;
+    }
+
+    await youtubeAdsService.handleWebhook(req.body, orgId);
+    res.sendStatus(200);
+  })
+);
+
+/**
+ * @api {get} /tracking/webhooks/youtube YouTube Webhook Verification
+ */
+router.get(
+  '/webhooks/youtube',
+  (req, res) => {
+    const challenge = req.query['hub.challenge'] as string;
+    if (challenge) {
+      res.send(challenge);
+    } else {
+      res.json({ status: 'ok' });
+    }
+  }
+);
+
+/**
  * AUTHENTICATED ENDPOINTS - Require login
  */
 
@@ -340,6 +742,68 @@ router.get(
         label: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       })),
     });
+  })
+);
+
+/**
+ * AD INTERACTION ENDPOINTS
+ */
+
+/**
+ * @api {get} /tracking/ad-interactions Ad Interaction Analytics
+ * Get analytics for ad interactions (clicks and conversions)
+ */
+router.get(
+  '/ad-interactions',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { organizationId } = req.user!;
+    const { startDate, endDate } = req.query;
+
+    const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate as string) : new Date();
+
+    const analytics = await adInteractionService.getAnalytics(organizationId, { start, end });
+
+    res.json({ success: true, data: analytics });
+  })
+);
+
+/**
+ * @api {get} /tracking/ad-interactions/unconverted Get Unconverted Clicks
+ * Get ad clicks that haven't converted to leads (for retargeting)
+ */
+router.get(
+  '/ad-interactions/unconverted',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { organizationId } = req.user!;
+    const { days, limit, offset } = req.query;
+
+    const result = await adInteractionService.getUnconvertedClicks({
+      organizationId,
+      days: days ? parseInt(days as string) : 30,
+      limit: limit ? parseInt(limit as string) : 100,
+      offset: offset ? parseInt(offset as string) : 0,
+    });
+
+    res.json({ success: true, data: result });
+  })
+);
+
+/**
+ * @api {get} /tracking/ad-interactions/lead/:leadId Get Ad Interaction for Lead
+ * Get the ad interaction that led to a specific lead
+ */
+router.get(
+  '/ad-interactions/lead/:leadId',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { leadId } = req.params;
+
+    const interaction = await adInteractionService.getByLeadId(leadId);
+
+    res.json({ success: true, data: interaction });
   })
 );
 

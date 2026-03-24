@@ -40,6 +40,7 @@ import messageStatusCallbackRoutes from './message-status-callback.routes';
 import auditLogsRoutes from './audit-logs.routes';
 import analyticsRoutes from './analytics.routes';
 import trackingRoutes from './tracking.routes';
+import adInsightsRoutes from './ad-insights.routes';
 import organizationRoutes from './organization.routes';
 import rawImportRoutes from './rawImport.routes';
 import telecallerRoutes from './telecaller.routes';
@@ -60,11 +61,20 @@ import instagramIntegrationRoutes from './instagram-integration.routes';
 import facebookIntegrationRoutes from './facebook-integration.routes';
 import linkedinIntegrationRoutes from './linkedin-integration.routes';
 import googleAdsIntegrationRoutes from './google-ads-integration.routes';
+import youtubeIntegrationRoutes from './youtube-integration.routes';
+import twitterIntegrationRoutes from './twitter-integration.routes';
+import tiktokIntegrationRoutes from './tiktok-integration.routes';
+import apifyIntegrationRoutes from './apify-integration.routes';
 import healthRoutes from './health.routes';
 import complianceRoutes from './compliance.routes';
 import leadScoringRoutes from './lead-scoring.routes';
 import callAnalyticsRoutes from './call-analytics.routes';
 import otpRoutes from './otp.routes';
+import leadLifecycleRoutes from './lead-lifecycle.routes';
+import conversationalAIAgentRoutes from './conversational-ai-agent.routes';
+import ragRoutes from './rag.routes';
+import agentAnalyticsRoutes from './agent-analytics.routes';
+import messagingRoutes from './messaging.routes';
 
 const router = Router();
 
@@ -83,6 +93,8 @@ router.use('/payments', paymentRoutes);
 router.use('/ads', adRoutes);
 router.use('/plivo', plivoRoutes);
 router.use('/voice-ai', voiceAIRoutes);
+router.use('/voice-ai', ragRoutes); // RAG endpoints under /voice-ai/agents/:agentId/rag/*
+router.use('/voice-ai', agentAnalyticsRoutes); // Analytics endpoints under /voice-ai/agents/:agentId/analytics
 router.use('/voice-templates', voiceTemplateRoutes);
 router.use('/call-flows', callFlowRoutes);
 router.use('/agents', specializedAgentsRoutes);
@@ -112,9 +124,11 @@ router.use('/message-status', messageStatusCallbackRoutes);
 router.use('/audit-logs', auditLogsRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/tracking', trackingRoutes);
+router.use('/ad-insights', adInsightsRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/raw-imports', rawImportRoutes);
 router.use('/telecaller', telecallerRoutes);
+router.use('/messaging', messagingRoutes);
 router.use('/phone-numbers', phoneNumberRoutes);
 
 // Inbound Call Features
@@ -140,11 +154,21 @@ router.use('/instagram', instagramIntegrationRoutes);
 router.use('/facebook', facebookIntegrationRoutes);
 router.use('/linkedin', linkedinIntegrationRoutes);
 router.use('/google-ads', googleAdsIntegrationRoutes);
+router.use('/youtube', youtubeIntegrationRoutes);
+router.use('/twitter', twitterIntegrationRoutes);
+router.use('/tiktok', tiktokIntegrationRoutes);
+router.use('/apify', apifyIntegrationRoutes);
 
 // Compliance & Analytics
 router.use('/compliance', complianceRoutes);
 router.use('/lead-scoring', leadScoringRoutes);
 router.use('/call-analytics', callAnalyticsRoutes);
+
+// Lead Lifecycle Management
+router.use('/lead-lifecycle', leadLifecycleRoutes);
+
+// ElevenLabs Conversational AI
+router.use('/conversational-ai', conversationalAIAgentRoutes);
 
 // OTP Verification
 router.use('/otp', otpRoutes);

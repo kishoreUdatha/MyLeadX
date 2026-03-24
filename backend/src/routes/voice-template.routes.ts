@@ -5,6 +5,7 @@ import { authenticate } from '../middlewares/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/errors';
 import { sarvamService } from '../integrations/sarvam.service';
+import { calendarService } from '../services/calendar.service';
 import { Readable } from 'stream';
 
 // Initialize OpenAI client for template testing
@@ -691,15 +692,33 @@ router.post(
 function postProcessTranscript(text: string): string {
   let result = text;
 
-  // Fix email patterns
-  result = result.replace(/\s*at\s*the\s*rate\s*/gi, '@');
+  // Fix email patterns - handle various ways people say email addresses
+  result = result.replace(/\s*at\s*the\s*rate\s*(of\s*)?/gi, '@');
   result = result.replace(/\s*at\s*rate\s*/gi, '@');
+  result = result.replace(/\s+at\s+/gi, '@'); // "john at gmail" → "john@gmail"
   result = result.replace(/\s*@\s*/g, '@');
   result = result.replace(/\s*dot\s*/gi, '.');
-  result = result.replace(/gmail\s*dot\s*com/gi, 'gmail.com');
-  result = result.replace(/yahoo\s*dot\s*com/gi, 'yahoo.com');
-  result = result.replace(/hotmail\s*dot\s*com/gi, 'hotmail.com');
-  result = result.replace(/outlook\s*dot\s*com/gi, 'outlook.com');
+  result = result.replace(/\s*period\s*/gi, '.');
+
+  // Fix common email domains
+  result = result.replace(/gmail\s*\.?\s*com/gi, 'gmail.com');
+  result = result.replace(/yahoo\s*\.?\s*com/gi, 'yahoo.com');
+  result = result.replace(/hotmail\s*\.?\s*com/gi, 'hotmail.com');
+  result = result.replace(/outlook\s*\.?\s*com/gi, 'outlook.com');
+  result = result.replace(/rediff\s*\.?\s*com/gi, 'rediff.com');
+  result = result.replace(/live\s*\.?\s*com/gi, 'live.com');
+
+  // Handle spelled out letters with spaces or hyphens: "K I S H O R E" or "K-I-S-H-O-R-E"
+  // Convert sequences of single letters to words
+  result = result.replace(/\b([A-Z])\s*-\s*([A-Z])\s*-\s*([A-Z])/gi, '$1$2$3');
+  result = result.replace(/\b([A-Z])\s+([A-Z])\s+([A-Z])\s+([A-Z])/gi, (match) => {
+    return match.replace(/\s+/g, '').toLowerCase();
+  });
+
+  // Fix common mishearings for email parts
+  result = result.replace(/g\s*mail/gi, 'gmail');
+  result = result.replace(/gee\s*mail/gi, 'gmail');
+  result = result.replace(/ji\s*mail/gi, 'gmail');
 
   // Fix phone number patterns - remove spaces between digits
   result = result.replace(/(\d)\s+(\d)/g, '$1$2');
@@ -717,14 +736,93 @@ function postProcessTranscript(text: string): string {
   return result;
 }
 
+// Tools for AI agent function calling
+const agentTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'book_appointment',
+      description: 'Book an appointment for the customer. Use this when the user wants to schedule a meeting, appointment, demo, or consultation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: {
+            type: 'string',
+            description: 'The date for the appointment in YYYY-MM-DD format',
+          },
+          time: {
+            type: 'string',
+            description: 'The time for the appointment in HH:MM format (24-hour)',
+          },
+          name: {
+            type: 'string',
+            description: 'The customer name',
+          },
+          phone: {
+            type: 'string',
+            description: 'The customer phone number',
+          },
+          email: {
+            type: 'string',
+            description: 'The customer email address. Convert spoken words: "at" or "at the rate" → @, "dot" or "period" → . For example: "john at gmail dot com" → "john@gmail.com"',
+          },
+          purpose: {
+            type: 'string',
+            description: 'The purpose or type of appointment (e.g., consultation, demo, follow-up)',
+          },
+          duration: {
+            type: 'number',
+            description: 'Duration in minutes (default 30)',
+          },
+        },
+        required: ['date', 'time', 'name', 'purpose'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_availability',
+      description: 'Check available appointment slots for a specific date',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: {
+            type: 'string',
+            description: 'The date to check availability in YYYY-MM-DD format',
+          },
+        },
+        required: ['date'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'transfer_to_human',
+      description: 'Transfer the call to a human agent when the customer requests it or when the AI cannot help',
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: {
+            type: 'string',
+            description: 'Reason for the transfer',
+          },
+        },
+        required: ['reason'],
+      },
+    },
+  },
+];
+
 /**
  * @api {post} /voice-templates/chat Chat with AI Agent
- * @description Get AI response for testing agent configuration
+ * @description Get AI response for testing agent configuration with function calling
  */
 router.post(
   '/chat',
   asyncHandler(async (req, res) => {
-    const { message, systemPrompt, conversationHistory = [] } = req.body;
+    const { message, systemPrompt, conversationHistory = [], enableTools = true } = req.body;
 
     if (!message) {
       throw new AppError('Message is required', 400);
@@ -737,18 +835,39 @@ router.post(
     // Build messages array
     const messages: any[] = [];
 
-    // Add system prompt
-    if (systemPrompt) {
-      messages.push({
-        role: 'system',
-        content: systemPrompt,
-      });
-    } else {
-      messages.push({
-        role: 'system',
-        content: 'You are a helpful voice AI assistant. Keep responses concise and natural for voice conversation.',
-      });
-    }
+    // Add system prompt with tool instructions
+    const basePrompt = systemPrompt || 'You are a helpful voice AI assistant. Keep responses concise and natural for voice conversation.';
+    const toolInstructions = enableTools ? `
+
+You have access to the following tools:
+- book_appointment: Use this to book appointments when users request scheduling
+- check_availability: Use this to check available time slots
+- transfer_to_human: Use this when the user asks to speak with a human
+
+When booking appointments:
+1. Ask for the date, time, name, and purpose if not provided
+2. For EMAIL ADDRESSES - this is CRITICAL for voice conversations:
+   - Say: "What is your email address? Please spell it letter by letter, like K I S H O R E at gmail dot com"
+   - The system automatically converts: "at" → @, "dot" → ., "you" → u, "are" → r, "see" → c, "bee" → b
+   - If the email seems incomplete or unclear, ask them to SPELL IT LETTER BY LETTER
+   - ALWAYS confirm the email: "I heard your email as kishore@gmail.com - is that correct?"
+   - If they say no, ask: "Please spell it one letter at a time, like K I S H O R E"
+   - If they say yes, proceed
+3. Confirm ALL details before booking
+4. After booking, confirm the appointment details
+
+IMPORTANT EMAIL CAPTURE - Ask users to spell letter by letter:
+- Best format: "K I S H O R E at gmail dot com" (letters with spaces)
+- Also works: "kishore at gmail dot com"
+- Phonetic: "K for King, I for India, S for Sam" → "kis"
+- Numbers: "one two three" → "123"
+- Common mishearings are auto-fixed: "you" → u, "are" → r, "see" → c, "bee" → b, "gee" → g
+- If email looks wrong, ALWAYS ask to spell it again letter by letter` : '';
+
+    messages.push({
+      role: 'system',
+      content: basePrompt + toolInstructions,
+    });
 
     // Add conversation history
     for (const msg of conversationHistory) {
@@ -758,28 +877,310 @@ router.post(
       });
     }
 
+    // Preprocess user message for email patterns (same as STT post-processing)
+    let processedMessage = message;
+
+    // Handle phonetic alphabet (NATO/common): "U for Umbrella" → "U", "A for Apple" → "A"
+    const phoneticMap: Record<string, string> = {
+      // Common phonetic words
+      'alpha': 'a', 'apple': 'a', 'america': 'a', 'ant': 'a',
+      'bravo': 'b', 'ball': 'b', 'boy': 'b', 'bat': 'b',
+      'charlie': 'c', 'cat': 'c', 'car': 'c',
+      'delta': 'd', 'dog': 'd', 'david': 'd',
+      'echo': 'e', 'elephant': 'e', 'egg': 'e',
+      'foxtrot': 'f', 'fox': 'f', 'father': 'f',
+      'golf': 'g', 'girl': 'g', 'george': 'g',
+      'hotel': 'h', 'horse': 'h', 'house': 'h', 'henry': 'h',
+      'india': 'i', 'ice': 'i', 'igloo': 'i',
+      'juliet': 'j', 'jack': 'j', 'john': 'j',
+      'kilo': 'k', 'king': 'k', 'kite': 'k', 'kishore': 'k',
+      'lima': 'l', 'lion': 'l', 'love': 'l', 'london': 'l',
+      'mike': 'm', 'mother': 'm', 'man': 'm', 'mary': 'm', 'monkey': 'm',
+      'november': 'n', 'nancy': 'n', 'number': 'n',
+      'oscar': 'o', 'orange': 'o', 'oil': 'o',
+      'papa': 'p', 'peter': 'p', 'pink': 'p',
+      'quebec': 'q', 'queen': 'q',
+      'romeo': 'r', 'red': 'r', 'roger': 'r', 'robert': 'r',
+      'sierra': 's', 'sam': 's', 'sugar': 's', 'snake': 's',
+      'tango': 't', 'tom': 't', 'tiger': 't', 'talent': 't', 'table': 't',
+      'uniform': 'u', 'umbrella': 'u', 'uncle': 'u', 'united': 'u',
+      'victor': 'v', 'van': 'v', 'victory': 'v',
+      'whiskey': 'w', 'william': 'w', 'water': 'w',
+      'xray': 'x', 'x-ray': 'x',
+      'yankee': 'y', 'yellow': 'y', 'yes': 'y',
+      'zulu': 'z', 'zebra': 'z', 'zero': 'z',
+    };
+
+    // Convert phonetic patterns: "U for Umbrella" → "u", "A for Apple" → "a"
+    for (const [word, letter] of Object.entries(phoneticMap)) {
+      // Match patterns like "U for Umbrella", "you for umbrella", "A as in Apple"
+      const patterns = [
+        new RegExp(`\\b[${letter.toUpperCase()}${letter}]\\s+(?:for|as\\s+in|like)\\s+${word}\\b`, 'gi'),
+        new RegExp(`\\b(?:you|u)\\s+(?:for|as\\s+in|like)\\s+${word}\\b`, 'gi'), // "you for umbrella" → "u"
+      ];
+      for (const pattern of patterns) {
+        processedMessage = processedMessage.replace(pattern, letter);
+      }
+    }
+
+    // Also handle "capital U", "small a" patterns
+    processedMessage = processedMessage.replace(/\b(?:capital|big|upper)\s+([a-zA-Z])\b/gi, (_, letter) => letter.toUpperCase());
+    processedMessage = processedMessage.replace(/\b(?:small|little|lower)\s+([a-zA-Z])\b/gi, (_, letter) => letter.toLowerCase());
+
+    // Handle common letter mishearings from speech-to-text
+    const letterMishearings: Record<string, string> = {
+      'be': 'b', 'bee': 'b', 'b as in': 'b',
+      'see': 'c', 'sea': 'c', 'c as in': 'c',
+      'de': 'd', 'dee': 'd', 'd as in': 'd',
+      'ee': 'e', 'e as in': 'e',
+      'ef': 'f', 'eff': 'f', 'f as in': 'f',
+      'gee': 'g', 'ji': 'g', 'g as in': 'g',
+      'aitch': 'h', 'h as in': 'h',
+      'eye': 'i', 'i as in': 'i',
+      'jay': 'j', 'j as in': 'j',
+      'kay': 'k', 'k as in': 'k',
+      'el': 'l', 'ell': 'l', 'l as in': 'l',
+      'em': 'm', 'm as in': 'm',
+      'en': 'n', 'n as in': 'n',
+      'oh': 'o', 'o as in': 'o',
+      'pee': 'p', 'p as in': 'p',
+      'cue': 'q', 'queue': 'q', 'q as in': 'q',
+      'are': 'r', 'ar': 'r', 'r as in': 'r',
+      'es': 's', 'ess': 's', 's as in': 's',
+      'tea': 't', 'tee': 't', 't as in': 't',
+      'you': 'u', 'yu': 'u', 'u as in': 'u',
+      'vee': 'v', 'v as in': 'v',
+      'double you': 'w', 'doubleyou': 'w', 'w as in': 'w',
+      'ex': 'x', 'x as in': 'x',
+      'why': 'y', 'y as in': 'y',
+      'zee': 'z', 'zed': 'z', 'z as in': 'z',
+    };
+
+    // Apply letter mishearings (only when surrounded by spaces or at boundaries)
+    for (const [mishearing, letter] of Object.entries(letterMishearings)) {
+      const pattern = new RegExp(`\\b${mishearing}\\b`, 'gi');
+      // Only replace if it looks like spelling context (near other single letters or email patterns)
+      if (processedMessage.match(/\b[a-zA-Z]\s+[a-zA-Z]\s+[a-zA-Z]\b/) ||
+          processedMessage.match(/email|@|gmail|yahoo|outlook/i)) {
+        processedMessage = processedMessage.replace(pattern, letter);
+      }
+    }
+
+    // Convert email patterns - more variations
+    processedMessage = processedMessage.replace(/\s*at\s*the\s*rate\s*(of\s*)?/gi, '@');
+    processedMessage = processedMessage.replace(/\s*at\s*rate\s*/gi, '@');
+    processedMessage = processedMessage.replace(/\s*@\s*the\s*rate\s*/gi, '@');
+    processedMessage = processedMessage.replace(/\s*add\s*the\s*rate\s*/gi, '@');
+    processedMessage = processedMessage.replace(/\s*at\s*(?=gmail|yahoo|hotmail|outlook)/gi, '@');
+    processedMessage = processedMessage.replace(/\s+at\s+/gi, '@');
+
+    // Handle "dot" variations
+    processedMessage = processedMessage.replace(/\s*dot\s*/gi, '.');
+    processedMessage = processedMessage.replace(/\s*period\s*/gi, '.');
+    processedMessage = processedMessage.replace(/\s*point\s*/gi, '.');
+    processedMessage = processedMessage.replace(/\s*full\s*stop\s*/gi, '.');
+
+    // Fix common email domains with various spacings
+    processedMessage = processedMessage.replace(/g\s*mail\s*\.?\s*com/gi, 'gmail.com');
+    processedMessage = processedMessage.replace(/gee\s*mail\s*\.?\s*com/gi, 'gmail.com');
+    processedMessage = processedMessage.replace(/ji\s*mail\s*\.?\s*com/gi, 'gmail.com');
+    processedMessage = processedMessage.replace(/gmail\s*\.?\s*com/gi, 'gmail.com');
+    processedMessage = processedMessage.replace(/yahoo\s*\.?\s*com/gi, 'yahoo.com');
+    processedMessage = processedMessage.replace(/hotmail\s*\.?\s*com/gi, 'hotmail.com');
+    processedMessage = processedMessage.replace(/outlook\s*\.?\s*com/gi, 'outlook.com');
+    processedMessage = processedMessage.replace(/rediff\s*mail\s*\.?\s*com/gi, 'rediffmail.com');
+    processedMessage = processedMessage.replace(/rediff\s*\.?\s*com/gi, 'rediff.com');
+
+    // Handle spelled out letters with spaces: "K I S H O R E" → "kishore"
+    // Match 3+ single letters separated by spaces
+    processedMessage = processedMessage.replace(/\b([a-zA-Z])\s+([a-zA-Z])\s+([a-zA-Z])(?:\s+([a-zA-Z]))?(?:\s+([a-zA-Z]))?(?:\s+([a-zA-Z]))?(?:\s+([a-zA-Z]))?(?:\s+([a-zA-Z]))?(?:\s+([a-zA-Z]))?(?:\s+([a-zA-Z]))?\b/gi,
+      (match, ...letters) => {
+        const validLetters = letters.filter(l => l && typeof l === 'string' && l.length === 1);
+        if (validLetters.length >= 3) {
+          return validLetters.join('').toLowerCase();
+        }
+        return match;
+      }
+    );
+
+    // Handle letters with hyphens: "K-I-S-H-O-R-E" → "kishore"
+    processedMessage = processedMessage.replace(/\b([a-zA-Z])(?:\s*-\s*([a-zA-Z]))+\b/gi, (match) => {
+      return match.replace(/[\s-]+/g, '').toLowerCase();
+    });
+
+    // Handle numbers in email (spoken as words)
+    processedMessage = processedMessage.replace(/\bone\b/gi, '1');
+    processedMessage = processedMessage.replace(/\btwo\b/gi, '2');
+    processedMessage = processedMessage.replace(/\bthree\b/gi, '3');
+    processedMessage = processedMessage.replace(/\bfour\b/gi, '4');
+    processedMessage = processedMessage.replace(/\bfive\b/gi, '5');
+    processedMessage = processedMessage.replace(/\bsix\b/gi, '6');
+    processedMessage = processedMessage.replace(/\bseven\b/gi, '7');
+    processedMessage = processedMessage.replace(/\beight\b/gi, '8');
+    processedMessage = processedMessage.replace(/\bnine\b/gi, '9');
+    processedMessage = processedMessage.replace(/\bzero\b/gi, '0');
+
+    // Remove extra spaces around @ and .
+    processedMessage = processedMessage.replace(/\s*@\s*/g, '@');
+    processedMessage = processedMessage.replace(/\s*\.\s*/g, '.');
+
+    // Fix double dots or double @
+    processedMessage = processedMessage.replace(/\.{2,}/g, '.');
+    processedMessage = processedMessage.replace(/@{2,}/g, '@');
+
+    // Try to extract email pattern if present
+    const emailMatch = processedMessage.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch) {
+      console.log('[Chat] Detected email:', emailMatch[0]);
+    }
+
+    console.log('[Chat] Original message:', message);
+    console.log('[Chat] Processed message:', processedMessage);
+
     // Add current user message
     messages.push({
       role: 'user',
-      content: message,
+      content: processedMessage,
     });
 
     try {
-      const completion = await openai.chat.completions.create({
+      const completionParams: any = {
         model: 'gpt-4o-mini',
         messages,
         max_tokens: 300,
         temperature: 0.7,
-      });
+      };
 
-      const response = completion.choices[0]?.message?.content || 'I apologize, I could not generate a response.';
+      // Add tools if enabled
+      if (enableTools) {
+        completionParams.tools = agentTools;
+        completionParams.tool_choice = 'auto';
+      }
 
-      res.json({
-        success: true,
-        data: {
-          response,
-        },
-      });
+      const completion = await openai.chat.completions.create(completionParams);
+      const responseMessage = completion.choices[0]?.message;
+
+      // Check if AI wants to call a function
+      if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
+        const toolCall = responseMessage.tool_calls[0];
+        const functionName = toolCall.function.name;
+        const functionArgs = JSON.parse(toolCall.function.arguments);
+
+        console.log(`[Chat] Tool call: ${functionName}`, functionArgs);
+
+        let toolResult = '';
+        let responseText = '';
+
+        switch (functionName) {
+          case 'book_appointment':
+            const appointmentDate = functionArgs.date;
+            const appointmentTime = functionArgs.time;
+            const customerName = functionArgs.name;
+            const customerEmail = functionArgs.email;
+            const customerPhone = functionArgs.phone;
+            const purpose = functionArgs.purpose;
+            const duration = functionArgs.duration || 30;
+
+            // Parse date and time to create start/end times
+            const [year, month, day] = appointmentDate.split('-').map(Number);
+            const [hours, minutes] = appointmentTime.split(':').map(Number);
+            const startTime = new Date(year, month - 1, day, hours, minutes);
+            const endTime = new Date(startTime.getTime() + duration * 60000);
+
+            // Try to create a real Google Calendar event
+            let calendarResult = null;
+            const organizationId = req.user?.organizationId;
+
+            if (organizationId) {
+              try {
+                const attendeesList = customerEmail ? [{ email: customerEmail, name: customerName }] : [];
+                console.log('[Calendar] Creating event with attendees:', JSON.stringify(attendeesList));
+                console.log('[Calendar] Customer email extracted:', customerEmail);
+
+                calendarResult = await calendarService.createEvent(organizationId, {
+                  title: `${purpose} - ${customerName}`,
+                  description: `Appointment booked via Voice AI\n\nName: ${customerName}\nPhone: ${customerPhone || 'Not provided'}\nEmail: ${customerEmail || 'Not provided'}\nPurpose: ${purpose}`,
+                  startTime,
+                  endTime,
+                  attendees: attendeesList,
+                  reminders: [
+                    { method: 'email', minutes: 60 },
+                    { method: 'popup', minutes: 15 },
+                  ],
+                });
+
+                if (calendarResult) {
+                  console.log(`[Calendar] Event created: ${calendarResult.eventId}`);
+                }
+              } catch (calError: any) {
+                console.error('[Calendar] Failed to create event:', calError.message);
+              }
+            }
+
+            toolResult = JSON.stringify({
+              success: true,
+              appointmentId: calendarResult?.eventId || `APT-${Date.now()}`,
+              calendarLink: calendarResult?.eventLink,
+              date: appointmentDate,
+              time: appointmentTime,
+              name: customerName,
+              email: customerEmail,
+              phone: customerPhone,
+              purpose: purpose,
+              duration: duration,
+              addedToCalendar: !!calendarResult,
+            });
+
+            if (calendarResult) {
+              responseText = `Great! I've booked your ${purpose} appointment for ${customerName} on ${appointmentDate} at ${appointmentTime}. The appointment is ${duration} minutes and has been added to your Google Calendar. ${customerEmail ? `A calendar invite has been sent to ${customerEmail}.` : ''} Is there anything else you'd like help with?`;
+            } else {
+              responseText = `Great! I've noted your ${purpose} appointment for ${customerName} on ${appointmentDate} at ${appointmentTime}. The appointment will be ${duration} minutes. Note: Calendar integration is not set up, so please add this to your calendar manually. Is there anything else you'd like help with?`;
+            }
+            break;
+
+          case 'check_availability':
+            // Simulate checking availability
+            const checkDate = functionArgs.date;
+            const availableSlots = ['09:00', '10:30', '14:00', '15:30', '16:00'];
+            toolResult = JSON.stringify({
+              date: checkDate,
+              availableSlots: availableSlots,
+            });
+            responseText = `I have the following slots available on ${checkDate}: ${availableSlots.join(', ')}. Which time works best for you?`;
+            break;
+
+          case 'transfer_to_human':
+            toolResult = JSON.stringify({ success: true, reason: functionArgs.reason });
+            responseText = `I understand. Let me transfer you to a human agent. The reason noted is: ${functionArgs.reason}. Please hold while I connect you.`;
+            break;
+
+          default:
+            toolResult = JSON.stringify({ error: 'Unknown function' });
+            responseText = responseMessage?.content || 'I apologize, something went wrong.';
+        }
+
+        res.json({
+          success: true,
+          data: {
+            response: responseText,
+            toolCall: {
+              name: functionName,
+              arguments: functionArgs,
+              result: JSON.parse(toolResult),
+            },
+          },
+        });
+      } else {
+        // Regular text response
+        const response = responseMessage?.content || 'I apologize, I could not generate a response.';
+
+        res.json({
+          success: true,
+          data: {
+            response,
+          },
+        });
+      }
     } catch (err: any) {
       console.error('[Chat] OpenAI error:', err);
       throw new AppError('Failed to generate response', 500);

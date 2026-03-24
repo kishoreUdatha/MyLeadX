@@ -174,6 +174,90 @@ export const telecallerApi = {
       throw new Error(getErrorMessage(error));
     }
   },
+
+  /**
+   * Get AI analysis status and results for a call
+   */
+  getCallAnalysis: async (callId: string): Promise<CallAnalysis> => {
+    try {
+      const response = await api.get<ApiResponse<CallAnalysis>>(`/telecaller/calls/${callId}/analysis`);
+      return response.data.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Trigger re-analysis for a call
+   */
+  reanalyzeCall: async (callId: string): Promise<void> => {
+    try {
+      await api.post(`/telecaller/calls/${callId}/reanalyze`);
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * Get calls with AI analysis
+   */
+  getAnalyzedCalls: async (
+    page: number = 1,
+    limit: number = 20,
+    analyzed?: boolean
+  ): Promise<PaginatedResponse<Call>> => {
+    try {
+      const params = new URLSearchParams({
+        offset: ((page - 1) * limit).toString(),
+        limit: limit.toString(),
+      });
+
+      if (analyzed !== undefined) {
+        params.append('analyzed', analyzed.toString());
+      }
+
+      const response = await api.get<PaginatedResponse<Call>>(
+        `/telecaller/calls-analyzed?${params.toString()}`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
 };
+
+// Type for AI analysis response
+export interface CallAnalysis {
+  id: string;
+  aiAnalyzed: boolean;
+  analysisStatus: 'completed' | 'pending';
+  transcript: string | null;
+  sentiment: 'positive' | 'neutral' | 'negative' | null;
+  outcome: string | null;
+  summary: string | null;
+  qualification: {
+    name?: string;
+    email?: string;
+    company?: string;
+    budget?: string;
+    timeline?: string;
+    requirements?: string;
+    buyingSignals?: string[];
+    objections?: string[];
+    aiAnalyzedAt?: string;
+  } | null;
+  recordingUrl: string | null;
+  duration: number | null;
+  lead: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    leadScore?: {
+      overallScore: number;
+      grade: string;
+      aiClassification: string;
+    };
+  } | null;
+}
 
 export default telecallerApi;

@@ -24,6 +24,8 @@ import LandingPagesPage from './pages/landing/LandingPagesPage';
 import LandingPageBuilderPage from './pages/landing/LandingPageBuilderPage';
 import CampaignsPage from './pages/campaigns/CampaignsPage';
 import { VoiceAgentsPage, CreateAgentPage, CreateAgentFromTemplatePage, NewAgentSelectionPage } from './pages/voice-ai';
+import { ConversationalAIAgentWizard } from './pages/voice-ai/ConversationalAIAgentWizard';
+import { ConversationalAIAgentDetail } from './pages/voice-ai/ConversationalAIAgentDetail';
 import { VoiceTemplatesPage, EditTemplatePage } from './pages/voice-templates';
 import {
   OutboundCallsPage,
@@ -58,7 +60,8 @@ import {
 import { AutoAssignSettingsPage, SmsSettingsPage, InstitutionSettingsPage, WhatsAppSettingsPage, VoiceMinutesPage, NotificationChannelsPage, CalendarSettingsPage, EmailSequencesPage, CRMIntegrationPage, PostCallMessagingPage } from './pages/settings';
 import IntegrationSettingsPage from './pages/settings/IntegrationSettingsPage';
 import { ReportsPage } from './pages/reports';
-import { SocialMediaAdsPage, InstagramLeadSetupPage, AdIntegrationsPage, FacebookSetupPage, LinkedInSetupPage, GoogleAdsSetupPage } from './pages/ads';
+import { SocialMediaAdsPage, InstagramLeadSetupPage, AdIntegrationsPage, FacebookSetupPage, LinkedInSetupPage, GoogleAdsSetupPage, YouTubeSetupPage, TwitterSetupPage, TikTokSetupPage } from './pages/ads';
+import { ApifyDashboardPage, ApifyJobsPage, ApifySmartScrapePage, ApifyRecordsPage } from './pages/apify';
 import { PricingPage } from './pages/pricing';
 import { CheckoutPage, SubscriptionManagementPage, SuccessPage } from './pages/subscription';
 import { RealtimeVoiceDemo } from './components/RealtimeVoiceWidget';
@@ -238,8 +241,9 @@ function App() {
         <Route path="voice-ai" element={<VoiceAgentsPage />} />
         <Route path="voice-ai/new" element={<NewAgentSelectionPage />} />
         <Route path="voice-ai/create" element={<CreateAgentPage />} />
+        <Route path="voice-ai/create-conversational" element={<ConversationalAIAgentWizard />} />
         <Route path="voice-ai/create-from-template/:templateId" element={<CreateAgentFromTemplatePage />} />
-        <Route path="voice-ai/agents/:id" element={<CreateAgentPage />} />
+        <Route path="voice-ai/agents/:agentId" element={<ConversationalAIAgentDetail />} />
 
         {/* Voice Templates */}
         <Route path="voice-templates" element={<VoiceTemplatesPage />} />
@@ -286,6 +290,15 @@ function App() {
         <Route path="facebook-setup" element={<FacebookSetupPage />} />
         <Route path="linkedin-setup" element={<LinkedInSetupPage />} />
         <Route path="google-ads-setup" element={<GoogleAdsSetupPage />} />
+        <Route path="youtube-setup" element={<YouTubeSetupPage />} />
+        <Route path="twitter-setup" element={<TwitterSetupPage />} />
+        <Route path="tiktok-setup" element={<TikTokSetupPage />} />
+        <Route path="apify" element={<ApifySmartScrapePage />} />
+        <Route path="apify-setup" element={<ApifySmartScrapePage />} />
+        <Route path="apify-dashboard" element={<ApifyDashboardPage />} />
+        <Route path="apify-jobs" element={<ApifyJobsPage />} />
+        <Route path="apify-smart" element={<ApifySmartScrapePage />} />
+        <Route path="apify-records/:jobId" element={<ApifyRecordsPage />} />
         <Route path="/subscription" element={<SubscriptionManagementPage />} />
         <Route path="/subscription/checkout" element={<CheckoutPage />} />
         <Route path="/subscription/success" element={<SuccessPage />} />
