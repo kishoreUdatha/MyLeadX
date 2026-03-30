@@ -1,0 +1,57 @@
+{
+  "title": "ફોર્મ બિલ્ડર",
+  "subtitle": "લીડ્સ કેપ્ચર કરવા માટે કસ્ટમ ફોર્મ્સ બનાવો",
+  "createForm": "ફોર્મ બનાવો",
+  "editForm": "ફોર્મ સંપાદિત કરો",
+  "formName": "ફોર્મ નામ",
+  "formDescription": "ફોર્મ વર્ણન",
+  "fields": {
+    "title": "ફોર્મ ફીલ્ડ્સ",
+    "addField": "ફીલ્ડ ઉમેરો",
+    "fieldName": "ફીલ્ડ નામ",
+    "fieldType": "ફીલ્ડ પ્રકાર",
+    "placeholder": "પ્લેસહોલ્ડર",
+    "required": "જરૂરી",
+    "options": "વિકલ્પો"
+  },
+  "fieldTypes": {
+    "text": "ટેક્સ્ટ",
+    "email": "ઇમેઇલ",
+    "phone": "ફોન",
+    "number": "નંબર",
+    "textarea": "ટેક્સ્ટ એરિયા",
+    "select": "ડ્રોપડાઉન",
+    "checkbox": "ચેકબોક્સ",
+    "radio": "રેડિયો",
+    "date": "તારીખ"
+  },
+  "settings": {
+    "title": "ફોર્મ સેટિંગ્સ",
+    "submitButton": "સબમિટ બટન ટેક્સ્ટ",
+    "successMessage": "સફળતા સંદેશ",
+    "redirectUrl": "રીડાયરેક્ટ URL",
+    "notifyEmail": "સૂચના ઇમેઇલ"
+  },
+  "preview": {
+    "title": "પૂર્વાવલોકન",
+    "mobile": "મોબાઇલ",
+    "desktop": "ડેસ્કટોપ"
+  },
+  "actions": {
+    "save": "ફોર્મ સેવ કરો",
+    "publish": "પ્રકાશિત કરો",
+    "unpublish": "અપ્રકાશિત કરો",
+    "duplicate": "ડુપ્લિકેટ",
+    "delete": "કાઢી નાખો",
+    "embedCode": "એમ્બેડ કોડ મેળવો",
+    "shareLink": "શેર લિંક"
+  },
+  "status": {
+    "draft": "ડ્રાફ્ટ",
+    "published": "પ્રકાશિત"
+  },
+  "empty": {
+    "title": "હજુ સુધી કોઈ ફોર્મ્સ નથી",
+    "description": "લીડ્સ કેપ્ચર કરવાનું શરૂ કરવા માટે તમારો પ્રથમ ફોર્મ બનાવો"
+  }
+}

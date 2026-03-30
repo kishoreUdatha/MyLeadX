@@ -1,0 +1,11 @@
+export { default as AutoAssignSettingsPage } from './AutoAssignSettingsPage';
+export { default as SmsSettingsPage } from './SmsSettingsPage';
+export { default as InstitutionSettingsPage } from './InstitutionSettingsPage';
+export { default as WhatsAppSettingsPage } from './WhatsAppSettingsPage';
+export { default as VoiceMinutesPage } from './VoiceMinutesPage';
+export { default as NotificationChannelsPage } from './NotificationChannelsPage';
+export { default as CalendarSettingsPage } from './CalendarSettingsPage';
+export { default as EmailSequencesPage } from './EmailSequencesPage';
+export { default as CRMIntegrationPage } from './CRMIntegrationPage';
+export { default as PostCallMessagingPage } from './PostCallMessagingPage';
+export { default as IntegrationCredentialsPage } from './IntegrationCredentialsPage';

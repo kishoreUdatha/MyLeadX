@@ -1,0 +1,48 @@
+{
+  "welcome": "ਵਾਪਸ ਸਵਾਗਤ ਹੈ, {{name}}!",
+  "subtitle": "ਅੱਜ ਤੁਹਾਡੀਆਂ ਲੀਡਾਂ ਨਾਲ ਕੀ ਹੋ ਰਿਹਾ ਹੈ ਇਹ ਰਿਹਾ।",
+  "addLead": "ਲੀਡ ਸ਼ਾਮਲ ਕਰੋ",
+  "stats": {
+    "totalLeads": "ਕੁੱਲ ਲੀਡਾਂ",
+    "today": "ਅੱਜ",
+    "thisWeek": "ਇਸ ਹਫ਼ਤੇ",
+    "thisMonth": "ਇਸ ਮਹੀਨੇ"
+  },
+  "leadsByStatus": {
+    "title": "ਸਥਿਤੀ ਅਨੁਸਾਰ ਲੀਡਾਂ",
+    "noLeads": "ਅਜੇ ਕੋਈ ਲੀਡਾਂ ਨਹੀਂ",
+    "startBy": "ਲੀਡਾਂ ਅੱਪਲੋਡ ਜਾਂ ਬਣਾ ਕੇ ਸ਼ੁਰੂ ਕਰੋ"
+  },
+  "leadSources": {
+    "title": "ਲੀਡ ਸਰੋਤ",
+    "noData": "ਕੋਈ ਸਰੋਤ ਡੇਟਾ ਉਪਲਬਧ ਨਹੀਂ"
+  },
+  "quickActions": {
+    "title": "ਤੇਜ਼ ਕਾਰਵਾਈਆਂ",
+    "bulkUpload": {
+      "name": "ਬਲਕ ਅੱਪਲੋਡ",
+      "description": "Excel/CSV ਤੋਂ ਲੀਡਾਂ ਅੱਪਲੋਡ ਕਰੋ"
+    },
+    "newLeads": {
+      "name": "ਨਵੀਆਂ ਲੀਡਾਂ",
+      "description": "ਸੰਪਰਕ ਨਾ ਕੀਤੀਆਂ ਲੀਡਾਂ ਵੇਖੋ"
+    },
+    "createForm": {
+      "name": "ਫਾਰਮ ਬਣਾਓ",
+      "description": "ਕਸਟਮ ਲੀਡ ਫਾਰਮ ਬਣਾਓ"
+    },
+    "campaigns": {
+      "name": "ਮੁਹਿੰਮਾਂ",
+      "description": "ਬਲਕ ਸੁਨੇਹੇ ਭੇਜੋ"
+    }
+  },
+  "status": {
+    "NEW": "ਨਵੀਂ",
+    "CONTACTED": "ਸੰਪਰਕ ਕੀਤੀ",
+    "QUALIFIED": "ਯੋਗ",
+    "NEGOTIATION": "ਗੱਲਬਾਤ",
+    "WON": "ਜਿੱਤੀ",
+    "LOST": "ਹਾਰੀ",
+    "FOLLOW_UP": "ਫਾਲੋ ਅੱਪ"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "title": "Voice AI ఏజెంట్లు",
+  "subtitle": "AI-పవర్డ్ వాయిస్ ఏజెంట్లను సృష్టించి నిర్వహించండి",
+  "createAgent": "ఏజెంట్ సృష్టించు",
+  "editAgent": "ఏజెంట్ సవరించు",
+  "agentName": "ఏజెంట్ పేరు",
+  "agentDescription": "ఏజెంట్ వివరణ",
+  "voiceSettings": {
+    "title": "వాయిస్ సెట్టింగ్‌లు",
+    "language": "భాష",
+    "voice": "స్వరం",
+    "speed": "వేగం",
+    "pitch": "పిచ్"
+  },
+  "industry": {
+    "title": "పరిశ్రమ",
+    "education": "విద్య",
+    "healthcare": "వైద్యం",
+    "realEstate": "రియల్ ఎస్టేట్",
+    "finance": "ఫైనాన్స్",
+    "insurance": "బీమా",
+    "ecommerce": "ఈ-కామర్స్",
+    "technology": "టెక్నాలజీ",
+    "hospitality": "ఆతిథ్యం",
+    "automotive": "ఆటోమోటివ్",
+    "retail": "రిటైల్",
+    "other": "ఇతర"
+  },
+  "script": {
+    "title": "స్క్రిప్ట్",
+    "greeting": "అభివాదం",
+    "introduction": "పరిచయం",
+    "questions": "ప్రశ్నలు",
+    "objectionHandling": "అభ్యంతర నిర్వహణ",
+    "closing": "ముగింపు"
+  },
+  "settings": {
+    "title": "సెట్టింగ్‌లు",
+    "maxCallDuration": "గరిష్ట కాల్ వ్యవధి",
+    "retryAttempts": "మళ్ళీ ప్రయత్నాలు",
+    "callInterval": "కాల్ విరామం",
+    "workingHours": "పని గంటలు"
+  },
+  "status": {
+    "active": "యాక్టివ్",
+    "inactive": "ఇన్‌యాక్టివ్",
+    "training": "శిక్షణ"
+  },
+  "actions": {
+    "activate": "యాక్టివేట్ చేయి",
+    "deactivate": "డీయాక్టివేట్ చేయి",
+    "test": "ఏజెంట్‌ను టెస్ట్ చేయి",
+    "clone": "క్లోన్ చేయి",
+    "delete": "తొలగించు"
+  },
+  "calls": {
+    "title": "AI కాలింగ్",
+    "outbound": "అవుట్‌బౌండ్ కాల్స్",
+    "inbound": "ఇన్‌బౌండ్ కాల్స్",
+    "scheduled": "షెడ్యూల్ చేసిన కాల్స్",
+    "makeCall": "కాల్ చేయి",
+    "createCampaign": "ప్రచారం సృష్టించు",
+    "callDetails": "కాల్ వివరాలు",
+    "duration": "వ్యవధి",
+    "outcome": "ఫలితం",
+    "recording": "రికార్డింగ్",
+    "transcript": "ట్రాన్స్‌క్రిప్ట్"
+  },
+  "campaign": {
+    "title": "ప్రచారం",
+    "name": "ప్రచార పేరు",
+    "agent": "ఏజెంట్‌ను ఎంచుకోండి",
+    "leads": "లీడ్‌లను ఎంచుకోండి",
+    "schedule": "షెడ్యూల్",
+    "startNow": "ఇప్పుడు ప్రారంభించు",
+    "scheduleLater": "తర్వాత షెడ్యూల్ చేయి"
+  },
+  "empty": {
+    "title": "ఇంకా ఏజెంట్లు లేరు",
+    "description": "కాల్స్ చేయడం ప్రారంభించడానికి మీ మొదటి AI వాయిస్ ఏజెంట్‌ను సృష్టించండి"
+  }
+}

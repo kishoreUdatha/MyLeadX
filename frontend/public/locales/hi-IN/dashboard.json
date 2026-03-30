@@ -1,0 +1,48 @@
+{
+  "welcome": "वापसी पर स्वागत है, {{name}}!",
+  "subtitle": "आज आपके लीड्स के साथ क्या हो रहा है।",
+  "addLead": "लीड जोड़ें",
+  "stats": {
+    "totalLeads": "कुल लीड्स",
+    "today": "आज",
+    "thisWeek": "इस सप्ताह",
+    "thisMonth": "इस महीने"
+  },
+  "leadsByStatus": {
+    "title": "स्थिति के अनुसार लीड्स",
+    "noLeads": "अभी कोई लीड नहीं",
+    "startBy": "लीड्स अपलोड या बनाकर शुरू करें"
+  },
+  "leadSources": {
+    "title": "लीड स्रोत",
+    "noData": "कोई स्रोत डेटा उपलब्ध नहीं"
+  },
+  "quickActions": {
+    "title": "त्वरित कार्य",
+    "bulkUpload": {
+      "name": "बल्क अपलोड",
+      "description": "Excel/CSV से लीड्स अपलोड करें"
+    },
+    "newLeads": {
+      "name": "नए लीड्स",
+      "description": "असंपर्कित लीड्स देखें"
+    },
+    "createForm": {
+      "name": "फॉर्म बनाएं",
+      "description": "कस्टम लीड फॉर्म बनाएं"
+    },
+    "campaigns": {
+      "name": "अभियान",
+      "description": "बल्क संदेश भेजें"
+    }
+  },
+  "status": {
+    "NEW": "नया",
+    "CONTACTED": "संपर्क किया",
+    "QUALIFIED": "योग्य",
+    "NEGOTIATION": "वार्ता",
+    "WON": "जीता",
+    "LOST": "हारा",
+    "FOLLOW_UP": "फॉलो अप"
+  }
+}

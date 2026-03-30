@@ -1,0 +1,352 @@
+paths:
+  /api/leads:
+    get:
+      summary: List leads
+      tags: [Leads]
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Search by name, email, or phone
+        - in: query
+          name: stageId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: source
+          schema:
+            type: string
+        - in: query
+          name: priority
+          schema:
+            type: string
+            enum: [LOW, MEDIUM, HIGH, URGENT]
+        - in: query
+          name: assignedTo
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            default: createdAt
+        - in: query
+          name: sortOrder
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      leads:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Lead'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+
+    post:
+      summary: Create lead
+      tags: [Leads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadCreate'
+      responses:
+        '201':
+          description: Lead created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Lead'
+
+  /api/leads/bulk-upload:
+    post:
+      summary: Bulk upload leads from CSV
+      tags: [Leads]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                mappings:
+                  type: string
+                  description: JSON string of field mappings
+      responses:
+        '200':
+          description: Bulk upload results
+
+  /api/leads/{id}:
+    get:
+      summary: Get lead by ID
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Lead'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      summary: Update lead
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadCreate'
+      responses:
+        '200':
+          description: Lead updated
+
+    delete:
+      summary: Delete lead
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lead deleted
+
+  /api/leads/{id}/assign:
+    post:
+      summary: Assign lead to user
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignedToId]
+              properties:
+                assignedToId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Lead assigned
+
+  /api/leads/{id}/notes:
+    get:
+      summary: Get lead notes
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lead notes
+
+    post:
+      summary: Add note to lead
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                isPinned:
+                  type: boolean
+      responses:
+        '201':
+          description: Note added
+
+  /api/leads/{id}/tasks:
+    get:
+      summary: Get lead tasks
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lead tasks
+
+    post:
+      summary: Create task for lead
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, assigneeId]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                assigneeId:
+                  type: string
+                  format: uuid
+                dueDate:
+                  type: string
+                  format: date-time
+                priority:
+                  type: string
+                  enum: [LOW, MEDIUM, HIGH, URGENT]
+      responses:
+        '201':
+          description: Task created
+
+  /api/leads/{id}/follow-ups:
+    get:
+      summary: Get lead follow-ups
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lead follow-ups
+
+    post:
+      summary: Schedule follow-up
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduledAt, assigneeId]
+              properties:
+                scheduledAt:
+                  type: string
+                  format: date-time
+                assigneeId:
+                  type: string
+                  format: uuid
+                message:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '201':
+          description: Follow-up scheduled
+
+  /api/leads/{id}/activities:
+    get:
+      summary: Get lead activity timeline
+      tags: [Leads]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Activity timeline

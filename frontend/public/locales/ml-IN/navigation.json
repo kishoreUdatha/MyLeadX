@@ -1,0 +1,36 @@
+{
+  "main": {
+    "dashboard": "ഡാഷ്‌ബോർഡ്",
+    "leads": "ലീഡുകൾ",
+    "users": "ഉപയോക്താക്കൾ",
+    "forms": "ഫോമുകൾ",
+    "landingPages": "ലാൻഡിംഗ് പേജുകൾ",
+    "campaigns": "കാമ്പെയ്‌നുകൾ"
+  },
+  "advanced": {
+    "title": "വിപുലമായത്",
+    "voiceAi": "വോയ്‌സ് AI",
+    "aiCalling": "AI കോളിംഗ്",
+    "hybridInbox": "ഹൈബ്രിഡ് ഇൻബോക്‌സ്",
+    "callHistory": "കോൾ ചരിത്രം",
+    "transferConfig": "ട്രാൻസ്ഫർ കോൺഫിഗ്",
+    "myQueue": "എന്റെ ക്യൂ",
+    "socialMediaAds": "സോഷ്യൽ മീഡിയ പരസ്യങ്ങൾ",
+    "advanced": "വിപുലമായത്",
+    "reports": "റിപ്പോർട്ടുകൾ",
+    "autoAssignSettings": "ഓട്ടോ-അസൈൻ ക്രമീകരണങ്ങൾ",
+    "subscription": "സബ്‌സ്‌ക്രിപ്ഷൻ"
+  },
+  "header": {
+    "searchPlaceholder": "ലീഡുകൾ, കാമ്പെയ്‌നുകൾ തിരയുക...",
+    "bulkUpload": "ബൾക്ക് അപ്‌ലോഡ്",
+    "notifications": "അറിയിപ്പുകൾ",
+    "settings": "ക്രമീകരണങ്ങൾ",
+    "logout": "ലോഗ്ഔട്ട്"
+  },
+  "userMenu": {
+    "profile": "പ്രൊഫൈൽ",
+    "settings": "ക്രമീകരണങ്ങൾ",
+    "logout": "ലോഗ്ഔട്ട്"
+  }
+}

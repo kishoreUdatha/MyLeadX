@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Voice AI - Audio Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 { color: #3b82f6; }
+    button {
+      padding: 20px 40px;
+      font-size: 18px;
+      margin: 10px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .play-btn { background: #10b981; color: white; }
+    .play-btn:hover { background: #059669; }
+    .status {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 10px;
+      background: #f3f4f6;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔊 Voice AI Audio Test</h1>
+  <p>Click the button below to test if you can hear the AI voice</p>
+
+  <button class="play-btn" onclick="testVoice()">
+    🎧 Click to Hear AI Voice
+  </button>
+
+  <div class="status" id="status">
+    Click the button above to test audio
+  </div>
+
+  <script>
+    async function testVoice() {
+      const status = document.getElementById('status');
+      status.innerHTML = '⏳ Generating voice... please wait';
+
+      try {
+        const response = await fetch('http://localhost:3000/api/voice-ai/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: 'Hello! I am your AI voice assistant. If you can hear me, the audio is working correctly. You can now use the Voice AI feature in your CRM.',
+            voice: 'alloy'
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('API request failed');
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+
+        status.innerHTML = '🔊 Playing audio...';
+
+        const audioContext = new AudioContext();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+
+        source.onended = () => {
+          status.innerHTML = '✅ Audio test successful! You can hear the AI voice.';
+        };
+
+        source.start();
+
+      } catch (error) {
+        status.innerHTML = '❌ Error: ' + error.message + '<br><br>Make sure backend is running on port 3000';
+        console.error(error);
+      }
+    }
+  </script>
+</body>
+</html>

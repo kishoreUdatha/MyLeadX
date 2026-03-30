@@ -1,0 +1,89 @@
+{
+  "title": "लीड्स",
+  "subtitle": "तुमचे सर्व लीड्स एकाच ठिकाणी व्यवस्थापित करा आणि ट्रॅक करा.",
+  "addLeads": "लीड्स जोडा",
+  "addLead": "लीड जोडा",
+  "editLead": "लीड संपादित करा",
+  "deleteLead": "लीड हटवा",
+  "viewDetails": "तपशील पहा",
+  "call": "कॉल करा",
+  "search": {
+    "placeholder": "नाव, ईमेल किंवा फोनद्वारे शोधा..."
+  },
+  "filters": {
+    "allStatuses": "सर्व स्थिती",
+    "allSources": "सर्व स्रोत",
+    "filter": "फिल्टर"
+  },
+  "table": {
+    "lead": "लीड",
+    "contact": "संपर्क",
+    "source": "स्रोत",
+    "status": "स्थिती",
+    "assignedTo": "असाइन केले",
+    "created": "तयार केले",
+    "actions": "क्रिया",
+    "unassigned": "असाइन केले नाही",
+    "unknown": "अज्ञात"
+  },
+  "status": {
+    "NEW": "नवीन",
+    "CONTACTED": "संपर्क केला",
+    "QUALIFIED": "पात्र",
+    "NEGOTIATION": "वाटाघाटी",
+    "WON": "जिंकले",
+    "LOST": "गमावले",
+    "FOLLOW_UP": "फॉलो अप"
+  },
+  "source": {
+    "MANUAL": "मॅन्युअल",
+    "BULK_UPLOAD": "बल्क अपलोड",
+    "FORM": "फॉर्म",
+    "LANDING_PAGE": "लँडिंग पेज",
+    "CHATBOT": "चॅटबॉट",
+    "AD_FACEBOOK": "Facebook जाहिराती",
+    "AD_INSTAGRAM": "Instagram जाहिराती",
+    "AD_LINKEDIN": "LinkedIn जाहिराती"
+  },
+  "empty": {
+    "title": "कोणतेही लीड्स सापडले नाहीत",
+    "description": "तुमचे फिल्टर्स समायोजित करण्याचा प्रयत्न करा किंवा नवीन लीड्स जोडा"
+  },
+  "loading": "लीड्स लोड होत आहेत...",
+  "pagination": {
+    "showing": "दाखवत आहे",
+    "to": "ते",
+    "of": "पैकी",
+    "leads": "लीड्स"
+  },
+  "bulkUpload": {
+    "title": "बल्क लीड्स अपलोड करा",
+    "subtitle": "Excel किंवा CSV फाइल्स वापरून एकाच वेळी अनेक लीड्स अपलोड करा",
+    "dropzone": {
+      "title": "तुमची फाइल येथे ड्रॉप करा",
+      "subtitle": "किंवा ब्राउझ करण्यासाठी क्लिक करा",
+      "formats": "CSV, XLS, XLSX फाइल्स समर्थित आहेत"
+    },
+    "processing": "फाइल प्रोसेस होत आहे...",
+    "success": "{{count}} लीड्स यशस्वीरित्या अपलोड झाले",
+    "error": "लीड्स अपलोड करण्यात अयशस्वी",
+    "downloadTemplate": "टेम्पलेट डाउनलोड करा"
+  },
+  "detail": {
+    "title": "लीड तपशील",
+    "basicInfo": "मूलभूत माहिती",
+    "contactInfo": "संपर्क माहिती",
+    "additionalInfo": "अतिरिक्त माहिती",
+    "timeline": "टाइमलाइन",
+    "notes": "टिपा",
+    "addNote": "टीप जोडा",
+    "assignTo": "असाइन करा",
+    "changeStatus": "स्थिती बदला",
+    "makeCall": "कॉल करा",
+    "sendEmail": "ईमेल पाठवा",
+    "sendSms": "SMS पाठवा"
+  },
+  "confirm": {
+    "delete": "तुम्हाला खात्री आहे की तुम्ही हे लीड हटवू इच्छिता?"
+  }
+}

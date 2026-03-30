@@ -1,0 +1,82 @@
+{
+  "title": "ভয়েস AI এজেন্ট",
+  "subtitle": "AI-চালিত ভয়েস এজেন্ট তৈরি এবং পরিচালনা করুন",
+  "createAgent": "এজেন্ট তৈরি করুন",
+  "editAgent": "এজেন্ট সম্পাদনা করুন",
+  "agentName": "এজেন্টের নাম",
+  "agentDescription": "এজেন্টের বিবরণ",
+  "voiceSettings": {
+    "title": "ভয়েস সেটিংস",
+    "language": "ভাষা",
+    "voice": "ভয়েস",
+    "speed": "গতি",
+    "pitch": "পিচ"
+  },
+  "industry": {
+    "title": "শিল্প",
+    "education": "শিক্ষা",
+    "healthcare": "স্বাস্থ্যসেবা",
+    "realEstate": "রিয়েল এস্টেট",
+    "finance": "ফাইন্যান্স",
+    "insurance": "বীমা",
+    "ecommerce": "ই-কমার্স",
+    "technology": "প্রযুক্তি",
+    "hospitality": "আতিথেয়তা",
+    "automotive": "অটোমোটিভ",
+    "retail": "খুচরা",
+    "other": "অন্যান্য"
+  },
+  "script": {
+    "title": "স্ক্রিপ্ট",
+    "greeting": "অভিবাদন",
+    "introduction": "পরিচয়",
+    "questions": "প্রশ্ন",
+    "objectionHandling": "আপত্তি সামলানো",
+    "closing": "সমাপ্তি"
+  },
+  "settings": {
+    "title": "সেটিংস",
+    "maxCallDuration": "সর্বোচ্চ কল সময়কাল",
+    "retryAttempts": "পুনরায় চেষ্টার সংখ্যা",
+    "callInterval": "কল ইন্টারভাল",
+    "workingHours": "কাজের সময়"
+  },
+  "status": {
+    "active": "সক্রিয়",
+    "inactive": "নিষ্ক্রিয়",
+    "training": "প্রশিক্ষণ"
+  },
+  "actions": {
+    "activate": "সক্রিয় করুন",
+    "deactivate": "নিষ্ক্রিয় করুন",
+    "test": "এজেন্ট পরীক্ষা করুন",
+    "clone": "ক্লোন করুন",
+    "delete": "মুছে ফেলুন"
+  },
+  "calls": {
+    "title": "AI কলিং",
+    "outbound": "আউটবাউন্ড কল",
+    "inbound": "ইনবাউন্ড কল",
+    "scheduled": "নির্ধারিত কল",
+    "makeCall": "কল করুন",
+    "createCampaign": "ক্যাম্পেইন তৈরি করুন",
+    "callDetails": "কলের বিস্তারিত",
+    "duration": "সময়কাল",
+    "outcome": "ফলাফল",
+    "recording": "রেকর্ডিং",
+    "transcript": "ট্রান্সক্রিপ্ট"
+  },
+  "campaign": {
+    "title": "ক্যাম্পেইন",
+    "name": "ক্যাম্পেইনের নাম",
+    "agent": "এজেন্ট নির্বাচন করুন",
+    "leads": "লিড নির্বাচন করুন",
+    "schedule": "সময়সূচী",
+    "startNow": "এখনই শুরু করুন",
+    "scheduleLater": "পরে সময়সূচী করুন"
+  },
+  "empty": {
+    "title": "এখনও কোনো এজেন্ট নেই",
+    "description": "কল শুরু করতে আপনার প্রথম AI ভয়েস এজেন্ট তৈরি করুন"
+  }
+}

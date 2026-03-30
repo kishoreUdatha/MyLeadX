@@ -1,0 +1,36 @@
+{
+  "main": {
+    "dashboard": "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+    "leads": "ಲೀಡ್‌ಗಳು",
+    "users": "ಬಳಕೆದಾರರು",
+    "forms": "ಫಾರ್ಮ್‌ಗಳು",
+    "landingPages": "ಲ್ಯಾಂಡಿಂಗ್ ಪುಟಗಳು",
+    "campaigns": "ಅಭಿಯಾನಗಳು"
+  },
+  "advanced": {
+    "title": "ಮುಂದುವರಿದ",
+    "voiceAi": "Voice AI",
+    "aiCalling": "AI ಕರೆಗಳು",
+    "hybridInbox": "ಹೈಬ್ರಿಡ್ ಇನ್‌ಬಾಕ್ಸ್",
+    "callHistory": "ಕರೆ ಇತಿಹಾಸ",
+    "transferConfig": "ವರ್ಗಾವಣೆ ಕಾನ್ಫಿಗ್",
+    "myQueue": "ನನ್ನ ಕ್ಯೂ",
+    "socialMediaAds": "ಸಾಮಾಜಿಕ ಮಾಧ್ಯಮ ಜಾಹೀರಾತುಗಳು",
+    "advanced": "ಮುಂದುವರಿದ",
+    "reports": "ವರದಿಗಳು",
+    "autoAssignSettings": "ಸ್ವಯಂ-ನಿಯೋಜನೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "subscription": "ಚಂದಾದಾರಿಕೆ"
+  },
+  "header": {
+    "searchPlaceholder": "ಲೀಡ್‌ಗಳು, ಅಭಿಯಾನಗಳನ್ನು ಹುಡುಕಿ...",
+    "bulkUpload": "ಬಲ್ಕ್ ಅಪ್‌ಲೋಡ್",
+    "notifications": "ಅಧಿಸೂಚನೆಗಳು",
+    "settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "logout": "ಲಾಗ್ ಔಟ್"
+  },
+  "userMenu": {
+    "profile": "ಪ್ರೊಫೈಲ್",
+    "settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "logout": "ಲಾಗ್ ಔಟ್"
+  }
+}

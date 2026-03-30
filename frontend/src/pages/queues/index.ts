@@ -1,0 +1,1 @@
+export { QueueManagementPage } from './QueueManagementPage';

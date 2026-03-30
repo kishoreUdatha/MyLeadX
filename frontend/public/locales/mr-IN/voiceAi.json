@@ -1,0 +1,82 @@
+{
+  "title": "Voice AI एजंट्स",
+  "subtitle": "AI-पावर्ड व्हॉइस एजंट्स तयार करा आणि व्यवस्थापित करा",
+  "createAgent": "एजंट तयार करा",
+  "editAgent": "एजंट संपादित करा",
+  "agentName": "एजंटचे नाव",
+  "agentDescription": "एजंटचे वर्णन",
+  "voiceSettings": {
+    "title": "व्हॉइस सेटिंग्ज",
+    "language": "भाषा",
+    "voice": "आवाज",
+    "speed": "वेग",
+    "pitch": "पिच"
+  },
+  "industry": {
+    "title": "उद्योग",
+    "education": "शिक्षण",
+    "healthcare": "आरोग्य सेवा",
+    "realEstate": "रिअल इस्टेट",
+    "finance": "वित्त",
+    "insurance": "विमा",
+    "ecommerce": "ई-कॉमर्स",
+    "technology": "तंत्रज्ञान",
+    "hospitality": "आदरातिथ्य",
+    "automotive": "ऑटोमोटिव्ह",
+    "retail": "रिटेल",
+    "other": "इतर"
+  },
+  "script": {
+    "title": "स्क्रिप्ट",
+    "greeting": "अभिवादन",
+    "introduction": "परिचय",
+    "questions": "प्रश्न",
+    "objectionHandling": "आक्षेप हाताळणी",
+    "closing": "समारोप"
+  },
+  "settings": {
+    "title": "सेटिंग्ज",
+    "maxCallDuration": "कमाल कॉल कालावधी",
+    "retryAttempts": "पुन्हा प्रयत्न",
+    "callInterval": "कॉल अंतर",
+    "workingHours": "कामाचे तास"
+  },
+  "status": {
+    "active": "सक्रिय",
+    "inactive": "निष्क्रिय",
+    "training": "प्रशिक्षण"
+  },
+  "actions": {
+    "activate": "सक्रिय करा",
+    "deactivate": "निष्क्रिय करा",
+    "test": "एजंट चाचणी करा",
+    "clone": "क्लोन करा",
+    "delete": "हटवा"
+  },
+  "calls": {
+    "title": "AI कॉलिंग",
+    "outbound": "आउटबाउंड कॉल्स",
+    "inbound": "इनबाउंड कॉल्स",
+    "scheduled": "शेड्यूल्ड कॉल्स",
+    "makeCall": "कॉल करा",
+    "createCampaign": "मोहीम तयार करा",
+    "callDetails": "कॉल तपशील",
+    "duration": "कालावधी",
+    "outcome": "निकाल",
+    "recording": "रेकॉर्डिंग",
+    "transcript": "ट्रान्सक्रिप्ट"
+  },
+  "campaign": {
+    "title": "मोहीम",
+    "name": "मोहिमेचे नाव",
+    "agent": "एजंट निवडा",
+    "leads": "लीड्स निवडा",
+    "schedule": "शेड्यूल",
+    "startNow": "आता सुरू करा",
+    "scheduleLater": "नंतरसाठी शेड्यूल करा"
+  },
+  "empty": {
+    "title": "अजून एजंट्स नाहीत",
+    "description": "कॉल करणे सुरू करण्यासाठी तुमचा पहिला AI व्हॉइस एजंट तयार करा"
+  }
+}

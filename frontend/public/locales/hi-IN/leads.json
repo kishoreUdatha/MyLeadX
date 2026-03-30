@@ -1,0 +1,115 @@
+{
+  "title": "लीड्स",
+  "subtitle": "अपने सभी लीड्स को एक जगह प्रबंधित और ट्रैक करें।",
+  "addLeads": "लीड्स जोड़ें",
+  "addLead": "लीड जोड़ें",
+  "editLead": "लीड संपादित करें",
+  "deleteLead": "लीड हटाएं",
+  "viewDetails": "विवरण देखें",
+  "call": "कॉल करें",
+  "search": {
+    "placeholder": "नाम, ईमेल या फ़ोन से खोजें..."
+  },
+  "filters": {
+    "allStatuses": "सभी स्थितियां",
+    "allSources": "सभी स्रोत",
+    "filter": "फ़िल्टर"
+  },
+  "table": {
+    "lead": "लीड",
+    "contact": "संपर्क",
+    "source": "स्रोत",
+    "status": "स्थिति",
+    "assignedTo": "को सौंपा गया",
+    "created": "बनाया गया",
+    "actions": "कार्य",
+    "unassigned": "असाइन नहीं",
+    "unknown": "अज्ञात"
+  },
+  "status": {
+    "NEW": "नया",
+    "CONTACTED": "संपर्क किया",
+    "QUALIFIED": "योग्य",
+    "NEGOTIATION": "वार्ता",
+    "WON": "जीता",
+    "LOST": "हारा",
+    "FOLLOW_UP": "फॉलो अप"
+  },
+  "source": {
+    "MANUAL": "मैन्युअल",
+    "BULK_UPLOAD": "बल्क अपलोड",
+    "FORM": "फॉर्म",
+    "LANDING_PAGE": "लैंडिंग पेज",
+    "CHATBOT": "चैटबॉट",
+    "AD_FACEBOOK": "फेसबुक विज्ञापन",
+    "AD_INSTAGRAM": "इंस्टाग्राम विज्ञापन",
+    "AD_LINKEDIN": "लिंक्डइन विज्ञापन"
+  },
+  "empty": {
+    "title": "कोई लीड नहीं मिला",
+    "description": "अपने फ़िल्टर बदलें या नए लीड जोड़ें"
+  },
+  "loading": "लीड्स लोड हो रहे हैं...",
+  "pagination": {
+    "showing": "दिखा रहे हैं",
+    "to": "से",
+    "of": "का",
+    "leads": "लीड्स"
+  },
+  "bulkUpload": {
+    "title": "बल्क अपलोड लीड्स",
+    "subtitle": "एक साथ कई लीड्स आयात करने के लिए Excel या CSV फ़ाइल अपलोड करें।",
+    "backToLeads": "लीड्स पर वापस जाएं",
+    "dropFile": "अपनी फ़ाइल यहां छोड़ें, या ब्राउज़ करने के लिए क्लिक करें",
+    "supportedFormats": ".xlsx, .xls, और .csv फ़ाइलों का समर्थन करता है (20MB तक)",
+    "requiredColumns": "आवश्यक कॉलम",
+    "optionalColumns": "वैकल्पिक कॉलम",
+    "firstNameDesc": "छात्र का पहला नाम",
+    "phoneDesc": "फ़ोन नंबर (आवश्यक)",
+    "customFieldsNote": "कोई भी अतिरिक्त कॉलम कस्टम फ़ील्ड के रूप में सहेजे जाएंगे",
+    "uploading": "अपलोड हो रहा है...",
+    "uploadButton": "अपलोड और प्रोसेस करें",
+    "assignToCounselors": "काउंसलर्स को सौंपें",
+    "roundRobinNote": "राउंड-रॉबिन वितरण के लिए काउंसलर्स चुनें",
+    "noCounselors": "कोई काउंसलर उपलब्ध नहीं",
+    "activeLeads": "सक्रिय लीड्स",
+    "emptyAssignNote": "सभी काउंसलर्स को सौंपने के लिए खाली छोड़ें",
+    "uploadComplete": "अपलोड पूर्ण",
+    "totalRows": "कुल पंक्तियां",
+    "inserted": "डाले गए",
+    "duplicates": "डुप्लीकेट",
+    "invalid": "अमान्य",
+    "duplicateEntries": "डुप्लीकेट प्रविष्टियां",
+    "validationErrors": "सत्यापन त्रुटियां",
+    "row": "पंक्ति",
+    "uploadAnother": "एक और फ़ाइल अपलोड करें",
+    "viewLeads": "लीड्स देखें",
+    "startCampaign": "AI कॉलिंग अभियान शुरू करें",
+    "dropzone": {
+      "title": "अपनी फ़ाइल यहां छोड़ें",
+      "subtitle": "या ब्राउज़ करने के लिए क्लिक करें",
+      "formats": "CSV, XLS, XLSX फ़ाइलों का समर्थन करता है"
+    },
+    "processing": "फ़ाइल प्रोसेस हो रही है...",
+    "success": "{{count}} लीड्स सफलतापूर्वक अपलोड हुए",
+    "error": "लीड्स अपलोड करने में विफल",
+    "downloadTemplate": "टेम्पलेट डाउनलोड करें"
+  },
+  "detail": {
+    "title": "लीड विवरण",
+    "basicInfo": "मूल जानकारी",
+    "contactInfo": "संपर्क जानकारी",
+    "additionalInfo": "अतिरिक्त जानकारी",
+    "timeline": "टाइमलाइन",
+    "notes": "नोट्स",
+    "addNote": "नोट जोड़ें",
+    "assignTo": "को सौंपें",
+    "changeStatus": "स्थिति बदलें",
+    "makeCall": "कॉल करें",
+    "sendEmail": "ईमेल भेजें",
+    "sendSms": "SMS भेजें"
+  },
+  "confirm": {
+    "delete": "क्या आप वाकई इस लीड को हटाना चाहते हैं?"
+  }
+}

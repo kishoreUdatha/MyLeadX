@@ -1,0 +1,10 @@
+export { default as SocialMediaAdsPage } from './SocialMediaAdsPage';
+export { default as InstagramLeadSetupPage } from './InstagramLeadSetupPage';
+export { default as AdIntegrationsPage } from './AdIntegrationsPage';
+export { default as FacebookSetupPage } from './FacebookSetupPage';
+export { default as LinkedInSetupPage } from './LinkedInSetupPage';
+export { default as GoogleAdsSetupPage } from './GoogleAdsSetupPage';
+export { default as YouTubeSetupPage } from './YouTubeSetupPage';
+export { default as TwitterSetupPage } from './TwitterSetupPage';
+export { default as TikTokSetupPage } from './TikTokSetupPage';
+export { default as WebhookUrlsPage } from './WebhookUrlsPage';

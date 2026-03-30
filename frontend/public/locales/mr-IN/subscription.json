@@ -1,0 +1,88 @@
+{
+  "title": "सबस्क्रिप्शन",
+  "subtitle": "तुमचे सबस्क्रिप्शन आणि बिलिंग व्यवस्थापित करा",
+  "currentPlan": "सध्याचा प्लॅन",
+  "changePlan": "प्लॅन बदला",
+  "cancelSubscription": "सबस्क्रिप्शन रद्द करा",
+  "billing": {
+    "title": "बिलिंग",
+    "nextBillingDate": "पुढील बिलिंग तारीख",
+    "paymentMethod": "पेमेंट पद्धत",
+    "updatePayment": "पेमेंट पद्धत अपडेट करा",
+    "billingHistory": "बिलिंग इतिहास",
+    "downloadInvoice": "इनव्हॉइस डाउनलोड करा"
+  },
+  "plans": {
+    "title": "तुमचा प्लॅन निवडा",
+    "subtitle": "तुमच्या गरजांसाठी सर्वोत्तम प्लॅन निवडा",
+    "monthly": "मासिक",
+    "yearly": "वार्षिक",
+    "savePercent": "{{percent}}% वाचवा",
+    "popular": "सर्वात लोकप्रिय",
+    "currentPlan": "सध्याचा प्लॅन",
+    "selectPlan": "प्लॅन निवडा",
+    "contactSales": "विक्री टीमशी संपर्क साधा"
+  },
+  "starter": {
+    "name": "स्टार्टर",
+    "description": "सुरुवात करणाऱ्या लहान टीम्ससाठी उत्तम",
+    "features": {
+      "leads": "१,००० लीड्सपर्यंत",
+      "users": "३ वापरकर्त्यांपर्यंत",
+      "forms": "५ फॉर्म्स",
+      "campaigns": "मूलभूत मोहिमा",
+      "support": "ईमेल सपोर्ट"
+    }
+  },
+  "professional": {
+    "name": "प्रोफेशनल",
+    "description": "वाढत्या व्यवसायांसाठी",
+    "features": {
+      "leads": "१०,००० लीड्सपर्यंत",
+      "users": "१० वापरकर्त्यांपर्यंत",
+      "forms": "अमर्यादित फॉर्म्स",
+      "campaigns": "प्रगत मोहिमा",
+      "voiceAi": "Voice AI (१०० मिनिटे/महिना)",
+      "support": "प्राधान्य सपोर्ट"
+    }
+  },
+  "enterprise": {
+    "name": "एंटरप्राइझ",
+    "description": "मोठ्या संस्थांसाठी",
+    "features": {
+      "leads": "अमर्यादित लीड्स",
+      "users": "अमर्यादित वापरकर्ते",
+      "forms": "अमर्यादित फॉर्म्स",
+      "campaigns": "सानुकूल मोहिमा",
+      "voiceAi": "Voice AI (अमर्यादित)",
+      "api": "API ऍक्सेस",
+      "support": "२४/७ समर्पित सपोर्ट",
+      "sla": "सानुकूल SLA"
+    }
+  },
+  "checkout": {
+    "title": "चेकआउट",
+    "orderSummary": "ऑर्डर सारांश",
+    "subtotal": "उपएकूण",
+    "tax": "कर",
+    "total": "एकूण",
+    "payNow": "आता पेमेंट करा",
+    "processing": "प्रोसेसिंग होत आहे...",
+    "secure": "Stripe द्वारे सुरक्षित पेमेंट"
+  },
+  "success": {
+    "title": "पेमेंट यशस्वी!",
+    "subtitle": "तुमच्या सबस्क्रिप्शनबद्दल धन्यवाद",
+    "goToDashboard": "डॅशबोर्डवर जा"
+  },
+  "management": {
+    "title": "सबस्क्रिप्शन व्यवस्थापन",
+    "usage": "वापर",
+    "leadsUsed": "वापरलेले लीड्स",
+    "usersUsed": "वापरकर्ते",
+    "voiceMinutes": "Voice AI मिनिटे",
+    "renewalDate": "नूतनीकरण तारीख",
+    "upgrade": "प्लॅन अपग्रेड करा",
+    "downgrade": "प्लॅन डाउनग्रेड करा"
+  }
+}

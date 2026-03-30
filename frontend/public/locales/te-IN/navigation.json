@@ -1,0 +1,36 @@
+{
+  "main": {
+    "dashboard": "డాష్‌బోర్డ్",
+    "leads": "లీడ్‌లు",
+    "users": "వినియోగదారులు",
+    "forms": "ఫారాలు",
+    "landingPages": "ల్యాండింగ్ పేజీలు",
+    "campaigns": "ప్రచారాలు"
+  },
+  "advanced": {
+    "title": "అధునాతన",
+    "voiceAi": "Voice AI",
+    "aiCalling": "AI కాలింగ్",
+    "hybridInbox": "హైబ్రిడ్ ఇన్‌బాక్స్",
+    "callHistory": "కాల్ చరిత్ర",
+    "transferConfig": "బదిలీ కాన్ఫిగ్",
+    "myQueue": "నా క్యూ",
+    "socialMediaAds": "సోషల్ మీడియా యాడ్స్",
+    "advanced": "అధునాతన",
+    "reports": "నివేదికలు",
+    "autoAssignSettings": "ఆటో-అసైన్ సెట్టింగ్‌లు",
+    "subscription": "సభ్యత్వం"
+  },
+  "header": {
+    "searchPlaceholder": "లీడ్‌లు, ప్రచారాలు వెతకండి...",
+    "bulkUpload": "బల్క్ అప్‌లోడ్",
+    "notifications": "నోటిఫికేషన్లు",
+    "settings": "సెట్టింగ్‌లు",
+    "logout": "లాగ్ అవుట్"
+  },
+  "userMenu": {
+    "profile": "ప్రొఫైల్",
+    "settings": "సెట్టింగ్‌లు",
+    "logout": "లాగ్ అవుట్"
+  }
+}

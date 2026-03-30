@@ -1,0 +1,89 @@
+{
+  "title": "લીડ્સ",
+  "subtitle": "એક જ જગ્યાએ તમારા બધા લીડ્સ મેનેજ અને ટ્રેક કરો.",
+  "addLeads": "લીડ્સ ઉમેરો",
+  "addLead": "લીડ ઉમેરો",
+  "editLead": "લીડ સંપાદિત કરો",
+  "deleteLead": "લીડ કાઢી નાખો",
+  "viewDetails": "વિગતો જુઓ",
+  "call": "કૉલ કરો",
+  "search": {
+    "placeholder": "નામ, ઇમેઇલ અથવા ફોન દ્વારા શોધો..."
+  },
+  "filters": {
+    "allStatuses": "બધી સ્થિતિઓ",
+    "allSources": "બધા સ્ત્રોતો",
+    "filter": "ફિલ્ટર"
+  },
+  "table": {
+    "lead": "લીડ",
+    "contact": "સંપર્ક",
+    "source": "સ્ત્રોત",
+    "status": "સ્થિતિ",
+    "assignedTo": "સોંપેલ",
+    "created": "બનાવ્યું",
+    "actions": "ક્રિયાઓ",
+    "unassigned": "સોંપેલ નથી",
+    "unknown": "અજ્ઞાત"
+  },
+  "status": {
+    "NEW": "નવું",
+    "CONTACTED": "સંપર્ક થયો",
+    "QUALIFIED": "લાયક",
+    "NEGOTIATION": "વાટાઘાટ",
+    "WON": "જીત્યું",
+    "LOST": "હાર્યું",
+    "FOLLOW_UP": "ફોલો અપ"
+  },
+  "source": {
+    "MANUAL": "મેન્યુઅલ",
+    "BULK_UPLOAD": "બલ્ક અપલોડ",
+    "FORM": "ફોર્મ",
+    "LANDING_PAGE": "લેન્ડિંગ પેજ",
+    "CHATBOT": "ચેટબોટ",
+    "AD_FACEBOOK": "ફેસબુક જાહેરાતો",
+    "AD_INSTAGRAM": "ઇન્સ્ટાગ્રામ જાહેરાતો",
+    "AD_LINKEDIN": "લિંક્ડઇન જાહેરાતો"
+  },
+  "empty": {
+    "title": "કોઈ લીડ્સ મળ્યા નથી",
+    "description": "તમારા ફિલ્ટર્સ એડજસ્ટ કરવાનો પ્રયાસ કરો અથવા નવા લીડ્સ ઉમેરો"
+  },
+  "loading": "લીડ્સ લોડ થઈ રહ્યા છે...",
+  "pagination": {
+    "showing": "બતાવી રહ્યા છે",
+    "to": "થી",
+    "of": "માંથી",
+    "leads": "લીડ્સ"
+  },
+  "bulkUpload": {
+    "title": "બલ્ક અપલોડ લીડ્સ",
+    "subtitle": "Excel અથવા CSV ફાઇલ્સનો ઉપયોગ કરીને એક સાથે ઘણા લીડ્સ અપલોડ કરો",
+    "dropzone": {
+      "title": "તમારી ફાઇલ અહીં છોડો",
+      "subtitle": "અથવા બ્રાઉઝ કરવા ક્લિક કરો",
+      "formats": "CSV, XLS, XLSX ફાઇલ્સ સપોર્ટેડ છે"
+    },
+    "processing": "ફાઇલ પ્રોસેસ થઈ રહી છે...",
+    "success": "{{count}} લીડ્સ સફળતાપૂર્વક અપલોડ થયા",
+    "error": "લીડ્સ અપલોડ કરવામાં નિષ્ફળ",
+    "downloadTemplate": "ટેમ્પ્લેટ ડાઉનલોડ કરો"
+  },
+  "detail": {
+    "title": "લીડ વિગતો",
+    "basicInfo": "મૂળભૂત માહિતી",
+    "contactInfo": "સંપર્ક માહિતી",
+    "additionalInfo": "વધારાની માહિતી",
+    "timeline": "ટાઇમલાઇન",
+    "notes": "નોંધો",
+    "addNote": "નોંધ ઉમેરો",
+    "assignTo": "સોંપો",
+    "changeStatus": "સ્થિતિ બદલો",
+    "makeCall": "કૉલ કરો",
+    "sendEmail": "ઇમેઇલ મોકલો",
+    "sendSms": "SMS મોકલો"
+  },
+  "confirm": {
+    "delete": "શું તમે ખરેખર આ લીડ કાઢી નાખવા માંગો છો?"
+  }
+}

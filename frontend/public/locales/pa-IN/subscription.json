@@ -1,0 +1,88 @@
+{
+  "title": "ਸਬਸਕ੍ਰਿਪਸ਼ਨ",
+  "subtitle": "ਆਪਣੀ ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਅਤੇ ਬਿਲਿੰਗ ਪ੍ਰਬੰਧਿਤ ਕਰੋ",
+  "currentPlan": "ਮੌਜੂਦਾ ਯੋਜਨਾ",
+  "changePlan": "ਯੋਜਨਾ ਬਦਲੋ",
+  "cancelSubscription": "ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਰੱਦ ਕਰੋ",
+  "billing": {
+    "title": "ਬਿਲਿੰਗ",
+    "nextBillingDate": "ਅਗਲੀ ਬਿਲਿੰਗ ਮਿਤੀ",
+    "paymentMethod": "ਭੁਗਤਾਨ ਦਾ ਤਰੀਕਾ",
+    "updatePayment": "ਭੁਗਤਾਨ ਦਾ ਤਰੀਕਾ ਅੱਪਡੇਟ ਕਰੋ",
+    "billingHistory": "ਬਿਲਿੰਗ ਇਤਿਹਾਸ",
+    "downloadInvoice": "ਇਨਵੌਇਸ ਡਾਊਨਲੋਡ ਕਰੋ"
+  },
+  "plans": {
+    "title": "ਆਪਣੀ ਯੋਜਨਾ ਚੁਣੋ",
+    "subtitle": "ਆਪਣੀਆਂ ਲੋੜਾਂ ਦੇ ਅਨੁਸਾਰ ਸਭ ਤੋਂ ਵਧੀਆ ਯੋਜਨਾ ਚੁਣੋ",
+    "monthly": "ਮਾਸਿਕ",
+    "yearly": "ਸਾਲਾਨਾ",
+    "savePercent": "{{percent}}% ਬਚਾਓ",
+    "popular": "ਸਭ ਤੋਂ ਪ੍ਰਸਿੱਧ",
+    "currentPlan": "ਮੌਜੂਦਾ ਯੋਜਨਾ",
+    "selectPlan": "ਯੋਜਨਾ ਚੁਣੋ",
+    "contactSales": "ਵਿਕਰੀ ਨਾਲ ਸੰਪਰਕ ਕਰੋ"
+  },
+  "starter": {
+    "name": "ਸਟਾਰਟਰ",
+    "description": "ਸ਼ੁਰੂਆਤ ਕਰ ਰਹੀਆਂ ਛੋਟੀਆਂ ਟੀਮਾਂ ਲਈ ਬਿਲਕੁਲ ਸਹੀ",
+    "features": {
+      "leads": "1,000 ਤੱਕ ਲੀਡਾਂ",
+      "users": "3 ਤੱਕ ਉਪਭੋਗਤਾ",
+      "forms": "5 ਫਾਰਮ",
+      "campaigns": "ਬੇਸਿਕ ਮੁਹਿੰਮਾਂ",
+      "support": "ਈਮੇਲ ਸਹਾਇਤਾ"
+    }
+  },
+  "professional": {
+    "name": "ਪ੍ਰੋਫੈਸ਼ਨਲ",
+    "description": "ਵਧ ਰਹੇ ਕਾਰੋਬਾਰਾਂ ਲਈ",
+    "features": {
+      "leads": "10,000 ਤੱਕ ਲੀਡਾਂ",
+      "users": "10 ਤੱਕ ਉਪਭੋਗਤਾ",
+      "forms": "ਅਸੀਮਿਤ ਫਾਰਮ",
+      "campaigns": "ਐਡਵਾਂਸਡ ਮੁਹਿੰਮਾਂ",
+      "voiceAi": "ਵੌਇਸ AI (100 ਮਿੰਟ/ਮਹੀਨਾ)",
+      "support": "ਤਰਜੀਹੀ ਸਹਾਇਤਾ"
+    }
+  },
+  "enterprise": {
+    "name": "ਐਂਟਰਪ੍ਰਾਈਜ਼",
+    "description": "ਵੱਡੀਆਂ ਸੰਸਥਾਵਾਂ ਲਈ",
+    "features": {
+      "leads": "ਅਸੀਮਿਤ ਲੀਡਾਂ",
+      "users": "ਅਸੀਮਿਤ ਉਪਭੋਗਤਾ",
+      "forms": "ਅਸੀਮਿਤ ਫਾਰਮ",
+      "campaigns": "ਕਸਟਮ ਮੁਹਿੰਮਾਂ",
+      "voiceAi": "ਵੌਇਸ AI (ਅਸੀਮਿਤ)",
+      "api": "API ਪਹੁੰਚ",
+      "support": "24/7 ਸਮਰਪਿਤ ਸਹਾਇਤਾ",
+      "sla": "ਕਸਟਮ SLA"
+    }
+  },
+  "checkout": {
+    "title": "ਚੈੱਕਆਊਟ",
+    "orderSummary": "ਆਰਡਰ ਸਾਰ",
+    "subtotal": "ਉਪ-ਕੁੱਲ",
+    "tax": "ਟੈਕਸ",
+    "total": "ਕੁੱਲ",
+    "payNow": "ਹੁਣੇ ਭੁਗਤਾਨ ਕਰੋ",
+    "processing": "ਪ੍ਰੋਸੈਸ ਹੋ ਰਿਹਾ ਹੈ...",
+    "secure": "Stripe ਦੁਆਰਾ ਸੁਰੱਖਿਅਤ ਭੁਗਤਾਨ"
+  },
+  "success": {
+    "title": "ਭੁਗਤਾਨ ਸਫਲ!",
+    "subtitle": "ਤੁਹਾਡੀ ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਲਈ ਧੰਨਵਾਦ",
+    "goToDashboard": "ਡੈਸ਼ਬੋਰਡ ਤੇ ਜਾਓ"
+  },
+  "management": {
+    "title": "ਸਬਸਕ੍ਰਿਪਸ਼ਨ ਪ੍ਰਬੰਧਨ",
+    "usage": "ਵਰਤੋਂ",
+    "leadsUsed": "ਵਰਤੀਆਂ ਲੀਡਾਂ",
+    "usersUsed": "ਉਪਭੋਗਤਾ",
+    "voiceMinutes": "ਵੌਇਸ AI ਮਿੰਟ",
+    "renewalDate": "ਨਵੀਨੀਕਰਨ ਮਿਤੀ",
+    "upgrade": "ਯੋਜਨਾ ਅੱਪਗ੍ਰੇਡ ਕਰੋ",
+    "downgrade": "ਯੋਜਨਾ ਡਾਊਨਗ੍ਰੇਡ ਕਰੋ"
+  }
+}

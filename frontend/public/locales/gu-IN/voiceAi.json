@@ -1,0 +1,82 @@
+{
+  "title": "વૉઇસ AI એજન્ટ્સ",
+  "subtitle": "AI-પાવર્ડ વૉઇસ એજન્ટ્સ બનાવો અને મેનેજ કરો",
+  "createAgent": "એજન્ટ બનાવો",
+  "editAgent": "એજન્ટ સંપાદિત કરો",
+  "agentName": "એજન્ટ નામ",
+  "agentDescription": "એજન્ટ વર્ણન",
+  "voiceSettings": {
+    "title": "વૉઇસ સેટિંગ્સ",
+    "language": "ભાષા",
+    "voice": "અવાજ",
+    "speed": "ઝડપ",
+    "pitch": "પિચ"
+  },
+  "industry": {
+    "title": "ઉદ્યોગ",
+    "education": "શિક્ષણ",
+    "healthcare": "આરોગ્યસેવા",
+    "realEstate": "રિયલ એસ્ટેટ",
+    "finance": "નાણાં",
+    "insurance": "વીમો",
+    "ecommerce": "ઈ-કોમર્સ",
+    "technology": "ટેકનોલોજી",
+    "hospitality": "હોસ્પિટાલિટી",
+    "automotive": "ઓટોમોટિવ",
+    "retail": "રીટેલ",
+    "other": "અન્ય"
+  },
+  "script": {
+    "title": "સ્ક્રિપ્ટ",
+    "greeting": "અભિવાદન",
+    "introduction": "પરિચય",
+    "questions": "પ્રશ્નો",
+    "objectionHandling": "વાંધા હેન્ડલિંગ",
+    "closing": "સમાપ્તિ"
+  },
+  "settings": {
+    "title": "સેટિંગ્સ",
+    "maxCallDuration": "મહત્તમ કૉલ અવધિ",
+    "retryAttempts": "ફરી પ્રયાસ",
+    "callInterval": "કૉલ અંતરાલ",
+    "workingHours": "કામના કલાકો"
+  },
+  "status": {
+    "active": "સક્રિય",
+    "inactive": "નિષ્ક્રિય",
+    "training": "તાલીમ"
+  },
+  "actions": {
+    "activate": "સક્રિય કરો",
+    "deactivate": "નિષ્ક્રિય કરો",
+    "test": "એજન્ટ ટેસ્ટ કરો",
+    "clone": "ક્લોન કરો",
+    "delete": "કાઢી નાખો"
+  },
+  "calls": {
+    "title": "AI કૉલિંગ",
+    "outbound": "આઉટબાઉન્ડ કૉલ્સ",
+    "inbound": "ઇનબાઉન્ડ કૉલ્સ",
+    "scheduled": "શેડ્યૂલ્ડ કૉલ્સ",
+    "makeCall": "કૉલ કરો",
+    "createCampaign": "કેમ્પેઇન બનાવો",
+    "callDetails": "કૉલ વિગતો",
+    "duration": "અવધિ",
+    "outcome": "પરિણામ",
+    "recording": "રેકોર્ડિંગ",
+    "transcript": "ટ્રાન્સક્રિપ્ટ"
+  },
+  "campaign": {
+    "title": "કેમ્પેઇન",
+    "name": "કેમ્પેઇન નામ",
+    "agent": "એજન્ટ પસંદ કરો",
+    "leads": "લીડ્સ પસંદ કરો",
+    "schedule": "શેડ્યૂલ",
+    "startNow": "હમણાં શરૂ કરો",
+    "scheduleLater": "પછીથી શેડ્યૂલ કરો"
+  },
+  "empty": {
+    "title": "હજુ સુધી કોઈ એજન્ટ્સ નથી",
+    "description": "કૉલ્સ કરવાનું શરૂ કરવા માટે તમારો પ્રથમ AI વૉઇસ એજન્ટ બનાવો"
+  }
+}

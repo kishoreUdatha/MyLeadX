@@ -1,0 +1,36 @@
+{
+  "main": {
+    "dashboard": "डॅशबोर्ड",
+    "leads": "लीड्स",
+    "users": "वापरकर्ते",
+    "forms": "फॉर्म्स",
+    "landingPages": "लँडिंग पेजेस",
+    "campaigns": "मोहिमा"
+  },
+  "advanced": {
+    "title": "प्रगत",
+    "voiceAi": "Voice AI",
+    "aiCalling": "AI कॉलिंग",
+    "hybridInbox": "हायब्रिड इनबॉक्स",
+    "callHistory": "कॉल इतिहास",
+    "transferConfig": "ट्रान्सफर कॉन्फिग",
+    "myQueue": "माझी क्यू",
+    "socialMediaAds": "सोशल मीडिया जाहिराती",
+    "advanced": "प्रगत",
+    "reports": "अहवाल",
+    "autoAssignSettings": "स्वयं-असाइन सेटिंग्ज",
+    "subscription": "सबस्क्रिप्शन"
+  },
+  "header": {
+    "searchPlaceholder": "लीड्स, मोहिमा शोधा...",
+    "bulkUpload": "बल्क अपलोड",
+    "notifications": "सूचना",
+    "settings": "सेटिंग्ज",
+    "logout": "लॉगआउट"
+  },
+  "userMenu": {
+    "profile": "प्रोफाइल",
+    "settings": "सेटिंग्ज",
+    "logout": "लॉगआउट"
+  }
+}

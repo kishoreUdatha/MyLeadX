@@ -1,0 +1,370 @@
+paths:
+  # Voice Agents
+  /api/voice-ai/agents:
+    get:
+      summary: List voice agents
+      tags: [Voice AI]
+      responses:
+        '200':
+          description: List of voice agents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoiceAgent'
+
+    post:
+      summary: Create voice agent
+      tags: [Voice AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, industry, systemPrompt]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                industry:
+                  type: string
+                  enum: [EDUCATION, IT_RECRUITMENT, REAL_ESTATE, CUSTOMER_CARE, HEALTHCARE, FINANCE, ECOMMERCE, CUSTOM]
+                systemPrompt:
+                  type: string
+                voiceId:
+                  type: string
+                  enum: [alloy, echo, fable, onyx, nova, shimmer]
+                  default: alloy
+                language:
+                  type: string
+                  default: en
+                temperature:
+                  type: number
+                  default: 0.7
+                questions:
+                  type: array
+                  items:
+                    type: object
+                knowledgeBase:
+                  type: string
+                faqs:
+                  type: array
+                  items:
+                    type: object
+                greeting:
+                  type: string
+                fallbackMessage:
+                  type: string
+                maxDuration:
+                  type: integer
+                  default: 300
+      responses:
+        '201':
+          description: Agent created
+
+  /api/voice-ai/agents/{id}:
+    get:
+      summary: Get voice agent
+      tags: [Voice AI]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Voice agent details
+
+    put:
+      summary: Update voice agent
+      tags: [Voice AI]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Agent updated
+
+    delete:
+      summary: Delete voice agent
+      tags: [Voice AI]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Agent deleted
+
+  /api/voice-ai/agents/{id}/widget:
+    get:
+      summary: Get widget embed code
+      tags: [Voice AI]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Widget embed code
+
+  /api/voice-ai/sessions:
+    get:
+      summary: List voice sessions
+      tags: [Voice AI]
+      parameters:
+        - in: query
+          name: agentId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ACTIVE, COMPLETED, TRANSFERRED, ABANDONED, ERROR]
+      responses:
+        '200':
+          description: List of sessions
+
+  /api/voice-ai/sessions/{id}:
+    get:
+      summary: Get session details
+      tags: [Voice AI]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session details with transcript
+
+  # Outbound Calls
+  /api/outbound-calls/campaigns:
+    get:
+      summary: List outbound campaigns
+      tags: [Outbound Calls]
+      responses:
+        '200':
+          description: List of campaigns
+
+    post:
+      summary: Create outbound campaign
+      tags: [Outbound Calls]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, agentId]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                agentId:
+                  type: string
+                  format: uuid
+                maxConcurrentCalls:
+                  type: integer
+                  default: 1
+                callsBetweenHours:
+                  type: object
+                  properties:
+                    start:
+                      type: integer
+                    end:
+                      type: integer
+                retryAttempts:
+                  type: integer
+                  default: 2
+                retryDelayMinutes:
+                  type: integer
+                  default: 30
+      responses:
+        '201':
+          description: Campaign created
+
+  /api/outbound-calls/campaigns/{id}:
+    get:
+      summary: Get campaign details
+      tags: [Outbound Calls]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campaign details
+
+  /api/outbound-calls/campaigns/{id}/start:
+    post:
+      summary: Start campaign
+      tags: [Outbound Calls]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campaign started
+
+  /api/outbound-calls/campaigns/{id}/pause:
+    post:
+      summary: Pause campaign
+      tags: [Outbound Calls]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campaign paused
+
+  /api/outbound-calls/campaigns/{id}/contacts:
+    post:
+      summary: Add contacts to campaign
+      tags: [Outbound Calls]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contacts]
+              properties:
+                contacts:
+                  type: array
+                  items:
+                    type: object
+                    required: [phone]
+                    properties:
+                      phone:
+                        type: string
+                      name:
+                        type: string
+                      email:
+                        type: string
+                      leadId:
+                        type: string
+                      customData:
+                        type: object
+      responses:
+        '201':
+          description: Contacts added
+
+  /api/outbound-calls/single:
+    post:
+      summary: Make single outbound call
+      tags: [Outbound Calls]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agentId, phoneNumber]
+              properties:
+                agentId:
+                  type: string
+                  format: uuid
+                phoneNumber:
+                  type: string
+                leadId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Call initiated
+
+  /api/outbound-calls/calls:
+    get:
+      summary: List outbound calls
+      tags: [Outbound Calls]
+      parameters:
+        - in: query
+          name: campaignId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: outcome
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of calls
+
+  /api/outbound-calls/calls/{id}:
+    get:
+      summary: Get call details
+      tags: [Outbound Calls]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Call details with transcript
+
+  /api/outbound-calls/calls/{id}/recording:
+    get:
+      summary: Get call recording
+      tags: [Outbound Calls]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Recording URL

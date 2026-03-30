@@ -1,0 +1,82 @@
+{
+  "title": "Voice AI ಏಜೆಂಟ್‌ಗಳು",
+  "subtitle": "AI-ಪವರ್ಡ್ ವಾಯ್ಸ್ ಏಜೆಂಟ್‌ಗಳನ್ನು ರಚಿಸಿ ಮತ್ತು ನಿರ್ವಹಿಸಿ",
+  "createAgent": "ಏಜೆಂಟ್ ರಚಿಸಿ",
+  "editAgent": "ಏಜೆಂಟ್ ಸಂಪಾದಿಸಿ",
+  "agentName": "ಏಜೆಂಟ್ ಹೆಸರು",
+  "agentDescription": "ಏಜೆಂಟ್ ವಿವರಣೆ",
+  "voiceSettings": {
+    "title": "ವಾಯ್ಸ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "language": "ಭಾಷೆ",
+    "voice": "ಧ್ವನಿ",
+    "speed": "ವೇಗ",
+    "pitch": "ಪಿಚ್"
+  },
+  "industry": {
+    "title": "ಉದ್ಯಮ",
+    "education": "ಶಿಕ್ಷಣ",
+    "healthcare": "ಆರೋಗ್ಯ ಸೇವೆ",
+    "realEstate": "ರಿಯಲ್ ಎಸ್ಟೇಟ್",
+    "finance": "ಹಣಕಾಸು",
+    "insurance": "ವಿಮೆ",
+    "ecommerce": "ಇ-ಕಾಮರ್ಸ್",
+    "technology": "ತಂತ್ರಜ್ಞಾನ",
+    "hospitality": "ಆತಿಥ್ಯ",
+    "automotive": "ಆಟೋಮೋಟಿವ್",
+    "retail": "ಚಿಲ್ಲರೆ",
+    "other": "ಇತರೆ"
+  },
+  "script": {
+    "title": "ಸ್ಕ್ರಿಪ್ಟ್",
+    "greeting": "ಶುಭಾಶಯ",
+    "introduction": "ಪರಿಚಯ",
+    "questions": "ಪ್ರಶ್ನೆಗಳು",
+    "objectionHandling": "ಆಕ್ಷೇಪಣೆ ನಿರ್ವಹಣೆ",
+    "closing": "ಮುಕ್ತಾಯ"
+  },
+  "settings": {
+    "title": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "maxCallDuration": "ಗರಿಷ್ಠ ಕರೆ ಅವಧಿ",
+    "retryAttempts": "ಮರು ಪ್ರಯತ್ನಗಳು",
+    "callInterval": "ಕರೆ ಮಧ್ಯಂತರ",
+    "workingHours": "ಕೆಲಸದ ಸಮಯ"
+  },
+  "status": {
+    "active": "ಸಕ್ರಿಯ",
+    "inactive": "ನಿಷ್ಕ್ರಿಯ",
+    "training": "ತರಬೇತಿ"
+  },
+  "actions": {
+    "activate": "ಸಕ್ರಿಯಗೊಳಿಸಿ",
+    "deactivate": "ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ",
+    "test": "ಏಜೆಂಟ್ ಪರೀಕ್ಷಿಸಿ",
+    "clone": "ಕ್ಲೋನ್ ಮಾಡಿ",
+    "delete": "ಅಳಿಸಿ"
+  },
+  "calls": {
+    "title": "AI ಕರೆಗಳು",
+    "outbound": "ಹೊರಹೋಗುವ ಕರೆಗಳು",
+    "inbound": "ಒಳಬರುವ ಕರೆಗಳು",
+    "scheduled": "ನಿಗದಿತ ಕರೆಗಳು",
+    "makeCall": "ಕರೆ ಮಾಡಿ",
+    "createCampaign": "ಅಭಿಯಾನ ರಚಿಸಿ",
+    "callDetails": "ಕರೆ ವಿವರಗಳು",
+    "duration": "ಅವಧಿ",
+    "outcome": "ಫಲಿತಾಂಶ",
+    "recording": "ರೆಕಾರ್ಡಿಂಗ್",
+    "transcript": "ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್"
+  },
+  "campaign": {
+    "title": "ಅಭಿಯಾನ",
+    "name": "ಅಭಿಯಾನ ಹೆಸರು",
+    "agent": "ಏಜೆಂಟ್ ಆಯ್ಕೆಮಾಡಿ",
+    "leads": "ಲೀಡ್‌ಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "schedule": "ವೇಳಾಪಟ್ಟಿ",
+    "startNow": "ಈಗಲೇ ಪ್ರಾರಂಭಿಸಿ",
+    "scheduleLater": "ನಂತರ ವೇಳಾಪಟ್ಟಿ ಮಾಡಿ"
+  },
+  "empty": {
+    "title": "ಇನ್ನೂ ಏಜೆಂಟ್‌ಗಳಿಲ್ಲ",
+    "description": "ಕರೆಗಳನ್ನು ಪ್ರಾರಂಭಿಸಲು ನಿಮ್ಮ ಮೊದಲ AI ವಾಯ್ಸ್ ಏಜೆಂಟ್ ರಚಿಸಿ"
+  }
+}
