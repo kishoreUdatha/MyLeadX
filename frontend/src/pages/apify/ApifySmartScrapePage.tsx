@@ -186,7 +186,7 @@ export default function ApifySmartScrapePage() {
           <button
             onClick={handleSaveToken}
             disabled={isTestingToken || !apiToken.trim()}
-            className="w-full py-2 text-xs font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full py-2 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isTestingToken ? (
               <>
@@ -300,7 +300,7 @@ export default function ApifySmartScrapePage() {
           <button
             onClick={handleSmartScrape}
             disabled={isProcessing || !prompt.trim()}
-            className="px-4 py-1.5 text-xs font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
+            className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5"
           >
             {isProcessing ? (
               <>

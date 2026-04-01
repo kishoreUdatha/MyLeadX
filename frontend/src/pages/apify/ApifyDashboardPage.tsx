@@ -212,7 +212,7 @@ export default function ApifyDashboardPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/apify-smart')}
-            className="btn btn-sm flex items-center gap-1 text-xs bg-purple-600 hover:bg-purple-700 text-white"
+            className="btn btn-sm flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl"
           >
             <SparklesIcon className="h-4 w-4" />
             Smart Scrape

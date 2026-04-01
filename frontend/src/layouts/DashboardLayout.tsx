@@ -57,39 +57,35 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 
 // ===========================================
-// CLEAN NAVIGATION - Organized by Business Function
+// NAVIGATION - Organized by Product Area
 // ===========================================
 
-// Main Navigation - Core daily workflow (visible to all)
+// 1. MAIN - Core daily workflow (always visible)
 const mainNavigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['admin', 'manager', 'counselor', 'telecaller'] },
   { name: 'Assigned Data', href: '/assigned-data', icon: DocumentArrowUpIcon, roles: ['telecaller', 'counselor'] },
   { name: 'My Conversions', href: '/qualified-leads', icon: TrophyIcon, roles: ['telecaller'] },
-  { name: 'Leads', href: '/leads', icon: UserGroupIcon, roles: ['admin', 'manager', 'counselor', 'telecaller'] },
-  { name: 'Inbox', href: '/hybrid-inbox', icon: ChatBubbleLeftRightIcon, roles: ['admin', 'manager', 'counselor', 'telecaller'] },
 ];
 
-// Voice AI - AI Agents & Automation
+// 2. CRM - Lead Management & Communication
+const crmNavigation: NavItem[] = [
+  { name: 'Leads', href: '/leads', icon: UserGroupIcon, roles: ['admin', 'manager', 'counselor', 'telecaller'] },
+  { name: 'Inbox', href: '/hybrid-inbox', icon: ChatBubbleLeftRightIcon, roles: ['admin', 'manager', 'counselor', 'telecaller'] },
+  { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon, roles: ['admin', 'manager', 'counselor'] },
+  { name: 'Bulk WhatsApp', href: '/whatsapp/bulk', icon: WhatsAppIcon, roles: ['admin', 'manager', 'counselor'] },
+  { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['admin', 'manager'] },
+];
+
+// 3. VOICE AI - AI Agents & Automated Calling
 const voiceAINavigation: NavItem[] = [
   { name: 'Voice Agents', href: '/voice-ai', icon: SparklesIcon, roles: ['admin', 'manager'] },
   { name: 'Call Flows', href: '/call-flows', icon: ArrowPathRoundedSquareIcon, roles: ['admin', 'manager'] },
-];
-
-// Calls - Calling Operations
-const callsNavigation: NavItem[] = [
   { name: 'Outbound Calls', href: '/outbound-calls', icon: PhoneIcon, roles: ['admin', 'manager', 'telecaller'] },
   { name: 'Call Queue', href: '/telecaller-queue', icon: QueueListIcon, roles: ['admin', 'manager', 'telecaller'] },
   { name: 'Call Monitoring', href: '/call-monitoring', icon: EyeIcon, roles: ['admin', 'manager'] },
 ];
 
-// Messaging - WhatsApp, SMS, Campaigns
-const messagingNavigation: NavItem[] = [
-  { name: 'Bulk WhatsApp', href: '/whatsapp/bulk', icon: WhatsAppIcon, roles: ['admin', 'manager', 'counselor'] },
-  { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon, roles: ['admin', 'manager', 'counselor'] },
-  { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['admin', 'manager'] },
-];
-
-// Data - Import & Lead Sources
+// 4. DATA - Import & Lead Sources
 const dataNavigation: NavItem[] = [
   { name: 'Import Data', href: '/raw-imports', icon: DocumentArrowUpIcon, roles: ['admin', 'manager'] },
   { name: 'Ad Integrations', href: '/ad-integrations', icon: ArrowPathRoundedSquareIcon, roles: ['admin', 'manager'] },
@@ -97,34 +93,32 @@ const dataNavigation: NavItem[] = [
   { name: 'Web Scraping', href: '/apify-dashboard', icon: MagnifyingGlassCircleIcon, roles: ['admin', 'manager'] },
 ];
 
-// Field Sales - B2B College Sales
+// 5. FIELD SALES - B2B College Sales
 const fieldSalesNavigation: NavItem[] = [
-  { name: 'Dashboard', href: '/field-sales', icon: BriefcaseIcon, roles: ['admin', 'manager', 'owner', 'field_sales', 'counselor'] },
+  { name: 'Overview', href: '/field-sales', icon: BriefcaseIcon, roles: ['admin', 'manager', 'owner', 'field_sales', 'counselor'] },
   { name: 'Colleges', href: '/field-sales/colleges', icon: BuildingOffice2Icon, roles: ['admin', 'manager', 'owner', 'field_sales', 'counselor'] },
   { name: 'Visits', href: '/field-sales/visits', icon: MapPinIcon, roles: ['admin', 'manager', 'owner', 'field_sales', 'counselor'] },
-  { name: 'Deal Pipeline', href: '/field-sales/deals', icon: FunnelIcon, roles: ['admin', 'manager', 'owner', 'field_sales', 'counselor'] },
+  { name: 'Deals', href: '/field-sales/deals', icon: FunnelIcon, roles: ['admin', 'manager', 'owner', 'field_sales', 'counselor'] },
   { name: 'Expenses', href: '/field-sales/expenses', icon: CurrencyRupeeIcon, roles: ['admin', 'manager', 'owner', 'field_sales', 'counselor'] },
 ];
 
-// Analytics - Reports & insights (consolidated)
-const analyticsNavigation: NavItem[] = [
+// 6. REPORTS - Analytics & insights
+const reportsNavigation: NavItem[] = [
   { name: 'Overview', href: '/analytics', icon: PresentationChartLineIcon, roles: ['admin', 'manager'] },
   { name: 'Reports', href: '/reports', icon: ChartBarIcon, roles: ['admin', 'manager'] },
   { name: 'Funnel', href: '/analytics/funnel', icon: FunnelIcon, roles: ['admin', 'manager'] },
-  { name: 'Agent Performance', href: '/analytics/agents', icon: TrophyIcon, roles: ['admin', 'manager'] },
+  { name: 'Performance', href: '/analytics/agents', icon: TrophyIcon, roles: ['admin', 'manager'] },
 ];
 
-// Settings - All Configuration (consolidated)
+// 7. SETTINGS - Configuration
 const settingsNavigation: NavItem[] = [
   { name: 'Users', href: '/users', icon: UsersIcon, roles: ['admin'] },
   { name: 'Organization', href: '/settings/institution', icon: Cog6ToothIcon, roles: ['admin'] },
-  { name: 'API Credentials', href: '/settings/integrations', icon: KeyIcon, roles: ['admin'] },
-  { name: 'WhatsApp', href: '/settings/whatsapp', icon: WhatsAppIcon, roles: ['admin', 'manager'] },
-  { name: 'SMS', href: '/settings/sms', icon: ChatBubbleLeftRightIcon, roles: ['admin', 'manager'] },
+  { name: 'Integrations', href: '/settings/integrations', icon: KeyIcon, roles: ['admin'] },
+  { name: 'Channels', href: '/settings/whatsapp', icon: WhatsAppIcon, roles: ['admin', 'manager'] },
   { name: 'Auto-Assign', href: '/settings/auto-assign', icon: BoltIcon, roles: ['admin', 'manager'] },
-  { name: 'CRM Integrations', href: '/settings/crm-integration', icon: ArrowPathRoundedSquareIcon, roles: ['admin', 'manager'] },
   { name: 'Compliance', href: '/compliance', icon: ShieldCheckIcon, roles: ['admin', 'manager'] },
-  { name: 'Subscription', href: '/subscription', icon: CreditCardIcon, roles: ['admin', 'manager'] },
+  { name: 'Billing', href: '/subscription', icon: CreditCardIcon, roles: ['admin', 'manager'] },
 ];
 
 // Routes where top header should be hidden
@@ -138,6 +132,11 @@ export default function DashboardLayout() {
     const saved = localStorage.getItem('sidebarCollapsed');
     return saved === 'true';
   });
+  // Collapsible section states - persisted in localStorage
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('navExpandedSections');
+    return saved ? JSON.parse(saved) : { crm: true, voiceAI: true, data: false, fieldSales: false, reports: false, settings: false };
+  });
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -149,8 +148,18 @@ export default function DashboardLayout() {
     localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
+  // Persist expanded sections state
+  useEffect(() => {
+    localStorage.setItem('navExpandedSections', JSON.stringify(expandedSections));
+  }, [expandedSections]);
+
   // Toggle sidebar collapsed state
   const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed);
+
+  // Toggle section expanded state
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   // Check if current route should hide header
   const hideHeader = headerHiddenRoutes.some(route => location.pathname.startsWith(route));
@@ -172,12 +181,11 @@ export default function DashboardLayout() {
   };
 
   const filteredMain = useMemo(() => filterByRole(mainNavigation), [userRole]);
+  const filteredCRM = useMemo(() => filterByRole(crmNavigation), [userRole]);
   const filteredVoiceAI = useMemo(() => filterByRole(voiceAINavigation), [userRole]);
-  const filteredCalls = useMemo(() => filterByRole(callsNavigation), [userRole]);
-  const filteredMessaging = useMemo(() => filterByRole(messagingNavigation), [userRole]);
   const filteredData = useMemo(() => filterByRole(dataNavigation), [userRole]);
   const filteredFieldSales = useMemo(() => filterByRole(fieldSalesNavigation), [userRole]);
-  const filteredAnalytics = useMemo(() => filterByRole(analyticsNavigation), [userRole]);
+  const filteredReports = useMemo(() => filterByRole(reportsNavigation), [userRole]);
   const filteredSettings = useMemo(() => filterByRole(settingsNavigation), [userRole]);
 
   const handleLogout = async () => {
@@ -220,6 +228,64 @@ export default function DashboardLayout() {
     </NavLink>
   );
 
+  // Section icons mapping
+  const sectionIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+    crm: UserGroupIcon,
+    voiceAI: SparklesIcon,
+    data: DocumentArrowUpIcon,
+    fieldSales: BriefcaseIcon,
+    reports: ChartBarIcon,
+    settings: Cog6ToothIcon,
+  };
+
+  // Collapsible Section component - Professional design with icon
+  const CollapsibleSection = ({
+    title,
+    sectionKey,
+    items,
+    colorClass,
+    onClick
+  }: {
+    title: string;
+    sectionKey: string;
+    items: NavItem[];
+    colorClass: string;
+    onClick?: () => void;
+  }) => {
+    const isExpanded = expandedSections[sectionKey];
+    const SectionIcon = sectionIcons[sectionKey] || Cog6ToothIcon;
+
+    return (
+      <div>
+        <button
+          onClick={() => toggleSection(sectionKey)}
+          className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg transition-colors group ${
+            isExpanded ? 'bg-slate-800/30' : 'hover:bg-slate-800/50'
+          }`}
+        >
+          <SectionIcon className={`w-5 h-5 ${colorClass}`} />
+          <span className="flex-1 text-left text-sm font-medium text-slate-300">
+            {title}
+          </span>
+          <ChevronDownIcon
+            className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+              isExpanded ? 'rotate-180' : 'rotate-0'
+            }`}
+          />
+        </button>
+        <div className={`overflow-hidden transition-all duration-200 ${
+          isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+        }`}>
+          <div className="mt-1 ml-4 pl-4 border-l border-slate-700/50 space-y-1">
+            {items.map((item) => (
+              <NavItem key={item.name} item={item} onClick={onClick} />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={`min-h-screen ${hideHeader ? 'bg-white overflow-x-hidden' : 'bg-slate-50'}`}>
       {/* Mobile sidebar backdrop */}
@@ -251,110 +317,78 @@ export default function DashboardLayout() {
           </div>
 
           {/* Navigation - Clean & Organized */}
-          <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-            {/* Main Navigation */}
+          <nav className="flex-1 px-3 py-4 space-y-3 overflow-y-auto">
+            {/* Main */}
             <div className="space-y-1">
               {filteredMain.map((item) => (
                 <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
               ))}
             </div>
 
-            {/* Voice AI Section */}
-            {showAdvancedSections && filteredVoiceAI.length > 0 && (
-              <div>
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-violet-400 uppercase tracking-wider">
-                  Voice AI
-                </div>
-                <div className="mt-1 space-y-1">
-                  {filteredVoiceAI.map((item) => (
-                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
-                  ))}
-                </div>
-              </div>
+            {/* CRM */}
+            {filteredCRM.length > 0 && (
+              <CollapsibleSection
+                title="CRM"
+                sectionKey="crm"
+                items={filteredCRM}
+                colorClass="text-emerald-400"
+                onClick={() => setSidebarOpen(false)}
+              />
             )}
 
-            {/* Calls Section */}
-            {filteredCalls.length > 0 && (
-              <div>
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
-                  Calls
-                </div>
-                <div className="mt-1 space-y-1">
-                  {filteredCalls.map((item) => (
-                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
-                  ))}
-                </div>
-              </div>
+            {/* Voice AI */}
+            {filteredVoiceAI.length > 0 && (
+              <CollapsibleSection
+                title="Voice AI"
+                sectionKey="voiceAI"
+                items={filteredVoiceAI}
+                colorClass="text-violet-400"
+                onClick={() => setSidebarOpen(false)}
+              />
             )}
 
-            {/* Messaging Section */}
-            {filteredMessaging.length > 0 && (
-              <div>
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-green-400 uppercase tracking-wider">
-                  Messaging
-                </div>
-                <div className="mt-1 space-y-1">
-                  {filteredMessaging.map((item) => (
-                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Data Section */}
+            {/* Data */}
             {showAdvancedSections && filteredData.length > 0 && (
-              <div>
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-sky-400 uppercase tracking-wider">
-                  Data
-                </div>
-                <div className="mt-1 space-y-1">
-                  {filteredData.map((item) => (
-                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
-                  ))}
-                </div>
-              </div>
+              <CollapsibleSection
+                title="Data"
+                sectionKey="data"
+                items={filteredData}
+                colorClass="text-sky-400"
+                onClick={() => setSidebarOpen(false)}
+              />
             )}
 
-            {/* Field Sales Section */}
+            {/* Field Sales */}
             {filteredFieldSales.length > 0 && (
-              <div>
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-orange-400 uppercase tracking-wider">
-                  Field Sales
-                </div>
-                <div className="mt-1 space-y-1">
-                  {filteredFieldSales.map((item) => (
-                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
-                  ))}
-                </div>
-              </div>
+              <CollapsibleSection
+                title="Field Sales"
+                sectionKey="fieldSales"
+                items={filteredFieldSales}
+                colorClass="text-orange-400"
+                onClick={() => setSidebarOpen(false)}
+              />
             )}
 
-            {/* Analytics Section */}
-            {showAdvancedSections && filteredAnalytics.length > 0 && (
-              <div>
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
-                  Analytics
-                </div>
-                <div className="mt-1 space-y-1">
-                  {filteredAnalytics.map((item) => (
-                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
-                  ))}
-                </div>
-              </div>
+            {/* Reports */}
+            {showAdvancedSections && filteredReports.length > 0 && (
+              <CollapsibleSection
+                title="Reports"
+                sectionKey="reports"
+                items={filteredReports}
+                colorClass="text-amber-400"
+                onClick={() => setSidebarOpen(false)}
+              />
             )}
 
-            {/* Settings Section */}
+            {/* Settings */}
             {showAdvancedSections && filteredSettings.length > 0 && (
-              <div>
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Settings
-                </div>
-                <div className="mt-1 space-y-1">
-                  {filteredSettings.map((item) => (
-                    <NavItem key={item.name} item={item} onClick={() => setSidebarOpen(false)} />
-                  ))}
-                </div>
-              </div>
+              <CollapsibleSection
+                title="Settings"
+                sectionKey="settings"
+                items={filteredSettings}
+                colorClass="text-slate-400"
+                onClick={() => setSidebarOpen(false)}
+              />
             )}
           </nav>
         </div>
@@ -389,187 +423,127 @@ export default function DashboardLayout() {
           {/* Navigation - Collapsed View (Icons Only) */}
           {sidebarCollapsed ? (
             <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto scrollbar-hide">
-              {/* Main Navigation */}
+              {/* Main */}
               {filteredMain.map((item) => (
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
 
-              {/* Divider */}
-              {showAdvancedSections && filteredVoiceAI.length > 0 && (
+              {/* Divider + CRM */}
+              {filteredCRM.length > 0 && (
                 <div className="my-2 border-t border-slate-700/50" />
               )}
-
-              {/* Voice AI */}
-              {showAdvancedSections && filteredVoiceAI.map((item) => (
+              {filteredCRM.map((item) => (
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
 
-              {/* Divider */}
-              {filteredCalls.length > 0 && (
+              {/* Divider + Voice AI */}
+              {filteredVoiceAI.length > 0 && (
                 <div className="my-2 border-t border-slate-700/50" />
               )}
-
-              {/* Calls */}
-              {filteredCalls.map((item) => (
+              {filteredVoiceAI.map((item) => (
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
 
-              {/* Divider */}
-              {filteredMessaging.length > 0 && (
-                <div className="my-2 border-t border-slate-700/50" />
-              )}
-
-              {/* Messaging */}
-              {filteredMessaging.map((item) => (
-                <NavItemCollapsed key={item.name} item={item} />
-              ))}
-
-              {/* Divider */}
+              {/* Divider + Data */}
               {showAdvancedSections && filteredData.length > 0 && (
                 <div className="my-2 border-t border-slate-700/50" />
               )}
-
-              {/* Data */}
               {showAdvancedSections && filteredData.map((item) => (
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
 
-              {/* Divider */}
+              {/* Divider + Field Sales */}
               {filteredFieldSales.length > 0 && (
                 <div className="my-2 border-t border-slate-700/50" />
               )}
-
-              {/* Field Sales */}
               {filteredFieldSales.map((item) => (
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
 
-              {/* Divider */}
-              {showAdvancedSections && filteredAnalytics.length > 0 && (
+              {/* Divider + Reports */}
+              {showAdvancedSections && filteredReports.length > 0 && (
                 <div className="my-2 border-t border-slate-700/50" />
               )}
-
-              {/* Analytics */}
-              {showAdvancedSections && filteredAnalytics.map((item) => (
+              {showAdvancedSections && filteredReports.map((item) => (
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
 
-              {/* Divider */}
+              {/* Divider + Settings */}
               {showAdvancedSections && filteredSettings.length > 0 && (
                 <div className="my-2 border-t border-slate-700/50" />
               )}
-
-              {/* Settings */}
               {showAdvancedSections && filteredSettings.map((item) => (
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
             </nav>
           ) : (
             /* Navigation - Expanded View (Full Labels) */
-            <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto scrollbar-hide">
-              {/* Main Navigation */}
+            <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto scrollbar-hide">
+              {/* Main */}
               <div className="space-y-1">
                 {filteredMain.map((item) => (
                   <NavItem key={item.name} item={item} />
                 ))}
               </div>
 
-              {/* Voice AI Section */}
-              {showAdvancedSections && filteredVoiceAI.length > 0 && (
-                <div>
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-violet-400 uppercase tracking-wider">
-                    Voice AI
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {filteredVoiceAI.map((item) => (
-                      <NavItem key={item.name} item={item} />
-                    ))}
-                  </div>
-                </div>
+              {/* CRM */}
+              {filteredCRM.length > 0 && (
+                <CollapsibleSection
+                  title="CRM"
+                  sectionKey="crm"
+                  items={filteredCRM}
+                  colorClass="text-emerald-400"
+                />
               )}
 
-              {/* Calls Section */}
-              {filteredCalls.length > 0 && (
-                <div>
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
-                    Calls
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {filteredCalls.map((item) => (
-                      <NavItem key={item.name} item={item} />
-                    ))}
-                  </div>
-                </div>
+              {/* Voice AI */}
+              {filteredVoiceAI.length > 0 && (
+                <CollapsibleSection
+                  title="Voice AI"
+                  sectionKey="voiceAI"
+                  items={filteredVoiceAI}
+                  colorClass="text-violet-400"
+                />
               )}
 
-              {/* Messaging Section */}
-              {filteredMessaging.length > 0 && (
-                <div>
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-green-400 uppercase tracking-wider">
-                    Messaging
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {filteredMessaging.map((item) => (
-                      <NavItem key={item.name} item={item} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Data Section */}
+              {/* Data */}
               {showAdvancedSections && filteredData.length > 0 && (
-                <div>
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-sky-400 uppercase tracking-wider">
-                    Data
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {filteredData.map((item) => (
-                      <NavItem key={item.name} item={item} />
-                    ))}
-                  </div>
-                </div>
+                <CollapsibleSection
+                  title="Data"
+                  sectionKey="data"
+                  items={filteredData}
+                  colorClass="text-sky-400"
+                />
               )}
 
-              {/* Field Sales Section */}
+              {/* Field Sales */}
               {filteredFieldSales.length > 0 && (
-                <div>
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-orange-400 uppercase tracking-wider">
-                    Field Sales
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {filteredFieldSales.map((item) => (
-                      <NavItem key={item.name} item={item} />
-                    ))}
-                  </div>
-                </div>
+                <CollapsibleSection
+                  title="Field Sales"
+                  sectionKey="fieldSales"
+                  items={filteredFieldSales}
+                  colorClass="text-orange-400"
+                />
               )}
 
-              {/* Analytics Section */}
-              {showAdvancedSections && filteredAnalytics.length > 0 && (
-                <div>
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
-                    Analytics
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {filteredAnalytics.map((item) => (
-                      <NavItem key={item.name} item={item} />
-                    ))}
-                  </div>
-                </div>
+              {/* Reports */}
+              {showAdvancedSections && filteredReports.length > 0 && (
+                <CollapsibleSection
+                  title="Reports"
+                  sectionKey="reports"
+                  items={filteredReports}
+                  colorClass="text-amber-400"
+                />
               )}
 
-              {/* Settings Section */}
+              {/* Settings */}
               {showAdvancedSections && filteredSettings.length > 0 && (
-                <div>
-                  <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Settings
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {filteredSettings.map((item) => (
-                      <NavItem key={item.name} item={item} />
-                    ))}
-                  </div>
-                </div>
+                <CollapsibleSection
+                  title="Settings"
+                  sectionKey="settings"
+                  items={filteredSettings}
+                  colorClass="text-slate-400"
+                />
               )}
             </nav>
           )}

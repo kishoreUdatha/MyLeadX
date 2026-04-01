@@ -663,7 +663,7 @@ export default function ApifySetupPage() {
       </nav>
 
       {/* Content */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
         {currentStep === 1 && renderStep1()}
         {currentStep === 2 && renderStep2()}
         {currentStep === 3 && renderStep3()}

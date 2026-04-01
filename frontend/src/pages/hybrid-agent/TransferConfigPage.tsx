@@ -381,7 +381,7 @@ export const TransferConfigPage: React.FC = () => {
 
       {/* Configs List */}
       {configs.length === 0 ? (
-        <div className="bg-white rounded-lg shadow border p-12 text-center">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
           <ArrowRightLeft size={48} className="mx-auto text-gray-400 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No Transfer Rules Yet</h3>
           <p className="text-gray-600 mb-4">
@@ -398,7 +398,7 @@ export const TransferConfigPage: React.FC = () => {
       ) : (
         <div className="grid gap-4">
           {configs.map(config => (
-            <div key={config.id} className="bg-white rounded-lg shadow border p-6">
+            <div key={config.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">

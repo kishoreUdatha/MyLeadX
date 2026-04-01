@@ -193,7 +193,7 @@ export const AgentSettingsPage: React.FC = () => {
 
       <div className="space-y-6">
         {/* Language & Voice Settings */}
-        <div className="bg-white rounded-lg shadow border p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center gap-2 mb-4">
             <Globe className="text-blue-600" size={24} />
             <h2 className="text-lg font-semibold">Language & Voice</h2>
@@ -247,7 +247,7 @@ export const AgentSettingsPage: React.FC = () => {
         </div>
 
         {/* Consent Settings */}
-        <div className="bg-white rounded-lg shadow border p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center gap-2 mb-4">
             <Shield className="text-green-600" size={24} />
             <h2 className="text-lg font-semibold">Consent & Compliance</h2>
@@ -289,7 +289,7 @@ export const AgentSettingsPage: React.FC = () => {
         </div>
 
         {/* Barge-in Settings */}
-        <div className="bg-white rounded-lg shadow border p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center gap-2 mb-4">
             <Zap className="text-yellow-600" size={24} />
             <h2 className="text-lg font-semibold">Interrupt Handling (Barge-in)</h2>
@@ -327,7 +327,7 @@ export const AgentSettingsPage: React.FC = () => {
         </div>
 
         {/* Transfer Settings */}
-        <div className="bg-white rounded-lg shadow border p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center gap-2 mb-4">
             <MessageSquare className="text-purple-600" size={24} />
             <h2 className="text-lg font-semibold">Human Transfer</h2>
@@ -373,7 +373,7 @@ export const AgentSettingsPage: React.FC = () => {
         </div>
 
         {/* Voice Settings */}
-        <div className="bg-white rounded-lg shadow border p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center gap-2 mb-4">
             <Volume2 className="text-orange-600" size={24} />
             <h2 className="text-lg font-semibold">Voice Messages</h2>

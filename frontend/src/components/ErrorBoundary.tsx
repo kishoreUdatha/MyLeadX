@@ -66,7 +66,7 @@ class ErrorBoundary extends Component<Props, State> {
       // Default fallback UI
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-          <div className="max-w-lg w-full bg-white rounded-lg shadow-lg p-8 text-center">
+          <div className="max-w-lg w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
             {/* Error Icon */}
             <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-6">
               <ExclamationTriangleIcon className="h-10 w-10 text-red-600" />

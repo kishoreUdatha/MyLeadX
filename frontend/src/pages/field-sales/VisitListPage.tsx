@@ -3,14 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   MapPinIcon,
   CalendarDaysIcon,
-  ClockIcon,
   CheckCircleIcon,
   PlusIcon,
   EyeIcon,
   XMarkIcon,
   DocumentTextIcon,
   UsersIcon,
-  ArrowTrendingUpIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid';
 import { visitService, Visit, VisitFilter } from '../../services/fieldSales/visit.service';

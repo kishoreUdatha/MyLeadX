@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import {
   PhoneIcon,
@@ -68,7 +67,7 @@ export default function AssignedDataPage() {
   const [selectedRecord, setSelectedRecord] = useState<RawRecord | null>(null);
   const [showCallModal, setShowCallModal] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [uploadingRecording, setUploadingRecording] = useState(false);
+  const [_uploadingRecording, setUploadingRecording] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -131,7 +130,7 @@ export default function AssignedDataPage() {
   const convertToLead = async (id: string, notes?: string) => {
     try {
       setUpdating(true);
-      const res = await api.post(`/telecaller/assigned-data/${id}/convert`, { notes });
+      await api.post(`/telecaller/assigned-data/${id}/convert`, { notes });
       alert('Successfully converted to lead!');
       fetchData();
       fetchStats();
@@ -145,6 +144,8 @@ export default function AssignedDataPage() {
     }
   };
 
+  // TODO: Enable when recording upload feature is implemented
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const uploadRecording = async (id: string, file: File) => {
     try {
       setUploadingRecording(true);
@@ -165,6 +166,7 @@ export default function AssignedDataPage() {
       setUploadingRecording(false);
     }
   };
+  void uploadRecording; // Suppress unused warning
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen -m-6">
@@ -185,7 +187,7 @@ export default function AssignedDataPage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-          <div className="bg-white rounded-lg p-3 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100">
             <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
             <p className="text-xs text-slate-500">Total Assigned</p>
           </div>
@@ -213,7 +215,7 @@ export default function AssignedDataPage() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-100 mb-6">
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
         <div className="flex flex-wrap items-center gap-4">
           {/* Search */}
           <form onSubmit={handleSearch} className="flex-1 min-w-[200px]">
@@ -249,7 +251,7 @@ export default function AssignedDataPage() {
       </div>
 
       {/* Records Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-slate-500">Loading...</div>
         ) : records.length === 0 ? (

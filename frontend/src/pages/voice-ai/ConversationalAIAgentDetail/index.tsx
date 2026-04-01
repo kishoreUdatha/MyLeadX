@@ -36,7 +36,7 @@ import { VoiceSettingsPanel } from './components/VoiceSettingsPanel';
 import { WorkflowBuilder } from './components/WorkflowBuilder';
 import { AnalysisTab } from './components/AnalysisTab';
 import { TestsTab } from './components/TestsTab';
-import { useAgentRealtime } from '../../../hooks/useAgentRealtime';
+// import { useAgentRealtime } from '../../../hooks/useAgentRealtime'; // TODO: Enable when realtime editing is implemented
 import { useAgentAnalytics } from '../../../hooks/useAgentAnalytics';
 import { RealtimeVoiceWidget } from '../../../components/RealtimeVoiceWidget';
 
@@ -188,8 +188,8 @@ export function ConversationalAIAgentDetail() {
   const [widgetSize, setWidgetSize] = useState('medium');
   const [embedCodeType, setEmbedCodeType] = useState<'Script' | 'React' | 'iFrame'>('Script');
 
-  // Real-time field update handler
-  const handleRealtimeFieldUpdate = useCallback((field: string, value: any, _updatedBy: string) => {
+  // Real-time field update handler - TODO: Wire up when realtime editing is enabled
+  const _handleRealtimeFieldUpdate = useCallback((field: string, value: any, _updatedBy: string) => {
     // Update local state based on field name
     const fieldUpdaters: Record<string, (val: any) => void> = {
       systemPrompt: setSystemPrompt,
@@ -253,6 +253,7 @@ export function ConversationalAIAgentDetail() {
       updater(value);
     }
   }, []);
+  void _handleRealtimeFieldUpdate; // Suppress unused warning - will be used when realtime editing is enabled
 
   // Real-time sync hook - Disabled due to socket connection causing page redirect issues
   // TODO: Fix useAgentRealtime hook's socket initialization to not interfere with page rendering

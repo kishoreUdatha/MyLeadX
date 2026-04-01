@@ -17,6 +17,15 @@ export interface Lead {
   convertedAt?: string;
   createdAt: string;
   updatedAt: string;
+  stage?: {
+    id: string;
+    name: string;
+    color?: string;
+  };
+  channel?: {
+    id: string;
+    name: string;
+  };
   assignments?: Array<{
     id: string;
     assignedTo: {

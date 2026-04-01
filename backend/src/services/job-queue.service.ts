@@ -57,6 +57,7 @@ class JobQueueService {
   private inMemoryJobs: Map<string, JobRecord> = new Map();
   private isRedisAvailable: boolean = false;
   private jobCounter: number = 0;
+  private redisErrorLogged: boolean = false;
 
   constructor() {
     this.initializeQueue();
@@ -82,17 +83,22 @@ class JobQueueService {
         this.queue.on('ready', () => {
           console.log('Job queue connected to Redis');
           this.isRedisAvailable = true;
+          this.redisErrorLogged = false;
         });
 
         this.queue.on('error', (error) => {
-          console.error('Job queue error:', error);
+          // Only log Redis connection error once to avoid spam
+          if (!this.redisErrorLogged) {
+            console.warn('[JobQueue] Redis unavailable, using in-memory fallback. Further errors will be suppressed.');
+            this.redisErrorLogged = true;
+          }
           this.isRedisAvailable = false;
         });
 
         // Register job processors
         this.registerProcessors();
       } catch (error) {
-        console.warn('Redis not available, using in-memory queue:', error);
+        console.warn('Redis not available, using in-memory queue');
         this.isRedisAvailable = false;
       }
     } else {

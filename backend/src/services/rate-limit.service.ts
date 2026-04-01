@@ -133,6 +133,7 @@ class RateLimitService {
   private redis: Redis | null = null;
   private memoryStore: MemoryStore = new MemoryStore();
   private useRedis: boolean = false;
+  private redisErrorLogged: boolean = false;
 
   constructor() {
     this.initializeRedis();
@@ -148,7 +149,10 @@ class RateLimitService {
           maxRetriesPerRequest: 3,
           retryStrategy: (times) => {
             if (times > 3) {
-              console.warn('Redis connection failed, falling back to memory store');
+              if (!this.redisErrorLogged) {
+                console.warn('[RateLimiter] Redis connection failed, using memory store');
+                this.redisErrorLogged = true;
+              }
               return null;
             }
             return Math.min(times * 100, 3000);
@@ -158,10 +162,11 @@ class RateLimitService {
         this.redis.on('connect', () => {
           console.log('Rate limiter connected to Redis');
           this.useRedis = true;
+          this.redisErrorLogged = false;
         });
 
-        this.redis.on('error', (err) => {
-          console.error('Redis error:', err);
+        this.redis.on('error', () => {
+          // Suppress repeated Redis errors - just switch to memory fallback
           this.useRedis = false;
         });
       } catch (error) {

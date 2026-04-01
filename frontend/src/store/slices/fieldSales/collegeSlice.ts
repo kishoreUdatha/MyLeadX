@@ -6,7 +6,6 @@ import {
   CollegeFilter,
   CreateCollegeData,
   UpdateCollegeData,
-  CollegeContact,
   CreateContactData,
 } from '../../../services/fieldSales/college.service';
 

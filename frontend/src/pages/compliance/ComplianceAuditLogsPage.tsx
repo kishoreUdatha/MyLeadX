@@ -148,7 +148,7 @@ const ComplianceAuditLogsPage: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
         <div className="flex flex-wrap gap-4">
           <select
             value={eventTypeFilter}
@@ -199,7 +199,7 @@ const ComplianceAuditLogsPage: React.FC = () => {
           <p className="text-gray-600 mt-1">Compliance activities will be logged here automatically</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>

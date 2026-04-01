@@ -87,8 +87,7 @@ router.post('/sms', messagingRateLimiter, validate(smsValidation), async (req: T
       },
     });
 
-    // TODO: Integrate with actual SMS provider (Twilio, MSG91, etc.)
-    // For now, simulate sending
+    // Send SMS via configured provider (Exotel or Plivo)
     const smsResult = await sendSMS(to, message, organizationId);
 
     // Update message log
@@ -160,7 +159,7 @@ router.post('/whatsapp', messagingRateLimiter, validate(whatsappValidation), asy
       },
     });
 
-    // TODO: Integrate with WhatsApp Business API
+    // Send via WhatsApp Business API
     const whatsappResult = await sendWhatsApp(to, message, organizationId, templateId);
 
     // Update message log
@@ -232,7 +231,7 @@ router.post('/email', messagingRateLimiter, validate(emailValidation), async (re
       },
     });
 
-    // TODO: Integrate with email provider (SendGrid, SES, etc.)
+    // Send email via SMTP (Nodemailer)
     const emailResult = await sendEmail(to, subject, body, organizationId);
 
     // Update message log
@@ -443,29 +442,66 @@ router.get('/templates', validate([
 
 // ============ Helper Functions ============
 
-// SMS Provider Integration
+// SMS Provider Integration - Uses configured provider (Exotel or Plivo)
 async function sendSMS(
   to: string,
   message: string,
-  organizationId: string
-): Promise<{ success: boolean; messageId?: string }> {
+  organizationId: string,
+  userId?: string,
+  leadId?: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    // TODO: Replace with actual SMS provider integration
-    // Example providers: Twilio, MSG91, Plivo, Gupshup
+    const { config } = await import('../config');
+    const smsProvider = config.smsProvider || 'exotel';
 
-    // For now, simulate success
-    console.log(`[SMS] Sending to ${to}: ${message.substring(0, 50)}...`);
+    console.log(`[SMS] Sending via ${smsProvider} to ${to}: ${message.substring(0, 50)}...`);
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    if (smsProvider === 'plivo') {
+      // Use Plivo
+      const { PlivoService } = await import('../integrations/plivo.service');
+      const plivoService = new PlivoService();
 
-    return {
-      success: true,
-      messageId: `sms_${Date.now()}`,
-    };
-  } catch (error) {
+      if (!plivoService.isConfigured()) {
+        console.warn('[SMS] Plivo not configured, message not sent');
+        return { success: false, error: 'Plivo not configured' };
+      }
+
+      const result = await plivoService.sendSms({
+        to,
+        message,
+        leadId,
+        userId,
+      });
+
+      return {
+        success: true,
+        messageId: result.messageId,
+      };
+    } else {
+      // Use Exotel (default for India)
+      const { exotelService } = await import('../integrations/exotel.service');
+
+      if (!exotelService.isConfigured()) {
+        console.warn('[SMS] Exotel not configured, message not sent');
+        return { success: false, error: 'Exotel not configured' };
+      }
+
+      const result = await exotelService.sendSMS({
+        to,
+        message,
+        leadId,
+        userId,
+      });
+
+      return {
+        success: result.success,
+        messageId: result.messageSid,
+        error: result.error,
+      };
+    }
+  } catch (error: any) {
     console.error('SMS send error:', error);
-    return { success: false };
+    return { success: false, error: error.message };
   }
 }
 
@@ -507,29 +543,45 @@ async function sendWhatsApp(
   }
 }
 
-// Email Provider Integration
+// Email Provider Integration - Uses SMTP via Nodemailer
 async function sendEmail(
   to: string,
   subject: string,
   body: string,
-  organizationId: string
-): Promise<{ success: boolean; messageId?: string }> {
+  organizationId: string,
+  userId?: string,
+  leadId?: string,
+  html?: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    // TODO: Replace with actual email provider integration
-    // Providers: SendGrid, Amazon SES, Mailgun, Postmark
+    const { emailService } = await import('../integrations/email.service');
 
     console.log(`[Email] Sending to ${to}: ${subject}`);
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Verify email service is configured
+    const verifyResult = await emailService.verifyConnection();
+    if (!verifyResult.success) {
+      console.warn('[Email] SMTP not configured:', verifyResult.error);
+      return { success: false, error: 'Email service not configured: ' + verifyResult.error };
+    }
+
+    const result = await emailService.sendEmail({
+      to,
+      subject,
+      body,
+      html: html || `<div style="font-family: Arial, sans-serif;">${body.replace(/\n/g, '<br>')}</div>`,
+      userId: userId || 'system',
+      leadId,
+      enableTracking: true,
+    });
 
     return {
       success: true,
-      messageId: `email_${Date.now()}`,
+      messageId: result.messageId,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Email send error:', error);
-    return { success: false };
+    return { success: false, error: error.message };
   }
 }
 

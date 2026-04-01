@@ -136,7 +136,7 @@ export default function SuperAdminDashboard() {
         <div className="flex flex-wrap gap-3">
           <Link
             to="/super-admin/organizations"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
           >
             <PlusIcon className="w-4 h-4" />
             Create Organization

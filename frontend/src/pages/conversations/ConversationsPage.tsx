@@ -145,7 +145,7 @@ const ConversationsPage: React.FC = () => {
           <p className="text-gray-600 mt-1">Conversations will appear here when customers reach out</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="divide-y divide-gray-200">
             {conversations.map((conversation) => (
               <div

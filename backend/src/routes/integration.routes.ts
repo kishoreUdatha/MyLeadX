@@ -12,6 +12,7 @@ import integrationService from '../services/integration.service';
 import { authenticate, authorize } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { validate } from '../middlewares/validate';
+import { verifyRazorpayWebhook, verifyStripeWebhook } from '../middlewares/webhookAuth';
 
 const router = Router();
 
@@ -548,33 +549,102 @@ router.post('/payment/:integrationId/create-link', paymentRateLimiter, validate(
   }
 });
 
-// Payment webhook callback (public endpoint - webhooks don't have auth)
-// Note: This endpoint should verify webhook signatures for security
-router.post('/payment/webhook/:provider', validate([
-  param('provider').isIn(['razorpay', 'stripe', 'paypal', 'cashfree', 'paytm']).withMessage('Invalid payment provider'),
-]), async (req: TenantRequest, res: Response) => {
-  try {
-    const { provider } = req.params;
+// Payment webhook callbacks (public endpoints - webhooks don't have auth)
+// Each provider has its own route with proper signature verification middleware
 
-    // Verify webhook signature based on provider
-    if (provider === 'razorpay') {
-      const signature = req.headers['x-razorpay-signature'] as string;
-      if (!signature) {
-        return res.status(401).json({ success: false, message: 'Missing signature' });
-      }
-      // TODO: Verify signature with razorpay webhook secret
-      console.log('Razorpay webhook received');
-    } else if (provider === 'stripe') {
-      const signature = req.headers['stripe-signature'] as string;
-      if (!signature) {
-        return res.status(401).json({ success: false, message: 'Missing signature' });
-      }
-      // TODO: Verify signature with stripe webhook secret
-      console.log('Stripe webhook received');
+// Razorpay webhook - with signature verification
+router.post('/payment/webhook/razorpay', verifyRazorpayWebhook, async (req: TenantRequest, res: Response) => {
+  try {
+    const event = req.body;
+    console.log('Razorpay webhook received:', event.event);
+
+    // Handle different Razorpay webhook events
+    switch (event.event) {
+      case 'payment.captured':
+        // Payment was successful
+        console.log('Payment captured:', event.payload?.payment?.entity?.id);
+        break;
+      case 'payment.failed':
+        // Payment failed
+        console.log('Payment failed:', event.payload?.payment?.entity?.id);
+        break;
+      case 'payment_link.paid':
+        // Payment link was paid
+        console.log('Payment link paid:', event.payload?.payment_link?.entity?.id);
+        break;
+      case 'subscription.activated':
+      case 'subscription.charged':
+      case 'subscription.cancelled':
+        // Subscription events
+        console.log('Subscription event:', event.event);
+        break;
+      default:
+        console.log('Unhandled Razorpay event:', event.event);
     }
 
     res.json({ success: true });
   } catch (error: any) {
+    console.error('Razorpay webhook error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Stripe webhook - with signature verification
+router.post('/payment/webhook/stripe', verifyStripeWebhook, async (req: TenantRequest, res: Response) => {
+  try {
+    const event = req.body;
+    console.log('Stripe webhook received:', event.type);
+
+    // Handle different Stripe webhook events
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        // Payment was successful
+        console.log('Payment intent succeeded:', event.data?.object?.id);
+        break;
+      case 'payment_intent.payment_failed':
+        // Payment failed
+        console.log('Payment intent failed:', event.data?.object?.id);
+        break;
+      case 'checkout.session.completed':
+        // Checkout session completed
+        console.log('Checkout completed:', event.data?.object?.id);
+        break;
+      case 'invoice.paid':
+      case 'invoice.payment_failed':
+        // Invoice events
+        console.log('Invoice event:', event.type);
+        break;
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted':
+        // Subscription events
+        console.log('Subscription event:', event.type);
+        break;
+      default:
+        console.log('Unhandled Stripe event:', event.type);
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Stripe webhook error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Other payment providers (PayPal, Cashfree, Paytm) - basic validation
+router.post('/payment/webhook/:provider', validate([
+  param('provider').isIn(['paypal', 'cashfree', 'paytm']).withMessage('Invalid payment provider'),
+]), async (req: TenantRequest, res: Response) => {
+  try {
+    const { provider } = req.params;
+    console.log(`${provider} webhook received:`, req.body);
+
+    // TODO: Add signature verification for PayPal, Cashfree, Paytm when integrated
+    // For now, log the webhook and acknowledge receipt
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error(`${req.params.provider} webhook error:`, error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

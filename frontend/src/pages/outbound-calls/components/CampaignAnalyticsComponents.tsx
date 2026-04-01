@@ -110,7 +110,7 @@ interface SummaryCardsProps {
 
 export const SummaryCards: React.FC<SummaryCardsProps> = ({ analytics }) => (
   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-    <div className="bg-white p-4 rounded-lg shadow border">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-blue-100 rounded-lg">
           <Users className="text-blue-600" size={20} />
@@ -122,7 +122,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ analytics }) => (
       </div>
     </div>
 
-    <div className="bg-white p-4 rounded-lg shadow border">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-indigo-100 rounded-lg">
           <Phone className="text-indigo-600" size={20} />
@@ -134,7 +134,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ analytics }) => (
       </div>
     </div>
 
-    <div className="bg-white p-4 rounded-lg shadow border">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-green-100 rounded-lg">
           <TrendingUp className="text-green-600" size={20} />
@@ -146,7 +146,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ analytics }) => (
       </div>
     </div>
 
-    <div className="bg-white p-4 rounded-lg shadow border">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-purple-100 rounded-lg">
           <Target className="text-purple-600" size={20} />
@@ -158,7 +158,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ analytics }) => (
       </div>
     </div>
 
-    <div className="bg-white p-4 rounded-lg shadow border">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-amber-100 rounded-lg">
           <Clock className="text-amber-600" size={20} />
@@ -178,7 +178,7 @@ interface OutcomeChartProps {
 }
 
 export const OutcomeChart: React.FC<OutcomeChartProps> = ({ data }) => (
-  <div className="bg-white rounded-lg shadow border p-4">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
       <BarChart3 size={20} />
       Call Outcomes
@@ -219,7 +219,7 @@ interface ConversionFunnelChartProps {
 }
 
 export const ConversionFunnelChart: React.FC<ConversionFunnelChartProps> = ({ data }) => (
-  <div className="bg-white rounded-lg shadow border p-4">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
       <TrendingUp size={20} />
       Conversion Funnel
@@ -244,7 +244,7 @@ interface HourlyChartProps {
 }
 
 export const HourlyChart: React.FC<HourlyChartProps> = ({ data }) => (
-  <div className="bg-white rounded-lg shadow border p-4">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
       <Clock size={20} />
       Hourly Call Distribution
@@ -271,7 +271,7 @@ interface DurationChartProps {
 }
 
 export const DurationChart: React.FC<DurationChartProps> = ({ data }) => (
-  <div className="bg-white rounded-lg shadow border p-4">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
       <Clock size={20} />
       Call Duration Distribution
@@ -297,7 +297,7 @@ interface SentimentChartProps {
 }
 
 export const SentimentChart: React.FC<SentimentChartProps> = ({ data, analytics }) => (
-  <div className="bg-white rounded-lg shadow border p-4">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
       <ThumbsUp size={20} />
       Sentiment Analysis
@@ -359,7 +359,7 @@ interface DailyTrendChartProps {
 }
 
 export const DailyTrendChart: React.FC<DailyTrendChartProps> = ({ data }) => (
-  <div className="bg-white rounded-lg shadow border p-4">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
       <TrendingUp size={20} />
       Daily Call Trend
@@ -392,7 +392,7 @@ interface StatisticsTableProps {
 }
 
 export const StatisticsTable: React.FC<StatisticsTableProps> = ({ analytics }) => (
-  <div className="bg-white rounded-lg shadow border p-4">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <h2 className="text-lg font-semibold text-gray-900 mb-4">Detailed Statistics</h2>
     <div className="grid md:grid-cols-3 gap-6">
       <div>

@@ -8,7 +8,6 @@ import {
   XCircleIcon,
   ChartBarIcon,
   ArrowTrendingUpIcon,
-  CheckCircleIcon,
   ClockIcon,
   BuildingOfficeIcon,
   Squares2X2Icon,

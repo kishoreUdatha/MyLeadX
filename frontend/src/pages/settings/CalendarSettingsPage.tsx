@@ -347,13 +347,13 @@ const CalendarSettingsPage: React.FC = () => {
         ) : (
           /* Not Connected State */
           <div className="space-y-4">
-            {/* Calendar Providers */}
-            {(Object.entries(CALENDAR_PROVIDERS) as [string, CalendarProviderConfig][]).map(([id, provider]) => (
+            {/* Calendar Providers - Only show available integrations */}
+            {(Object.entries(CALENDAR_PROVIDERS) as [string, CalendarProviderConfig][])
+              .filter(([, provider]) => !provider.comingSoon)
+              .map(([id, provider]) => (
               <div
                 key={id}
-                className={`bg-white rounded-2xl border border-gray-200 overflow-hidden transition-all hover:shadow-md ${
-                  provider.comingSoon ? 'opacity-75' : ''
-                }`}
+                className="bg-white rounded-2xl border border-gray-200 overflow-hidden transition-all hover:shadow-md"
               >
                 <div className="p-6">
                   <div className="flex items-center justify-between">
@@ -367,38 +367,22 @@ const CalendarSettingsPage: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-gray-900">{provider.name}</h3>
-                          {provider.comingSoon && (
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-full">
-                              Coming Soon
-                            </span>
-                          )}
-                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">{provider.name}</h3>
                         <p className="text-sm text-gray-500">{provider.description}</p>
                       </div>
                     </div>
-                    {provider.comingSoon ? (
-                      <button
-                        disabled
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed text-sm font-medium"
-                      >
-                        Coming Soon
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleConnect(id)}
-                        disabled={connecting}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition text-sm font-medium"
-                      >
-                        {connecting ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Link2 size={16} />
-                        )}
-                        Connect
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleConnect(id)}
+                      disabled={connecting}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition text-sm font-medium"
+                    >
+                      {connecting ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Link2 size={16} />
+                      )}
+                      Connect
+                    </button>
                   </div>
 
                   {/* Features */}

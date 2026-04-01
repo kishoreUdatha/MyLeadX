@@ -112,7 +112,7 @@ export default function LeadScoringPage() {
           const count = scores.filter(s => s.grade === grade).length;
           const gradeColor = getGradeColor(grade);
           return (
-            <div key={grade} className="bg-white rounded-lg shadow p-4 text-center">
+            <div key={grade} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
               <div className={`inline-block px-3 py-1 rounded-lg ${gradeColor.bg} ${gradeColor.text} font-bold text-lg mb-2`}>
                 {getGradeLabel(grade)}
               </div>
@@ -125,7 +125,7 @@ export default function LeadScoringPage() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Lead List */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow overflow-hidden">
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-4 border-b">
             <h2 className="text-lg font-semibold">Scored Leads</h2>
           </div>
@@ -203,7 +203,7 @@ export default function LeadScoringPage() {
         </div>
 
         {/* Score Details Panel */}
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
           <div className="p-4 border-b">
             <h2 className="text-lg font-semibold">Score Breakdown</h2>
           </div>

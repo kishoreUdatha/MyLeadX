@@ -152,7 +152,7 @@ export default function WebhooksPage() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700"
+          className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 transition-colors"
         >
           Add Webhook
         </button>
@@ -161,14 +161,14 @@ export default function WebhooksPage() {
       {/* Webhooks List */}
       <div className="grid gap-4">
         {webhooks.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center text-gray-500">
             No webhooks configured yet
           </div>
         ) : (
           webhooks.map((webhook) => (
             <div
               key={webhook.id}
-              className={`bg-white rounded-lg shadow p-6 ${
+              className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-6 ${
                 !webhook.isActive ? 'opacity-60' : ''
               }`}
             >
@@ -255,7 +255,7 @@ export default function WebhooksPage() {
                         type="checkbox"
                         checked={formData.events.includes(event.value)}
                         onChange={() => toggleEvent(event.value)}
-                        className="h-4 w-4 text-orange-600 border-gray-300 rounded"
+                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
                       />
                       <span className="text-sm text-gray-700">{event.label}</span>
                     </label>
@@ -304,7 +304,7 @@ export default function WebhooksPage() {
                   id="isActive"
                   checked={formData.isActive}
                   onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="h-4 w-4 text-orange-600 border-gray-300 rounded"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
                 />
                 <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">
                   Webhook is active
@@ -321,7 +321,7 @@ export default function WebhooksPage() {
                 <button
                   type="submit"
                   disabled={formData.events.length === 0}
-                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                 >
                   Add Webhook
                 </button>

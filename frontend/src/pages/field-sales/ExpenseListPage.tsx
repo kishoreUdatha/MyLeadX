@@ -19,8 +19,6 @@ import {
   TrashIcon,
   PaperAirplaneIcon,
   CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
   CurrencyRupeeIcon,
   XMarkIcon,
   PencilIcon,
@@ -28,9 +26,6 @@ import {
   ExclamationTriangleIcon,
   CloudArrowUpIcon,
   DocumentIcon,
-  UserIcon,
-  BuildingOfficeIcon,
-  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { ExpenseStatus, ExpenseCategory, CreateExpenseData, ExpenseLog, expenseService, Expense } from '../../services/fieldSales/expense.service';
@@ -87,7 +82,6 @@ export default function ExpenseListPage() {
 
   const [mainTab, setMainTab] = useState<MainTab>('my-expenses');
   const [userStatusFilter, setUserStatusFilter] = useState<UserStatusFilter>('');
-  const [statusFilter, setStatusFilter] = useState<ExpenseStatus | ''>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -1108,7 +1102,7 @@ export default function ExpenseListPage() {
                 </h2>
                 {editingExpense && (
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {formatDateFull(editingExpense.expenseDate)} • {categoryLabels[editingExpense.category]}
+                    {formatDateFull(editingExpense.expenseDate)} • {categoryLabels[editingExpense.category as ExpenseCategory]}
                   </p>
                 )}
               </div>

@@ -108,7 +108,7 @@ const RecordingDisclosurePage: React.FC = () => {
       )}
 
       {/* Settings Form */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
         <div className="p-6 space-y-6">
           {/* Enable Disclosure */}
           <div className="flex items-center justify-between">

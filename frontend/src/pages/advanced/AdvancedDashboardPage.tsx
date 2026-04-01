@@ -194,7 +194,7 @@ export default function AdvancedDashboardPage() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Daily Stats Chart */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-semibold mb-4">Daily Performance</h2>
           {analytics?.dailyStats && analytics.dailyStats.length > 0 ? (
             <div className="space-y-2">
@@ -217,7 +217,7 @@ export default function AdvancedDashboardPage() {
         </div>
 
         {/* Top Leads */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-semibold mb-4">Top Leads by Score</h2>
           {topLeads.length > 0 ? (
             <div className="space-y-3">

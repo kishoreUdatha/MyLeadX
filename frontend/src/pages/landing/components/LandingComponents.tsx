@@ -598,7 +598,7 @@ export const PricingPreviewSection: React.FC<PricingPreviewSectionProps> = ({ ti
       </div>
 
       <div className="grid md:grid-cols-4 gap-6 max-w-6xl mx-auto">
-        {tiers.map((tier, index) => (
+        {tiers.map((tier) => (
           <div
             key={tier.id}
             className={`relative rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 ${
