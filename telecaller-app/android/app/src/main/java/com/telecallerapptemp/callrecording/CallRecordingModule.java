@@ -14,8 +14,15 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Comparator;
+
+import android.content.ContentResolver;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.MediaStore;
 
 import javax.annotation.Nullable;
 
@@ -202,6 +209,8 @@ public class CallRecordingModule extends ReactContextBaseJavaModule {
 
         // Common call recording directories on different phones
         String[] possiblePaths = {
+            // iQOO/Vivo/Funtouch OS (FOUND ON THIS DEVICE)
+            Environment.getExternalStorageDirectory() + "/Recordings/Record/Call",
             // MIUI/Xiaomi
             Environment.getExternalStorageDirectory() + "/MIUI/sound_recorder/call_rec",
             // Samsung
@@ -212,7 +221,7 @@ public class CallRecordingModule extends ReactContextBaseJavaModule {
             // Realme/Oppo
             Environment.getExternalStorageDirectory() + "/Music/Recordings/Call Recordings",
             Environment.getExternalStorageDirectory() + "/Record/Call",
-            // Vivo
+            // Vivo alternate
             Environment.getExternalStorageDirectory() + "/Record/Call",
             // Generic Android
             Environment.getExternalStorageDirectory() + "/CallRecordings",
@@ -242,29 +251,54 @@ public class CallRecordingModule extends ReactContextBaseJavaModule {
                         if (file.isFile() && (fileName.endsWith(".mp3") || fileName.endsWith(".m4a") ||
                             fileName.endsWith(".wav") || fileName.endsWith(".amr") || fileName.endsWith(".3gp"))) {
 
-                            // Check if filename contains the phone number
-                            // MIUI format: 9885634152(9885634152)_20260304122705.mp3
-                            // Samsung format: +919885634152_20260304_122705.m4a
-                            // Generic: Call_9885634152_20260304.mp3
-                            if (fileName.contains(normalizedPhone) || file.getName().contains(normalizedPhone)) {
-                                Log.d(TAG, "Found matching recording: " + file.getAbsolutePath());
-                                Log.d(TAG, "File modified: " + file.lastModified() + ", size: " + file.length());
+                            // Check if this recording was made in the last 5 minutes
+                            long ageMs = System.currentTimeMillis() - file.lastModified();
+                            if (ageMs > 300000) { // older than 5 minutes, skip
+                                continue;
+                            }
 
-                                // Check if this recording was made in the last 5 minutes
-                                long ageMs = System.currentTimeMillis() - file.lastModified();
-                                if (ageMs < 300000) { // 5 minutes
-                                    if (file.lastModified() > latestModified) {
-                                        latestModified = file.lastModified();
-                                        foundRecording = file;
-                                        Log.d(TAG, "This is the most recent matching recording");
-                                    }
-                                } else {
-                                    Log.d(TAG, "Recording too old: " + (ageMs / 1000) + "s ago");
+                            // Match by phone number in filename OR by being the most recent file
+                            // iQOO/Vivo uses contact name in filename (e.g., "Baaji ( vertilink) 2026-04-03 17-23-57.m4a")
+                            // Other phones use phone number (e.g., "+919885634152_20260304_122705.m4a")
+                            boolean matches = false;
+
+                            // Check phone number match
+                            if (fileName.contains(normalizedPhone) || file.getName().contains(normalizedPhone)) {
+                                matches = true;
+                                Log.d(TAG, "Phone number match: " + file.getName());
+                            }
+
+                            // If no phone match, use the MOST RECENT recording (within 5 min)
+                            // This handles devices that use contact names instead of phone numbers
+                            if (!matches && file.lastModified() > latestModified) {
+                                matches = true;
+                                Log.d(TAG, "Using most recent recording (no phone match): " + file.getName());
+                            }
+
+                            if (matches) {
+                                Log.d(TAG, "Found matching recording: " + file.getAbsolutePath());
+                                Log.d(TAG, "File modified: " + file.lastModified() + ", size: " + file.length() + ", age: " + (ageMs / 1000) + "s");
+
+                                if (file.lastModified() > latestModified) {
+                                    latestModified = file.lastModified();
+                                    foundRecording = file;
+                                    Log.d(TAG, "This is the most recent matching recording");
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // If direct file search didn't find anything, try MediaStore API
+        // (required for Android 11+ scoped storage)
+        if (foundRecording == null) {
+            Log.d(TAG, "Direct file search failed, trying MediaStore API...");
+            try {
+                foundRecording = findViaMediaStore(normalizedPhone);
+            } catch (Exception e) {
+                Log.e(TAG, "MediaStore search failed: " + e.getMessage());
             }
         }
 
@@ -283,5 +317,92 @@ public class CallRecordingModule extends ReactContextBaseJavaModule {
             Log.d(TAG, "No system call recording found for " + phoneNumber);
             promise.resolve(null);
         }
+    }
+
+    /**
+     * Search for call recordings using MediaStore API (works on Android 11+ with scoped storage)
+     * Finds the most recent audio file in call recording directories within the last 5 minutes
+     */
+    private File findViaMediaStore(String normalizedPhone) {
+        ContentResolver resolver = getReactApplicationContext().getContentResolver();
+        Uri audioUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+
+        // Query for recent audio files (last 5 minutes)
+        long fiveMinAgo = (System.currentTimeMillis() / 1000) - 300;
+
+        String selection = MediaStore.Audio.Media.DATE_MODIFIED + " > ?";
+        String[] selectionArgs = { String.valueOf(fiveMinAgo) };
+        String sortOrder = MediaStore.Audio.Media.DATE_MODIFIED + " DESC";
+
+        String[] projection = {
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DATE_MODIFIED,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.RELATIVE_PATH,
+        };
+
+        Cursor cursor = null;
+        try {
+            cursor = resolver.query(audioUri, projection, selection, selectionArgs, sortOrder);
+            if (cursor != null) {
+                Log.d(TAG, "MediaStore: found " + cursor.getCount() + " recent audio files");
+
+                while (cursor.moveToNext()) {
+                    String displayName = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME));
+                    String data = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA));
+                    long dateModified = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED));
+                    long size = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE));
+                    String relativePath = "";
+                    try {
+                        relativePath = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH));
+                    } catch (Exception e) {}
+
+                    Log.d(TAG, "MediaStore file: " + displayName + " path=" + relativePath + " data=" + data + " size=" + size);
+
+                    // Check if this is a call recording (by path or name)
+                    String lowerPath = (relativePath + "/" + displayName).toLowerCase();
+                    boolean isCallRecording = lowerPath.contains("call") || lowerPath.contains("record/call") ||
+                                              lowerPath.contains("recordings/record");
+
+                    if (isCallRecording && data != null) {
+                        File file = new File(data);
+                        if (file.exists() && file.length() > 1000) {
+                            Log.d(TAG, "MediaStore: FOUND call recording: " + data);
+                            return file;
+                        } else if (!file.exists()) {
+                            // Scoped storage: copy via ContentResolver
+                            Log.d(TAG, "MediaStore: File not directly accessible, copying via URI...");
+                            long id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID));
+                            Uri contentUri = Uri.withAppendedPath(audioUri, String.valueOf(id));
+
+                            File outputDir = new File(getReactApplicationContext().getFilesDir(), "recordings");
+                            if (!outputDir.exists()) outputDir.mkdirs();
+                            File outputFile = new File(outputDir, "system_" + displayName);
+
+                            try (InputStream in = resolver.openInputStream(contentUri);
+                                 FileOutputStream out = new FileOutputStream(outputFile)) {
+                                byte[] buffer = new byte[8192];
+                                int len;
+                                while ((len = in.read(buffer)) != -1) {
+                                    out.write(buffer, 0, len);
+                                }
+                                Log.d(TAG, "MediaStore: Copied to " + outputFile.getAbsolutePath() + " (" + outputFile.length() + " bytes)");
+                                return outputFile;
+                            } catch (Exception e) {
+                                Log.e(TAG, "MediaStore: Failed to copy: " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "MediaStore query failed: " + e.getMessage());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+
+        return null;
     }
 }

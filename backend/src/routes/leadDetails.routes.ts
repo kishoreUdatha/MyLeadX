@@ -1140,11 +1140,11 @@ router.get(
       return res.status(404).json({ success: false, message: 'Lead not found' });
     }
 
-    const calls = await prisma.callLog.findMany({
+    const calls = await prisma.telecallerCall.findMany({
       where: { leadId },
       include: {
-        caller: {
-          select: { id: true, firstName: true, lastName: true },
+        lead: {
+          select: { id: true, firstName: true, lastName: true, phone: true },
         },
       },
       orderBy: { createdAt: 'desc' },

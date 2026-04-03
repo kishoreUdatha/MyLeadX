@@ -103,7 +103,7 @@ export const authApi = {
       }
 
       const response = await api.post<ApiResponse<{ token: string; refreshToken: string }>>(
-        '/auth/refresh',
+        '/auth/refresh-token',
         { refreshToken }
       );
 

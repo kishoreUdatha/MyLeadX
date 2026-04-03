@@ -1191,15 +1191,77 @@ router.post('/calls/:id/recording', upload.single('recording'), async (req: Tena
   }
 });
 
-// Note: AI analysis is now handled by telecaller-call-finalization.service.ts
-// which provides full AI-powered analysis including:
-// - Transcription (Sarvam/Whisper)
-// - Sentiment Analysis (OpenAI)
-// - Outcome Detection (OpenAI)
-// - Summary Generation (OpenAI)
-// - Lead Scoring
-// - Lead Lifecycle Integration
-// - Auto Follow-up Scheduling
+// Get call analysis data for mobile app
+router.get('/calls/:id/analysis', async (req: TenantRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    const call = await prisma.telecallerCall.findFirst({
+      where: { id, telecallerId: userId },
+      include: {
+        lead: {
+          select: { id: true, firstName: true, lastName: true, phone: true },
+        },
+      },
+    });
+
+    if (!call) {
+      return ApiResponse.error(res, 'Call not found', 404);
+    }
+
+    // Build analysis response with available data
+    const analysis: any = {
+      id: call.id,
+      aiAnalyzed: call.aiAnalyzed || false,
+      outcome: call.outcome,
+      duration: call.duration,
+      recordingUrl: call.recordingUrl,
+      transcript: call.transcript,
+      sentiment: call.sentiment,
+      summary: call.summary || (call.outcome ? `Call with ${call.lead ? `${call.lead.firstName} ${call.lead.lastName || ''}`.trim() : call.phoneNumber}. Outcome: ${call.outcome}. Duration: ${call.duration || 0}s.` : null),
+      qualification: call.qualification || {},
+      callQualityScore: call.callQualityScore,
+      lead: call.lead,
+      notes: call.notes,
+      // Enhanced fields
+      keyQuestionsAsked: call.keyQuestionsAsked || [],
+      keyIssuesDiscussed: call.keyIssuesDiscussed || [],
+      sentimentIntensity: call.sentimentIntensity,
+      agentSpeakingTime: call.agentSpeakingTime,
+      customerSpeakingTime: call.customerSpeakingTime,
+      // Coaching
+      coachingPositiveHighlights: call.coachingPositiveHighlights,
+      coachingAreasToImprove: call.coachingAreasToImprove,
+      coachingNextCallTips: call.coachingNextCallTips || [],
+      coachingSummary: call.coachingSummary,
+      coachingEmpathyScore: call.coachingEmpathyScore,
+      coachingObjectionScore: call.coachingObjectionScore,
+      coachingClosingScore: call.coachingClosingScore,
+    };
+
+    // If no AI analysis yet, generate basic insights from metadata
+    if (!call.aiAnalyzed && call.outcome) {
+      analysis.aiAnalyzed = true;
+      analysis.summary = analysis.summary || `Call completed. Outcome: ${call.outcome}.`;
+
+      // Basic sentiment based on outcome
+      if (!analysis.sentiment) {
+        if (['INTERESTED', 'CONVERTED'].includes(call.outcome)) {
+          analysis.sentiment = 'positive';
+        } else if (['NOT_INTERESTED', 'WRONG_NUMBER'].includes(call.outcome)) {
+          analysis.sentiment = 'negative';
+        } else {
+          analysis.sentiment = 'neutral';
+        }
+      }
+    }
+
+    ApiResponse.success(res, 'Call analysis retrieved', analysis);
+  } catch (error) {
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
 
 // Get telecaller stats/dashboard - used by mobile app
 router.get('/stats', async (req: TenantRequest, res: Response) => {

@@ -144,10 +144,12 @@ public class CallRecordingService extends Service {
 
     // Track if we've ever seen OFFHOOK state (call in progress)
     private boolean hasSeenOffhook = false;
+    private boolean pendingRecordingStart = false;
+    private String pendingCallId = null;
 
     private void handleCallStateChange(int state) {
         Log.d(TAG, "========== CALL STATE CHANGED: " + state + " ==========");
-        Log.d(TAG, "isRecording=" + isRecording + ", hasSeenOffhook=" + hasSeenOffhook + ", callAnswered=" + callAnswered);
+        Log.d(TAG, "isRecording=" + isRecording + ", hasSeenOffhook=" + hasSeenOffhook + ", callAnswered=" + callAnswered + ", pendingRecordingStart=" + pendingRecordingStart);
 
         switch (state) {
             case TelephonyManager.CALL_STATE_OFFHOOK:
@@ -155,9 +157,17 @@ public class CallRecordingService extends Service {
                 hasSeenOffhook = true;
                 Log.d(TAG, "OFFHOOK detected - call is in progress");
 
-                // For outgoing calls, OFFHOOK happens when call is initiated (not when answered)
-                // We still track it to know a call was started
-                if (!callAnswered && isRecording) {
+                // If recording was deferred, start it now that the call is active
+                if (pendingRecordingStart && !isRecording) {
+                    Log.d(TAG, "========== STARTING DEFERRED RECORDING ==========");
+                    // Small delay to let audio routing settle
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        actuallyStartRecording(pendingCallId);
+                        pendingRecordingStart = false;
+                    }, 1500);
+                }
+
+                if (!callAnswered) {
                     callAnswered = true;
                     conversationStartTime = System.currentTimeMillis();
                     Log.d(TAG, "========== CALL IN PROGRESS - TRACKING STARTED ==========");
@@ -289,6 +299,8 @@ public class CallRecordingService extends Service {
         callAnswered = false;
         conversationStartTime = 0;
         hasSeenOffhook = false;
+        pendingRecordingStart = false;
+        pendingCallId = callId;
 
         // Start phone state monitoring to detect when call is answered
         startPhoneStateMonitoring();
@@ -297,6 +309,7 @@ public class CallRecordingService extends Service {
         startForeground(NOTIFICATION_ID, createNotification());
         Log.d(TAG, "Foreground service started");
 
+        // Prepare the recording file path
         try {
             File recordingsDir = new File(getFilesDir(), "recordings");
             if (!recordingsDir.exists()) {
@@ -307,67 +320,87 @@ public class CallRecordingService extends Service {
             String filename = "call_" + callId + "_" + timestamp + ".m4a";
             File recordingFile = new File(recordingsDir, filename);
             currentRecordingPath = recordingFile.getAbsolutePath();
+            Log.d(TAG, "Will record to: " + currentRecordingPath);
 
-            Log.d(TAG, "Recording to: " + currentRecordingPath);
+            // DEFER actual recording until call is OFFHOOK (connected)
+            // This prevents the phone app from stealing the microphone
+            pendingRecordingStart = true;
 
-            mediaRecorder = new MediaRecorder();
-
-            // Try different audio sources in order of preference for call recording
-            // VOICE_CALL (4) = Records both sides of phone call (works on some devices)
-            // VOICE_COMMUNICATION (7) = VoIP calls
-            // MIC (1) = Microphone only (fallback)
-            int[] audioSources = {
-                MediaRecorder.AudioSource.VOICE_CALL,        // Best for calls - both sides
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION, // Good for VoIP
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,   // Sometimes works better
-                MediaRecorder.AudioSource.MIC                  // Fallback
-            };
-            String[] sourceNames = {"VOICE_CALL", "VOICE_COMMUNICATION", "VOICE_RECOGNITION", "MIC"};
-
-            boolean sourceSet = false;
-            for (int i = 0; i < audioSources.length && !sourceSet; i++) {
-                try {
-                    if (i > 0) {
-                        // Need new MediaRecorder instance after failed setAudioSource
-                        mediaRecorder = new MediaRecorder();
-                    }
-                    mediaRecorder.setAudioSource(audioSources[i]);
-                    Log.d(TAG, "SUCCESS: Using " + sourceNames[i] + " audio source");
-                    sourceSet = true;
-                } catch (Exception e) {
-                    Log.w(TAG, sourceNames[i] + " failed: " + e.getMessage());
-                }
-            }
-
-            if (!sourceSet) {
-                throw new IOException("No audio source available for recording");
-            }
-
-            mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-            mediaRecorder.setAudioSamplingRate(44100);
-            mediaRecorder.setAudioEncodingBitRate(128000);
-            mediaRecorder.setOutputFile(currentRecordingPath);
-
-            mediaRecorder.prepare();
-            mediaRecorder.start();
-
-            isRecording = true;
-            recordingStartTime = System.currentTimeMillis();
-
-            Log.d(TAG, "========== RECORDING STARTED ==========");
-
+            // Report the path immediately so JS side has it
             if (callback != null) {
                 callback.onRecordingStarted(currentRecordingPath);
             }
 
-        } catch (IOException e) {
-            Log.e(TAG, "Recording failed: " + e.getMessage(), e);
-            cleanupRecorder();
+            // Fallback: if OFFHOOK doesn't fire within 10 seconds, start recording anyway
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                if (pendingRecordingStart && !isRecording) {
+                    Log.d(TAG, "========== FALLBACK: Starting recording after 10s timeout ==========");
+                    actuallyStartRecording(callId);
+                    pendingRecordingStart = false;
+                }
+            }, 10000);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Recording setup failed: " + e.getMessage(), e);
             stopForeground(true);
             if (callback != null) {
                 callback.onRecordingError(e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Actually start the MediaRecorder. Called when call is OFFHOOK (connected).
+     * Starting recording during an active call gives MIC access since the audio
+     * routing is already set up for the call.
+     */
+    private void actuallyStartRecording(String callId) {
+        if (isRecording) {
+            Log.d(TAG, "Already recording, skipping actuallyStartRecording");
+            return;
+        }
+
+        Log.d(TAG, "========== ACTUALLY STARTING RECORDING ==========");
+        Log.d(TAG, "Call ID: " + callId);
+        Log.d(TAG, "Output path: " + currentRecordingPath);
+
+        // Try audio sources - VOICE_COMMUNICATION first (works during active calls on many devices)
+        int[] audioSources = {
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION, // Best during active calls
+            MediaRecorder.AudioSource.VOICE_CALL,          // Records both sides if supported
+            MediaRecorder.AudioSource.MIC,                 // Fallback
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,   // Alternative
+        };
+        String[] sourceNames = {"VOICE_COMMUNICATION", "VOICE_CALL", "MIC", "VOICE_RECOGNITION"};
+
+        boolean recordingStarted = false;
+        for (int i = 0; i < audioSources.length && !recordingStarted; i++) {
+            try {
+                mediaRecorder = new MediaRecorder();
+                mediaRecorder.setAudioSource(audioSources[i]);
+                mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+                mediaRecorder.setAudioSamplingRate(44100);
+                mediaRecorder.setAudioEncodingBitRate(128000);
+                mediaRecorder.setOutputFile(currentRecordingPath);
+                mediaRecorder.prepare();
+                mediaRecorder.start();
+                Log.d(TAG, "SUCCESS: Recording started with " + sourceNames[i] + " during active call");
+                recordingStarted = true;
+            } catch (Exception e) {
+                Log.w(TAG, sourceNames[i] + " failed during active call: " + e.getMessage());
+                try { mediaRecorder.release(); } catch (Exception ignored) {}
+                mediaRecorder = null;
+            }
+        }
+
+        if (recordingStarted) {
+            isRecording = true;
+            recordingStartTime = System.currentTimeMillis();
+            Log.d(TAG, "========== RECORDING STARTED DURING ACTIVE CALL ==========");
+        } else {
+            Log.e(TAG, "All audio sources failed during active call");
+            // Don't stop the service - we still want to track call state
         }
     }
 

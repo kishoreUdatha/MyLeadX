@@ -1,4 +1,4 @@
-import { Platform, PermissionsAndroid, Alert, Linking, Permission } from 'react-native';
+import { Platform, PermissionsAndroid, Alert, Linking, Permission, NativeModules } from 'react-native';
 
 export type PermissionType =
   | 'RECORD_AUDIO'
@@ -132,7 +132,25 @@ export const requestCallPermissions = async (): Promise<boolean> => {
     'READ_PHONE_STATE',
     'CALL_PHONE',
     'READ_CALL_LOG',
+    'READ_EXTERNAL_STORAGE',
   ];
+
+  // Also request READ_MEDIA_AUDIO on Android 13+
+  try {
+    const apiLevel = Platform.Version;
+    if (typeof apiLevel === 'number' && apiLevel >= 33) {
+      await PermissionsAndroid.request(
+        'android.permission.READ_MEDIA_AUDIO' as Permission,
+        {
+          title: 'Audio Access',
+          message: 'This app needs access to audio files to find call recordings.',
+          buttonPositive: 'OK',
+        }
+      );
+    }
+  } catch (e) {
+    console.log('READ_MEDIA_AUDIO request failed:', e);
+  }
 
   const results = await requestMultiplePermissions(permissions);
   const allGranted = Object.values(results).every((granted) => granted);
@@ -150,6 +168,15 @@ export const requestCallPermissions = async (): Promise<boolean> => {
         { text: 'Open Settings', onPress: () => Linking.openSettings() },
       ]
     );
+  }
+
+  // Request All Files Access for system call recording access (Android 11+)
+  try {
+    if (NativeModules.StoragePermission) {
+      await NativeModules.StoragePermission.requestAllFilesAccess();
+    }
+  } catch (e) {
+    console.log('All files access request skipped:', e);
   }
 
   return allGranted;

@@ -1,9 +1,22 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, NativeModules } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { Call, CallOutcome } from '../types';
 import { formatDuration, formatDateTime } from '../utils/formatters';
+import { API_URL } from '../config';
+
+// Simple audio player using Android's MediaPlayer via a minimal native bridge
+// Falls back to downloading and opening the file if native player isn't available
+const AudioPlayer = {
+  currentUrl: null as string | null,
+  isPlaying: false,
+
+  getFullUrl(recordingUrl: string): string {
+    const baseUrl = API_URL.replace(/\/api$/, '');
+    return `${baseUrl}${recordingUrl}`;
+  },
+};
 
 interface Props {
   call: Call;
@@ -23,6 +36,146 @@ const OUTCOME_CONFIG: Record<CallOutcome, { icon: string; color: string; label: 
 
 const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
   const outcome = call.outcome ? OUTCOME_CONFIG[call.outcome] : null;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const playerRef = useRef<any>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [playbackTime, setPlaybackTime] = useState(0);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.stop();
+          playerRef.current.release();
+        } catch (e) {}
+        playerRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  const handlePlayPause = useCallback(async () => {
+    if (!call.recordingUrl) return;
+
+    const url = AudioPlayer.getFullUrl(call.recordingUrl);
+
+    if (isPlaying && playerRef.current) {
+      // Pause
+      try {
+        playerRef.current.pause();
+      } catch (e) {}
+      setIsPlaying(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
+
+    // Use react-native's built-in fetch to download and play via native
+    // Since we don't have a dedicated audio library, use the AudioPlayer native module
+    // or fall back to downloading via RNFS and using Android intent
+
+    try {
+      setIsLoading(true);
+
+      // Try using the NativeModules.AudioPlayer if available
+      if (NativeModules.AudioPlayer) {
+        if (playerRef.current === 'loaded') {
+          await NativeModules.AudioPlayer.resume();
+        } else {
+          await NativeModules.AudioPlayer.play(url);
+          playerRef.current = 'loaded';
+        }
+        setIsPlaying(true);
+        setIsLoading(false);
+
+        // Track playback time
+        setPlaybackTime(0);
+        timerRef.current = setInterval(() => {
+          setPlaybackTime(prev => prev + 1);
+        }, 1000);
+        return;
+      }
+
+      // Fallback: Download file and open with system player
+      const RNFS = require('react-native-fs');
+      const localPath = `${RNFS.CachesDirectoryPath}/recording_${call.id}.m4a`;
+
+      // Check if already downloaded
+      const exists = await RNFS.exists(localPath);
+      if (!exists) {
+        console.log('[Audio] Downloading recording from:', url);
+        await RNFS.downloadFile({
+          fromUrl: url,
+          toFile: localPath,
+        }).promise;
+        console.log('[Audio] Downloaded to:', localPath);
+      }
+
+      // Use Android MediaPlayer via FileViewer or intent
+      const { Linking } = require('react-native');
+
+      // Try to play using Android's built-in audio player
+      // For Android, we can use content:// URI or file:// URI
+      const fileUri = `file://${localPath}`;
+
+      // Use Android intent to play audio
+      if (NativeModules.IntentLauncher) {
+        await NativeModules.IntentLauncher.startActivity({
+          action: 'android.intent.action.VIEW',
+          data: fileUri,
+          type: 'audio/mp4',
+        });
+      } else {
+        // Last resort: open the URL directly in browser
+        await Linking.openURL(url);
+      }
+
+      setIsLoading(false);
+      setIsPlaying(true);
+
+      // Auto-reset after estimated duration
+      setTimeout(() => {
+        setIsPlaying(false);
+      }, (call.duration || 30) * 1000);
+
+    } catch (error) {
+      console.error('[Audio] Playback error:', error);
+      setIsLoading(false);
+      setIsPlaying(false);
+
+      // Final fallback: open URL in browser
+      try {
+        const { Linking } = require('react-native');
+        await Linking.openURL(url);
+      } catch (e) {
+        console.error('[Audio] Cannot open URL:', e);
+      }
+    }
+  }, [call, isPlaying]);
+
+  const handleStop = useCallback(() => {
+    if (NativeModules.AudioPlayer) {
+      try { NativeModules.AudioPlayer.stop(); } catch (e) {}
+    }
+    if (playerRef.current) {
+      playerRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setIsPlaying(false);
+    setPlaybackTime(0);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <TouchableOpacity
@@ -49,21 +202,16 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
           </Text>
         </View>
 
+        {call.leadName && (
+          <Text style={styles.leadName}>{call.leadName}</Text>
+        )}
+
         <View style={styles.details}>
           {call.duration !== undefined && call.duration > 0 && (
             <View style={styles.detailItem}>
               <Icon name="timer-outline" size={14} color="#9CA3AF" />
               <Text style={styles.detailText}>
                 {formatDuration(call.duration)}
-              </Text>
-            </View>
-          )}
-
-          {call.recordingUrl && (
-            <View style={styles.detailItem}>
-              <Icon name="microphone" size={14} color="#3B82F6" />
-              <Text style={[styles.detailText, { color: '#3B82F6' }]}>
-                Recording
               </Text>
             </View>
           )}
@@ -81,6 +229,44 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
             </View>
           )}
         </View>
+
+        {/* Recording Playback Button */}
+        {call.recordingUrl && (
+          <View style={styles.playbackContainer}>
+            {isLoading ? (
+              <View style={styles.playButton}>
+                <ActivityIndicator size="small" color="#3B82F6" />
+                <Text style={styles.playButtonText}>Loading...</Text>
+              </View>
+            ) : (
+              <View style={styles.playbackRow}>
+                <TouchableOpacity
+                  style={[styles.playButton, isPlaying && styles.playButtonActive]}
+                  onPress={handlePlayPause}
+                  activeOpacity={0.7}
+                >
+                  <Icon
+                    name={isPlaying ? 'pause' : 'play'}
+                    size={18}
+                    color={isPlaying ? '#FFFFFF' : '#3B82F6'}
+                  />
+                  <Text style={[styles.playButtonText, isPlaying && styles.playButtonTextActive]}>
+                    {isPlaying ? `Playing ${formatTime(playbackTime)}` : 'Play Recording'}
+                  </Text>
+                </TouchableOpacity>
+                {isPlaying && (
+                  <TouchableOpacity
+                    style={styles.stopButton}
+                    onPress={handleStop}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="stop" size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
         {call.notes && (
           <Text style={styles.notes} numberOfLines={2}>
@@ -132,6 +318,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
   },
+  leadName: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
   details: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -146,6 +337,47 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  playbackContainer: {
+    marginTop: 8,
+  },
+  playbackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  playButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  playButtonActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  playButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#3B82F6',
+  },
+  playButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  stopButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   notes: {
     fontSize: 13,

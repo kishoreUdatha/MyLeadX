@@ -12,6 +12,8 @@ import com.facebook.soloader.SoLoader
 import com.telecallerapptemp.callrecording.CallRecordingPackage
 import com.telecallerapptemp.calllog.CallLogPackage
 import com.telecallerapptemp.accessibility.AccessibilityPackage
+import com.telecallerapptemp.audioplayer.AudioPlayerPackage
+import com.telecallerapptemp.storage.StoragePermissionPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -23,6 +25,8 @@ class MainApplication : Application(), ReactApplication {
           add(CallRecordingPackage())
           add(CallLogPackage())
           add(AccessibilityPackage())
+          add(AudioPlayerPackage())
+          add(StoragePermissionPackage())
         }
 
       override fun getJSMainModuleName(): String = "index"

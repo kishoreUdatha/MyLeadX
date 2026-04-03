@@ -4,7 +4,7 @@ import { Request, Response } from 'express';
 // General API rate limiter
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 500 : 5000, // Higher limit for development
+  max: process.env.NODE_ENV === 'production' ? 500 : 50000, // Much higher limit for development
   message: {
     success: false,
     message: 'Too many requests, please try again after 15 minutes',
@@ -20,7 +20,7 @@ export const apiLimiter = rateLimit({
 // Strict limiter for authentication endpoints
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 10 : 100, // Higher limit for development
+  max: process.env.NODE_ENV === 'production' ? 10 : 1000, // Higher limit for development
   message: {
     success: false,
     message: 'Too many login attempts, please try again after 15 minutes',

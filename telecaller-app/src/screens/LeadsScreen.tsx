@@ -196,13 +196,10 @@ const LeadsScreen: React.FC = () => {
 
   const handleCall = useCallback(
     (lead: Lead) => {
-      // Directly open phone dialer to make the call
-      const cleanPhone = lead.phone.replace(/[^\d+]/g, '');
-      Linking.openURL(`tel:${cleanPhone}`).catch(() => {
-        Alert.alert('Error', 'Cannot open phone dialer');
-      });
+      // Navigate to CallScreen which handles recording and call tracking
+      navigation.navigate('Call', { lead });
     },
-    []
+    [navigation]
   );
 
   const handleLeadPress = useCallback(

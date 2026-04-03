@@ -8,8 +8,10 @@ import {
   RefreshControl,
   ActivityIndicator,
   ScrollView,
+  NativeModules,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { API_URL } from '../config';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppDispatch, useAppSelector } from '../store';
@@ -73,6 +75,178 @@ const getDateRange = (rangeType: DateRangeType, customDates?: { startDate: Date 
     default:
       return null;
   }
+};
+
+// Audio playback component for expanded call items
+const ExpandedCallContent: React.FC<{ item: Call }> = ({ item }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [playTime, setPlayTime] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const getRecordingUrl = () => {
+    if (!item.recordingUrl) return null;
+    const baseUrl = API_URL.replace(/\/api$/, '');
+    return `${baseUrl}${item.recordingUrl}`;
+  };
+
+  const maxDuration = item.duration || 60; // Use call duration as max playback limit
+
+  const stopPlayback = useCallback(() => {
+    try { NativeModules.AudioPlayer?.stop(); } catch (e) {}
+    setIsPlaying(false);
+    setPlayTime(0);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }, []);
+
+  const handlePlay = async () => {
+    if (isPlaying) {
+      try { await NativeModules.AudioPlayer?.pause(); } catch (e) {}
+      setIsPlaying(false);
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      return;
+    }
+
+    // Resume if paused
+    if (playTime > 0 && !isPlaying) {
+      try {
+        await NativeModules.AudioPlayer?.resume();
+        setIsPlaying(true);
+        timerRef.current = setInterval(() => {
+          setPlayTime(t => {
+            if (t + 1 >= maxDuration) {
+              stopPlayback();
+              return 0;
+            }
+            return t + 1;
+          });
+        }, 1000);
+        return;
+      } catch (e) {}
+    }
+
+    const url = getRecordingUrl();
+    if (!url) return;
+
+    setIsLoading(true);
+    try {
+      await NativeModules.AudioPlayer.play(url);
+      setIsPlaying(true);
+      setPlayTime(0);
+      timerRef.current = setInterval(() => {
+        setPlayTime(t => {
+          if (t + 1 >= maxDuration) {
+            stopPlayback();
+            return 0;
+          }
+          return t + 1;
+        });
+      }, 1000);
+    } catch (e) {
+      console.error('[Audio] Play failed:', e);
+    }
+    setIsLoading(false);
+  };
+
+  // Listen for playback completion and cleanup on unmount
+  useEffect(() => {
+    const { DeviceEventEmitter } = require('react-native');
+    const sub = DeviceEventEmitter.addListener('onPlaybackComplete', () => {
+      setIsPlaying(false);
+      setPlayTime(0);
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    });
+    return () => {
+      sub.remove();
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      try { NativeModules.AudioPlayer?.stop(); } catch (e) {}
+    };
+  }, []);
+
+  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  return (
+    <View style={styles.expandedContent}>
+      {/* Play Recording Button */}
+      {item.recordingUrl && (
+        <View style={{ marginBottom: 12 }}>
+          {isLoading ? (
+            <View style={styles.playRecordingButton}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.playRecordingText}>Loading...</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.playRecordingButton, isPlaying && { backgroundColor: '#059669' }]}
+                onPress={handlePlay}
+              >
+                <Icon name={isPlaying ? 'pause' : 'play'} size={20} color="#FFFFFF" />
+                <Text style={styles.playRecordingText}>
+                  {isPlaying ? `Playing ${fmtTime(playTime)}` : 'Play Recording'}
+                </Text>
+              </TouchableOpacity>
+              {isPlaying && (
+                <TouchableOpacity
+                  style={{ backgroundColor: '#FEE2E2', padding: 8, borderRadius: 20 }}
+                  onPress={stopPlayback}
+                >
+                  <Icon name="stop" size={20} color="#EF4444" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      )}
+
+      {item.notes && (
+        <View style={styles.notesSection}>
+          <Text style={styles.notesLabel}>Notes:</Text>
+          <Text style={styles.notesText}>{item.notes}</Text>
+        </View>
+      )}
+      {item.transcript && (
+        <View style={styles.transcriptSection}>
+          <Text style={styles.transcriptLabel}>Transcript:</Text>
+          <Text style={styles.transcriptText} numberOfLines={5}>
+            {item.transcript}
+          </Text>
+        </View>
+      )}
+
+      {/* Call Details */}
+      <View style={{ marginTop: 8, backgroundColor: '#F9FAFB', borderRadius: 8, padding: 10 }}>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: '#4B5563', marginBottom: 6 }}>Call Details</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {item.outcome && (
+            <View style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+              <Text style={{ fontSize: 11, color: '#3B82F6' }}>Outcome: {item.outcome}</Text>
+            </View>
+          )}
+          {item.duration !== undefined && item.duration > 0 && (
+            <View style={{ backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+              <Text style={{ fontSize: 11, color: '#16A34A' }}>Duration: {fmtTime(item.duration)}</Text>
+            </View>
+          )}
+          {item.recordingUrl && (
+            <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+              <Text style={{ fontSize: 11, color: '#D97706' }}>Recording saved</Text>
+            </View>
+          )}
+          {item.sentimentScore !== undefined && (
+            <View style={{ backgroundColor: '#F5F3FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+              <Text style={{ fontSize: 11, color: '#7C3AED' }}>Sentiment: {item.sentimentScore}%</Text>
+            </View>
+          )}
+        </View>
+        {!item.transcript && (
+          <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6, fontStyle: 'italic' }}>
+            AI analysis requires OpenAI API key to be configured
+          </Text>
+        )}
+      </View>
+    </View>
+  );
 };
 
 const HistoryScreen: React.FC = () => {
@@ -244,52 +418,7 @@ const HistoryScreen: React.FC = () => {
           </View>
 
           {isExpanded && (
-            <View style={styles.expandedContent}>
-              {item.notes && (
-                <View style={styles.notesSection}>
-                  <Text style={styles.notesLabel}>Notes:</Text>
-                  <Text style={styles.notesText}>{item.notes}</Text>
-                </View>
-              )}
-              {item.transcript && (
-                <View style={styles.transcriptSection}>
-                  <Text style={styles.transcriptLabel}>Transcript:</Text>
-                  <Text style={styles.transcriptText} numberOfLines={5}>
-                    {item.transcript}
-                  </Text>
-                </View>
-              )}
-              {item.sentimentScore !== undefined && (
-                <View style={styles.sentimentSection}>
-                  <Text style={styles.sentimentLabel}>Sentiment Score:</Text>
-                  <Text
-                    style={[
-                      styles.sentimentScore,
-                      {
-                        color:
-                          item.sentimentScore >= 70
-                            ? '#10B981'
-                            : item.sentimentScore >= 40
-                              ? '#F59E0B'
-                              : '#EF4444',
-                      },
-                    ]}
-                  >
-                    {item.sentimentScore}%
-                  </Text>
-                </View>
-              )}
-
-              {/* AI Analysis Button */}
-              <TouchableOpacity
-                style={styles.aiAnalysisButton}
-                onPress={() => navigation.navigate('AIAnalysis', { callId: item.id })}
-              >
-                <Icon name="robot" size={18} color="#FFFFFF" />
-                <Text style={styles.aiAnalysisButtonText}>View AI Analysis</Text>
-                <Icon name="chevron-right" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <ExpandedCallContent item={item} />
           )}
         </TouchableOpacity>
       );
@@ -571,18 +700,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  aiAnalysisButton: {
+  playRecordingButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#3B82F6',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
-    marginTop: 12,
     gap: 8,
   },
-  aiAnalysisButtonText: {
+  playRecordingText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',

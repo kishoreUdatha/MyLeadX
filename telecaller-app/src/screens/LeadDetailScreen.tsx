@@ -72,11 +72,8 @@ const LeadDetailScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const handleCall = () => {
     if (selectedLead) {
-      // Directly open phone dialer to make the call
-      const cleanPhone = selectedLead.phone.replace(/[^\d+]/g, '');
-      Linking.openURL(`tel:${cleanPhone}`).catch(() => {
-        Alert.alert('Error', 'Cannot open phone dialer');
-      });
+      // Navigate to CallScreen which handles recording and call tracking
+      navigation.navigate('Call', { lead: selectedLead });
     }
   };
 

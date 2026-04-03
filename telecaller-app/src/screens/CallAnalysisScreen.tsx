@@ -46,46 +46,37 @@ const CallAnalysisScreen: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [pollCount, setPollCount] = useState(0);
 
-  // Poll for analysis results
+  // Fetch analysis results (single attempt, no aggressive polling)
   const fetchAnalysis = useCallback(async () => {
     try {
       const result = await telecallerApi.getCallAnalysis(callId);
       setAnalysis(result);
-
-      if (result.aiAnalyzed) {
-        setIsLoading(false);
-      } else {
-        // Keep polling if not analyzed yet
-        setPollCount((prev) => prev + 1);
-      }
+      setIsLoading(false);
     } catch (err) {
       console.error('Error fetching analysis:', err);
-      // Don't set error on first few attempts, AI might still be processing
-      if (pollCount > 10) {
-        setError('Unable to fetch analysis. Please try again later.');
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
-  }, [callId, pollCount]);
+  }, [callId]);
 
-  // Start polling when screen mounts
+  // Fetch once on mount, then poll gently (max 5 attempts)
   useEffect(() => {
     fetchAnalysis();
 
-    // Poll every 3 seconds until we get results (max 20 attempts = 60 seconds)
     const interval = setInterval(() => {
-      if (pollCount < 20 && isLoading) {
-        fetchAnalysis();
-      } else if (pollCount >= 20) {
-        setIsLoading(false);
-        if (!analysis?.aiAnalyzed) {
-          setError('Analysis is taking longer than expected. Results will be available soon.');
+      setPollCount((prev) => {
+        if (prev >= 5) {
+          setIsLoading(false);
+          return prev;
         }
-      }
-    }, 3000);
+        if (!analysis?.aiAnalyzed) {
+          fetchAnalysis();
+        }
+        return prev + 1;
+      });
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [fetchAnalysis, pollCount, isLoading, analysis]);
+  }, []);
 
   const handleDone = useCallback(() => {
     navigation.reset({
@@ -297,17 +288,14 @@ const CallAnalysisScreen: React.FC = () => {
           </>
         )}
 
-        {/* Done Button */}
+        {/* Done Button - always clickable */}
         <TouchableOpacity
-          style={[styles.doneButton, isLoading && styles.doneButtonDisabled]}
+          style={styles.doneButton}
           onPress={handleDone}
-          disabled={isLoading}
           activeOpacity={0.8}
         >
           <Icon name="check" size={20} color="#FFFFFF" />
-          <Text style={styles.doneButtonText}>
-            {isLoading ? 'Waiting for Analysis...' : 'Done'}
-          </Text>
+          <Text style={styles.doneButtonText}>Done</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

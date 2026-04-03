@@ -70,6 +70,7 @@ const CallScreen: React.FC = () => {
     recordingPath,
     endCall,
     initiateCall,
+    submitOutcome,
   } = useCallRecording();
 
   const [callInitiated, setCallInitiated] = useState(false);
@@ -321,10 +322,39 @@ const CallScreen: React.FC = () => {
     );
   };
 
+  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
+  const [outcomeNotes, setOutcomeNotes] = useState('');
+
+  const OUTCOMES = [
+    { value: 'INTERESTED', label: 'Interested', icon: 'thumb-up', color: '#10B981' },
+    { value: 'NOT_INTERESTED', label: 'Not Interested', icon: 'thumb-down', color: '#EF4444' },
+    { value: 'CALLBACK', label: 'Callback', icon: 'phone-return', color: '#F59E0B' },
+    { value: 'CONVERTED', label: 'Converted', icon: 'check-circle', color: '#8B5CF6' },
+    { value: 'NO_ANSWER', label: 'No Answer', icon: 'phone-missed', color: '#6B7280' },
+    { value: 'BUSY', label: 'Busy', icon: 'phone-lock', color: '#6B7280' },
+    { value: 'WRONG_NUMBER', label: 'Wrong Number', icon: 'phone-cancel', color: '#EF4444' },
+  ];
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSelectOutcome = async (outcomeValue: string) => {
+    setIsSubmitting(true);
+    try {
+      // Wait a moment for recording upload to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await submitOutcome(outcomeValue as any, outcomeNotes || undefined);
+    } catch (err) {
+      console.error('Failed to submit outcome:', err);
+    }
+    setIsSubmitting(false);
+    setShowOutcomeModal(false);
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+  };
+
   const handleEndCall = async () => {
     Alert.alert(
       'End Call',
-      'Are you ready to end the call? AI will analyze the recording and determine the outcome.',
+      'Are you ready to end the call?',
       [
         { text: 'Continue Call', style: 'cancel' },
         {
@@ -332,16 +362,7 @@ const CallScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             await endCall();
-            if (currentCall) {
-              // Navigate to AI-powered analysis screen instead of manual outcome
-              navigation.replace('CallAnalysis', {
-                callId: currentCall.id,
-                duration: callDuration,
-                recordingPath: recordingPath || undefined,
-              });
-            } else {
-              navigation.goBack();
-            }
+            setShowOutcomeModal(true);
           },
         },
       ]
@@ -740,6 +761,73 @@ const CallScreen: React.FC = () => {
           </Text>
         </View>
       )}
+
+      {/* Outcome Selection Modal */}
+      <Modal
+        visible={showOutcomeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Call Outcome</Text>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 12 }}>
+                How did the call go?
+              </Text>
+              {isSubmitting ? (
+                <View style={{ alignItems: 'center', padding: 30 }}>
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <Text style={{ fontSize: 14, color: '#6B7280', marginTop: 12 }}>Saving call data & recording...</Text>
+                </View>
+              ) : (
+                OUTCOMES.map((item) => (
+                  <TouchableOpacity
+                    key={item.value}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 14,
+                      marginBottom: 8,
+                      backgroundColor: '#F9FAFB',
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                    }}
+                    onPress={() => handleSelectOutcome(item.value)}
+                  >
+                    <Icon name={item.icon} size={24} color={item.color} />
+                    <Text style={{ fontSize: 16, fontWeight: '500', color: '#1F2937', marginLeft: 12 }}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+              <TextInput
+                style={{
+                  borderWidth: 1,
+                  borderColor: '#E5E7EB',
+                  borderRadius: 10,
+                  padding: 12,
+                  marginTop: 8,
+                  fontSize: 14,
+                  color: '#1F2937',
+                  minHeight: 60,
+                  textAlignVertical: 'top',
+                }}
+                placeholder="Add notes (optional)..."
+                placeholderTextColor="#9CA3AF"
+                value={outcomeNotes}
+                onChangeText={setOutcomeNotes}
+                multiline
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
