@@ -220,11 +220,9 @@ class TelecallerCallFinalizationService {
       const detectedLanguage = transcribed.detectedLanguage;
       console.log(`[TelecallerAI] Detected language: ${detectedLanguage}`);
 
-      // Step 1b: English translation of the audio (best-effort)
+      // Step 1b: English translation of the cleaned native transcript (best-effort)
       const englishTranscript =
-        detectedLanguage && detectedLanguage.toLowerCase().startsWith('en')
-          ? transcript
-          : (await this.translateToEnglish(filePath)) || '';
+        (await this.translateTranscriptToEnglish(transcript, detectedLanguage)) || '';
 
       // Step 1.5: Validate transcript has meaningful conversation
       const validationResult = this.validateTranscript(transcript, call.duration || 0);
@@ -531,24 +529,33 @@ class TelecallerCallFinalizationService {
    * @param language - Preferred language code (e.g., 'te-IN', 'hi-IN', 'en-IN')
    */
   /**
-   * Translate audio directly to English using Whisper's translations endpoint.
-   * Returns null on any failure — caller should treat translation as best-effort.
+   * Translate the cleaned native-language transcript into faithful English using GPT.
+   * This is more accurate than Whisper's audio→English mode because we feed it the
+   * already-cleaned conversation text (with speaker turns), not noisy audio.
    */
-  private async translateToEnglish(filePath: string): Promise<string | null> {
-    if (!openai) return null;
+  private async translateTranscriptToEnglish(cleanedTranscript: string, sourceLanguage: string): Promise<string | null> {
+    if (!openai || !cleanedTranscript || cleanedTranscript.length < 5) return null;
+    if (sourceLanguage && sourceLanguage.toLowerCase().startsWith('en')) return cleanedTranscript;
     try {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Whisper translation timeout (60s)')), 60000);
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              `Translate the following ${sourceLanguage} phone-call transcript into clear, natural ` +
+              `English. Preserve speaker turns ("Agent:" / "Customer:") exactly. Keep all numbers, ` +
+              `names, place names, and specific entities (universities, courses, fees, phone numbers) ` +
+              `intact. Do not add commentary, do not summarize, do not use markdown — output ONLY ` +
+              `the translated transcript text.`,
+          },
+          { role: 'user', content: cleanedTranscript },
+        ],
+        temperature: 0.1,
+        max_tokens: 3000,
       });
-      const response: any = await Promise.race([
-        openai.audio.translations.create({
-          file: fs.createReadStream(filePath),
-          model: 'whisper-1',
-        }),
-        timeoutPromise,
-      ]);
-      const text = (response?.text || '').trim();
-      console.log(`[TelecallerAI] English translation: ${text.substring(0, 100)}...`);
+      const text = response.choices[0]?.message?.content?.trim();
+      console.log(`[TelecallerAI] English translation: ${(text || '').substring(0, 100)}...`);
       return text || null;
     } catch (err: any) {
       console.warn(`[TelecallerAI] English translation failed: ${err?.message || err}`);
@@ -589,7 +596,17 @@ class TelecallerCallFinalizationService {
    * Split a WAV file into N-second chunks. Returns the chunk paths in order.
    * Used to work around Sarvam's 30s sync-STT limit.
    */
-  private async splitWavIntoChunks(wavPath: string, chunkSeconds: number = 28): Promise<string[]> {
+  /**
+   * Split a WAV file into overlapping chunks. Each chunk is `chunkSeconds` long
+   * and starts `overlapSeconds` before the previous one ended, so a word that
+   * straddles a chunk boundary appears (in some form) in both chunks. The cleanup
+   * GPT pass then merges and de-duplicates the boundary text.
+   */
+  private async splitWavIntoChunks(
+    wavPath: string,
+    chunkSeconds: number = 28,
+    overlapSeconds: number = 2,
+  ): Promise<string[]> {
     try {
       const ffmpeg = require('fluent-ffmpeg');
       const ffmpegStatic = require('ffmpeg-static');
@@ -598,20 +615,22 @@ class TelecallerCallFinalizationService {
       // Compute duration directly from the WAV header (we know it's 16kHz mono 16-bit PCM
       // because we just generated it with convertToPcmWav). Avoids needing ffprobe binary.
       const stats = fs.statSync(wavPath);
-      const dataBytes = Math.max(0, stats.size - 44); // strip RIFF header
-      const duration = dataBytes / (16000 * 2); // sampleRate * bytesPerSample(2) * channels(1)
+      const dataBytes = Math.max(0, stats.size - 44);
+      const duration = dataBytes / (16000 * 2);
       console.log(`[TelecallerAI] WAV duration ~${duration.toFixed(1)}s (size=${stats.size})`);
       if (!duration || duration <= chunkSeconds) return [wavPath];
 
       const chunks: string[] = [];
-      const numChunks = Math.ceil(duration / chunkSeconds);
-      for (let i = 0; i < numChunks; i++) {
-        const start = i * chunkSeconds;
+      const stride = chunkSeconds - overlapSeconds;
+      let i = 0;
+      for (let start = 0; start < duration; start += stride) {
         const out = wavPath.replace(/\.wav$/, `-chunk${i}.wav`);
+        const dur = Math.min(chunkSeconds, duration - start);
+        if (dur < 1) break;
         await new Promise<void>((resolve, reject) => {
           ffmpeg(wavPath)
             .setStartTime(start)
-            .setDuration(chunkSeconds)
+            .setDuration(dur)
             .audioFrequency(16000)
             .audioChannels(1)
             .audioCodec('pcm_s16le')
@@ -621,8 +640,10 @@ class TelecallerCallFinalizationService {
             .save(out);
         });
         chunks.push(out);
+        i += 1;
+        if (start + chunkSeconds >= duration) break;
       }
-      console.log(`[TelecallerAI] Split ${duration.toFixed(1)}s audio into ${chunks.length} chunks`);
+      console.log(`[TelecallerAI] Split ${duration.toFixed(1)}s audio into ${chunks.length} overlapping chunks (${chunkSeconds}s, ${overlapSeconds}s overlap)`);
       return chunks;
     } catch (err: any) {
       console.warn(`[TelecallerAI] Audio chunking failed: ${err?.message || err}`);
@@ -644,19 +665,29 @@ class TelecallerCallFinalizationService {
           {
             role: 'system',
             content:
-              `You are an expert ASR post-processor. The input is a raw speech-to-text transcript ` +
-              `from a phone conversation in ${language}. It may contain: garbled spellings, missing ` +
-              `word boundaries, filler sounds, repeated phrases, mis-detected words. Your job: ` +
-              `produce a cleaned, faithful version of the conversation in the SAME language and ` +
-              `script. Rules: (1) Do not add information that is not implied by the audio. ` +
-              `(2) Keep speaker turns if you can infer them, prefixed with "Agent:" / "Customer:". ` +
-              `(3) Fix obvious mis-spellings using context. (4) Remove pure filler/noise. ` +
-              `(5) Reply with ONLY the cleaned transcript text, no preamble or commentary.`,
+              `You are an expert ASR post-processor for telecaller phone calls. The input is a raw ` +
+              `speech-to-text transcript in ${language}. It may contain artifacts from automatic ` +
+              `chunking with overlap (so a sentence near a chunk boundary may appear twice in slightly ` +
+              `different forms), garbled spellings, missing word boundaries, filler sounds, and ` +
+              `mis-detected words. Reconstruct a clean, faithful, well-punctuated rendering of the ` +
+              `actual conversation in the SAME language and native script.\n\n` +
+              `STRICT RULES:\n` +
+              `1. Output ONLY the cleaned transcript — no commentary, no headings, no markdown fences.\n` +
+              `2. NEVER invent content. Only fix what is implied by the surrounding context.\n` +
+              `3. Detect speakers from context (an agent introduces themselves / asks qualifying ` +
+              `questions; a customer answers about themselves). Prefix each turn with "Agent:" or ` +
+              `"Customer:" on its own line.\n` +
+              `4. Merge duplicate sentences caused by chunk overlap — keep the more complete version.\n` +
+              `5. Preserve numbers, money amounts, names, university/college names, dates, phone ` +
+              `numbers and any factual entities EXACTLY as the customer said them.\n` +
+              `6. Remove pure filler ("umm", "ah", repeated "okay okay") but keep meaningful "okay"s.\n` +
+              `7. Add proper punctuation (commas, full stops, question marks) appropriate for ${language}.\n` +
+              `8. If a word looks garbled but you can infer the intended word from context, replace it.`,
           },
           { role: 'user', content: rawTranscript },
         ],
-        temperature: 0.2,
-        max_tokens: 1500,
+        temperature: 0.1,
+        max_tokens: 3000,
       });
       const cleaned = response.choices[0]?.message?.content?.trim();
       if (cleaned && cleaned.length > 5) {
@@ -1676,11 +1707,9 @@ ${call.summary}
       const detectedLanguage = transcribed.detectedLanguage;
       console.log(`[TelecallerAI] Detected language: ${detectedLanguage}`);
 
-      // Step 1b: English translation of the audio (best-effort)
+      // Step 1b: English translation of the cleaned native transcript (best-effort)
       const englishTranscript =
-        detectedLanguage && detectedLanguage.toLowerCase().startsWith('en')
-          ? transcript
-          : (await this.translateToEnglish(filePath)) || '';
+        (await this.translateTranscriptToEnglish(transcript, detectedLanguage)) || '';
 
       // Step 1.5: Validate transcript has meaningful conversation
       const validationResult = this.validateTranscript(transcript, call.duration || 0);

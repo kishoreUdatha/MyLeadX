@@ -5,9 +5,33 @@
 
 import { Platform, Alert, AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import messaging, { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import api from '../api';
+
+// Lazy-load native push deps. If the APK was built without the corresponding native
+// modules (or google-services.json is missing), the require throws — we degrade
+// gracefully so the rest of the app still works.
+let messaging: any = null;
+let FirebaseMessagingTypes: any = null;
+let notifee: any = null;
+let AndroidImportance: any = { HIGH: 4, DEFAULT: 3, LOW: 2 };
+let EventType: any = { DISMISSED: 0, PRESS: 1, ACTION_PRESS: 2, DELIVERED: 3 };
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fbMessaging = require('@react-native-firebase/messaging');
+  messaging = fbMessaging?.default || fbMessaging;
+  FirebaseMessagingTypes = fbMessaging?.FirebaseMessagingTypes;
+} catch (e) {
+  console.warn('[NotificationService] @react-native-firebase/messaging not available — push notifications disabled');
+}
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const notifeeMod = require('@notifee/react-native');
+  notifee = notifeeMod?.default || notifeeMod;
+  if (notifeeMod?.AndroidImportance) AndroidImportance = notifeeMod.AndroidImportance;
+  if (notifeeMod?.EventType) EventType = notifeeMod.EventType;
+} catch (e) {
+  console.warn('[NotificationService] @notifee/react-native not available — local notifications disabled');
+}
 
 // Storage keys
 const FCM_TOKEN_KEY = '@voicebridge:fcm_token';
@@ -86,6 +110,23 @@ class NotificationService {
    */
   async init(): Promise<boolean> {
     if (this.initialized) return true;
+
+    if (!messaging || !notifee) {
+      console.warn('[NotificationService] Native push deps unavailable — skipping init');
+      this.initialized = true;
+      return false;
+    }
+
+    // Probe firebase: getToken() throws synchronously inside its promise if the
+    // Firebase API key is missing (no google-services.json shipped with the APK).
+    // Skip initialization quietly in that case so the app doesn't spam ERROR logs.
+    try {
+      await messaging().getToken();
+    } catch (probeError: any) {
+      console.warn('[NotificationService] Firebase not configured — notifications disabled');
+      this.initialized = true;
+      return false;
+    }
 
     console.log('[NotificationService] Initializing with Firebase...');
 
@@ -179,7 +220,7 @@ class NotificationService {
 
       return token;
     } catch (error) {
-      console.error('[NotificationService] Failed to get token:', error);
+      console.warn('[NotificationService] Failed to get token:', error?.message || error);
       return null;
     }
   }

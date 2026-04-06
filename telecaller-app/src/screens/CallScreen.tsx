@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  AppState,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -141,6 +142,25 @@ const CallScreen: React.FC = () => {
     });
     return () => backHandler.remove();
   }, []);
+
+  // When the user returns to the app after ending the call from the phone dialer,
+  // automatically stop recording and prompt for the outcome — they should never
+  // have to also tap "End Call" inside the app.
+  const dialerLeftRef = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (next) => {
+      if (next === 'background' || next === 'inactive') {
+        // App went to background — assume the dialer took over.
+        dialerLeftRef.current = true;
+      } else if (next === 'active' && dialerLeftRef.current && callInitiated && !showOutcomeModal) {
+        // Returned from the dialer — finalize the call and ask for the outcome.
+        dialerLeftRef.current = false;
+        try { await endCall(); } catch (e) { console.warn('endCall failed:', e); }
+        setShowOutcomeModal(true);
+      }
+    });
+    return () => sub.remove();
+  }, [callInitiated, endCall, showOutcomeModal]);
 
   const handleAutoSend = async () => {
     try {
@@ -339,16 +359,36 @@ const CallScreen: React.FC = () => {
 
   const handleSelectOutcome = async (outcomeValue: string) => {
     setIsSubmitting(true);
+    let savedCallId: string | undefined;
+    let savedRecordingPath: string | undefined;
+    let savedDuration = 0;
     try {
       // Wait a moment for recording upload to complete
       await new Promise(resolve => setTimeout(resolve, 1000));
+      // Capture call refs BEFORE submitOutcome resets them so we can navigate.
+      savedCallId = (currentCall as any)?.id;
+      savedRecordingPath = recordingPath || undefined;
+      savedDuration = callDuration || 0;
       await submitOutcome(outcomeValue as any, outcomeNotes || undefined);
     } catch (err) {
       console.error('Failed to submit outcome:', err);
     }
     setIsSubmitting(false);
     setShowOutcomeModal(false);
-    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+
+    // Go straight to the analysis screen so the telecaller sees the transcript
+    // (and AI summary) the moment the backend finishes processing the recording.
+    if (savedCallId) {
+      navigation.reset({
+        index: 1,
+        routes: [
+          { name: 'Main' as any },
+          { name: 'CallAnalysis' as any, params: { callId: savedCallId, duration: savedDuration, recordingPath: savedRecordingPath } },
+        ],
+      });
+    } else {
+      navigation.reset({ index: 0, routes: [{ name: 'Main' as any }] });
+    }
   };
 
   const handleEndCall = async () => {

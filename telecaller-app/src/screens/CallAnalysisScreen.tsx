@@ -46,37 +46,43 @@ const CallAnalysisScreen: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [pollCount, setPollCount] = useState(0);
 
-  // Fetch analysis results (single attempt, no aggressive polling)
-  const fetchAnalysis = useCallback(async () => {
+  // Fetch analysis results. Keeps the most recent result in state and stops loading
+  // once aiAnalyzed=true is observed.
+  const fetchAnalysis = useCallback(async (): Promise<CallAnalysis | null> => {
     try {
       const result = await telecallerApi.getCallAnalysis(callId);
       setAnalysis(result);
-      setIsLoading(false);
+      if (result?.aiAnalyzed || result?.transcript) {
+        setIsLoading(false);
+      }
+      return result;
     } catch (err) {
       console.error('Error fetching analysis:', err);
-      setIsLoading(false);
+      return null;
     }
   }, [callId]);
 
-  // Fetch once on mount, then poll gently (max 5 attempts)
+  // Poll until the backend finishes AI analysis (~30 attempts × 4s = 2 min max).
   useEffect(() => {
-    fetchAnalysis();
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 30;
 
-    const interval = setInterval(() => {
-      setPollCount((prev) => {
-        if (prev >= 5) {
-          setIsLoading(false);
-          return prev;
-        }
-        if (!analysis?.aiAnalyzed) {
-          fetchAnalysis();
-        }
-        return prev + 1;
-      });
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      setPollCount(attempts);
+      const result = await fetchAnalysis();
+      const done = result?.aiAnalyzed || (result?.transcript && result.transcript.length > 0);
+      if (!done && attempts < maxAttempts && !cancelled) {
+        setTimeout(tick, 4000);
+      } else {
+        setIsLoading(false);
+      }
+    };
+    tick();
+    return () => { cancelled = true; };
+  }, [fetchAnalysis]);
 
   const handleDone = useCallback(() => {
     navigation.reset({
@@ -226,13 +232,25 @@ const CallAnalysisScreen: React.FC = () => {
               </View>
             )}
 
-            {/* Transcript Preview */}
+            {/* Full Transcript */}
             {analysis.transcript && (
               <View style={styles.resultSection}>
-                <Text style={styles.sectionTitle}>Transcript Preview</Text>
+                <Text style={styles.sectionTitle}>Transcript</Text>
                 <View style={styles.transcriptBox}>
-                  <Text style={styles.transcriptText} numberOfLines={5}>
+                  <Text style={styles.transcriptText} selectable>
                     {analysis.transcript}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* English translation (if conversation was in another language) */}
+            {(analysis as any).qualification?.englishTranscript && (
+              <View style={styles.resultSection}>
+                <Text style={styles.sectionTitle}>English Translation</Text>
+                <View style={styles.transcriptBox}>
+                  <Text style={styles.transcriptText} selectable>
+                    {(analysis as any).qualification.englishTranscript}
                   </Text>
                 </View>
               </View>

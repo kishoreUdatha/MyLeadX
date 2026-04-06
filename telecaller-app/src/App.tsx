@@ -17,6 +17,10 @@ import { offlineQueue, recordingBackupService, notificationService } from './ser
 LogBox.ignoreLogs([
   'Non-serializable values were found in the navigation state',
   'ViewPropTypes will be removed',
+  'This method is deprecated',
+  'React Native Firebase namespaced API',
+  'migrating-to-v22',
+  '[NotificationService]',
 ]);
 
 // Loading component for PersistGate

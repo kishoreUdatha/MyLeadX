@@ -12,7 +12,7 @@ import {
   Linking,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useLeads } from '../hooks/useLeads';
@@ -108,6 +108,17 @@ const LeadsScreen: React.FC = () => {
     console.log('[LeadsScreen] Leads state updated, count:', leads.length, 'isLoading:', isLoading);
   }, [leads, isLoading]);
 
+  // Refresh leads when the screen regains focus (e.g. returning from CallScreen)
+  // so lastContactedAt / totalCalls reflect the call we just made and the NEW
+  // bucket count drops accordingly.
+  useFocusEffect(
+    useCallback(() => {
+      if (hasInitializedRef.current) {
+        loadLeads(true);
+      }
+    }, [loadLeads])
+  );
+
   // Filter leads by date range first
   const dateFilteredLeads = useMemo(() => {
     const dates = getDateRange(dateRange, customDates);
@@ -118,10 +129,28 @@ const LeadsScreen: React.FC = () => {
     });
   }, [leads, dateRange, customDates]);
 
+  // A lead is "NEW" (uncalled) if it has never been contacted.
+  // It moves to "CONTACTED" after the first call, unless it has progressed to a
+  // later stage (Qualified / Negotiation / Converted / Lost).
+  const isUncalled = (l: any) =>
+    !l.lastContactedAt && (l.totalCalls === undefined || l.totalCalls === 0);
+
+  const isContacted = (l: any) => {
+    if (isUncalled(l)) return false;
+    const advanced = ['QUALIFIED', 'NEGOTIATION', 'CONVERTED', 'LOST'];
+    return !advanced.includes(l.status);
+  };
+
+  const matchesFilter = (l: any, filter: LeadStatus | 'ALL') => {
+    if (filter === 'ALL') return true;
+    if (filter === 'NEW') return isUncalled(l);
+    if (filter === 'CONTACTED') return isContacted(l);
+    return l.status === filter;
+  };
+
   // Get final filtered leads (date + status)
   const displayLeads = useMemo(() => {
-    if (activeFilter === 'ALL') return dateFilteredLeads;
-    return dateFilteredLeads.filter(l => l.status === activeFilter);
+    return dateFilteredLeads.filter(l => matchesFilter(l, activeFilter));
   }, [dateFilteredLeads, activeFilter]);
 
   // Calculate counts for each status (based on date-filtered leads)
@@ -129,7 +158,7 @@ const LeadsScreen: React.FC = () => {
     const counts: Record<string, number> = { ALL: dateFilteredLeads.length };
     STATUS_FILTERS.forEach(filter => {
       if (filter.value !== 'ALL') {
-        counts[filter.value] = dateFilteredLeads.filter(l => l.status === filter.value).length;
+        counts[filter.value] = dateFilteredLeads.filter(l => matchesFilter(l, filter.value)).length;
       }
     });
     return counts;
@@ -186,12 +215,13 @@ const LeadsScreen: React.FC = () => {
     [search, loadLeads]
   );
 
+  // Tab change is purely client-side: filter the already-loaded leads instead of
+  // refetching, so the badge counts remain stable across tab switches.
   const handleFilterChange = useCallback(
     (status: LeadStatus | 'ALL') => {
       setActiveFilter(status);
-      filterByStatus(status === 'ALL' ? undefined : status);
     },
-    [filterByStatus]
+    []
   );
 
   const handleCall = useCallback(

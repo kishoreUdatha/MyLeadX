@@ -31,6 +31,27 @@ export const leadsApi = {
       const leads: Lead[] = responseData.data?.leads || [];
       const total = responseData.data?.total || 0;
 
+      // Map a backend lead stage / outcome to the app's coarse LeadStatus enum.
+      // Order of precedence: explicit stage.slug → latest call outcome → call history.
+      const deriveStatus = (lead: any): LeadStatus => {
+        const slug = (lead.stage?.slug || lead.stage?.name || '').toString().toLowerCase();
+        if (slug.includes('convert') || slug.includes('won') || lead.isConverted) return 'CONVERTED';
+        if (slug.includes('lost') || slug.includes('not_interested')) return 'LOST';
+        if (slug.includes('negotiat') || slug.includes('proposal')) return 'NEGOTIATION';
+        if (slug.includes('qualif')) return 'QUALIFIED';
+
+        // Fall back to the last telecaller call outcome (set by the AI pipeline).
+        const lastOutcome = (lead.lastCallOutcome || lead.outcome || '').toString().toUpperCase();
+        if (lastOutcome === 'CONVERTED') return 'CONVERTED';
+        if (lastOutcome === 'NOT_INTERESTED') return 'LOST';
+        if (lastOutcome === 'INTERESTED') return 'QUALIFIED';
+        if (['CALLBACK_REQUESTED', 'NEEDS_FOLLOWUP', 'NO_ANSWER', 'VOICEMAIL'].includes(lastOutcome)) return 'CONTACTED';
+
+        // No outcome yet — was it ever called?
+        if (lead.lastContactedAt || (lead.totalCalls && lead.totalCalls > 0)) return 'CONTACTED';
+        return 'NEW';
+      };
+
       // Transform leads to match app's Lead type
       const transformedLeads: Lead[] = leads.map((lead: any) => ({
         id: lead.id,
@@ -38,12 +59,14 @@ export const leadsApi = {
         phone: lead.phone || '',
         email: lead.email || undefined,
         company: lead.centerName || undefined,
-        status: 'NEW' as LeadStatus,
+        status: deriveStatus(lead),
         source: lead.source || undefined,
         lastContactedAt: lead.lastContactedAt || undefined,
+        // Carry the raw counters so LeadsScreen can compute "uncalled" reliably.
+        totalCalls: lead.totalCalls || 0,
         createdAt: lead.createdAt || new Date().toISOString(),
         updatedAt: lead.updatedAt || new Date().toISOString(),
-      }));
+      } as any));
 
       // Cache leads for offline access
       try {

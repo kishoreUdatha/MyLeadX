@@ -700,12 +700,18 @@ router.get('/leads', async (req: TenantRequest, res: Response) => {
       prisma.lead.findMany({
         where: whereClause,
         include: {
+          stage: { select: { id: true, name: true, slug: true } },
           assignments: {
             where: { isActive: true },
             include: { assignedTo: { select: { id: true, firstName: true, lastName: true } } },
             take: 1,
           },
-          _count: { select: { activities: true, notes: true } },
+          telecallerCalls: {
+            select: { outcome: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+          _count: { select: { activities: true, notes: true, telecallerCalls: true } },
         },
         orderBy: { createdAt: 'desc' },
         take: parseInt(limit as string),
@@ -714,7 +720,15 @@ router.get('/leads', async (req: TenantRequest, res: Response) => {
       prisma.lead.count({ where: whereClause }),
     ]);
 
-    ApiResponse.success(res, 'Leads retrieved', { leads, total });
+    // Decorate each lead with totalCalls and lastCallOutcome so the mobile app
+    // can move it into the right tab without further API calls.
+    const decorated = leads.map((l: any) => ({
+      ...l,
+      totalCalls: l._count?.telecallerCalls || 0,
+      lastCallOutcome: l.telecallerCalls?.[0]?.outcome || null,
+    }));
+
+    ApiResponse.success(res, 'Leads retrieved', { leads: decorated, total });
   } catch (error) {
     ApiResponse.error(res, (error as Error).message, 500);
   }
@@ -2763,13 +2777,13 @@ router.get('/follow-ups/today', async (req: TenantRequest, res: Response) => {
 
     const followUps = await prisma.followUp.findMany({
       where: {
-        organizationId,
         assigneeId: userId,
         status: 'UPCOMING',
         scheduledAt: {
           gte: todayStart,
           lte: todayEnd,
         },
+        lead: { organizationId },
       },
       include: {
         lead: {
@@ -2779,7 +2793,7 @@ router.get('/follow-ups/today', async (req: TenantRequest, res: Response) => {
             lastName: true,
             phone: true,
             email: true,
-            company: true,
+            companyName: true,
             stage: { select: { name: true } },
           },
         },
@@ -2807,8 +2821,8 @@ router.get('/follow-ups', async (req: TenantRequest, res: Response) => {
     const { status, type, limit = '50', offset = '0' } = req.query;
 
     const where: any = {
-      organizationId,
       assigneeId: userId,
+      lead: { organizationId },
     };
 
     if (status) {
@@ -2830,7 +2844,7 @@ router.get('/follow-ups', async (req: TenantRequest, res: Response) => {
               lastName: true,
               phone: true,
               email: true,
-              company: true,
+              companyName: true,
               stage: { select: { name: true } },
             },
           },
