@@ -118,6 +118,46 @@ class AgentAnalyticsService {
       ? Math.round(allDurations.reduce((a, b) => a + b, 0) / allDurations.length)
       : 0;
 
+    // Calculate average rating based on sentiment and outcomes
+    // Rating scale: 1-5 stars
+    // POSITIVE sentiment = 5, NEUTRAL = 3, NEGATIVE = 1
+    // Successful outcomes add bonus: INTERESTED/APPOINTMENT_BOOKED = +0.5
+    const sentimentScores: Record<string, number> = {
+      POSITIVE: 5,
+      NEUTRAL: 3,
+      NEGATIVE: 1,
+    };
+    const successOutcomes = ['INTERESTED', 'APPOINTMENT_BOOKED', 'CALLBACK_REQUESTED'];
+
+    let totalRatingScore = 0;
+    let ratedConversations = 0;
+
+    // Score voice sessions by sentiment
+    voiceSessions.forEach(session => {
+      if (session.sentiment) {
+        const score = sentimentScores[session.sentiment] || 3;
+        totalRatingScore += score;
+        ratedConversations++;
+      }
+    });
+
+    // Score outbound calls by sentiment + outcome bonus
+    outboundCalls.forEach(call => {
+      if (call.sentiment || call.outcome) {
+        let score = call.sentiment ? (sentimentScores[call.sentiment] || 3) : 3;
+        // Add bonus for successful outcomes
+        if (call.outcome && successOutcomes.includes(call.outcome)) {
+          score = Math.min(5, score + 0.5);
+        }
+        totalRatingScore += score;
+        ratedConversations++;
+      }
+    });
+
+    const avgRating = ratedConversations > 0
+      ? Math.round((totalRatingScore / ratedConversations) * 10) / 10  // Round to 1 decimal
+      : null;
+
     // Sentiment breakdown
     const allSentiments = [
       ...voiceSessions.map(s => s.sentiment),
@@ -174,7 +214,7 @@ class AgentAnalyticsService {
       totalConversations,
       successRate,
       avgDuration,
-      avgRating: null, // Rating system not implemented yet
+      avgRating, // Calculated from sentiment and outcomes
       sentimentBreakdown,
       outcomeBreakdown,
       conversationsToday,

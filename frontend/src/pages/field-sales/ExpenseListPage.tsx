@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
   fetchExpenses,
@@ -19,8 +20,6 @@ import {
   TrashIcon,
   PaperAirplaneIcon,
   CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
   CurrencyRupeeIcon,
   XMarkIcon,
   PencilIcon,
@@ -28,9 +27,6 @@ import {
   ExclamationTriangleIcon,
   CloudArrowUpIcon,
   DocumentIcon,
-  UserIcon,
-  BuildingOfficeIcon,
-  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { ExpenseStatus, ExpenseCategory, CreateExpenseData, ExpenseLog, expenseService, Expense } from '../../services/fieldSales/expense.service';
@@ -76,6 +72,7 @@ type UserStatusFilter = '' | 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PAID' | 'REJE
 
 export default function ExpenseListPage() {
   const dispatch = useAppDispatch();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { expenses, mySummary, pendingApprovals, total, page, isLoading, isSubmitting } = useAppSelector(
     (state) => state.fieldSalesExpenses
   );
@@ -87,7 +84,6 @@ export default function ExpenseListPage() {
 
   const [mainTab, setMainTab] = useState<MainTab>('my-expenses');
   const [userStatusFilter, setUserStatusFilter] = useState<UserStatusFilter>('');
-  const [statusFilter, setStatusFilter] = useState<ExpenseStatus | ''>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -130,6 +126,18 @@ export default function ExpenseListPage() {
     dispatch(fetchColleges({ filter: {}, page: 1, limit: 100 }));
     dispatch(fetchCategoryLimits());
   }, [dispatch]);
+
+  // Check for action=new query parameter to open create modal
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setIsModalOpen(true);
+      setEditingExpense(null);
+      reset();
+      // Clear the action param from URL
+      searchParams.delete('action');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, reset]);
 
   useEffect(() => {
     if (mainTab === 'my-expenses') {
@@ -235,7 +243,7 @@ export default function ExpenseListPage() {
       formData.append('folder', 'receipts');
       formData.append('isPublic', 'true');
 
-      const response = await api.post('/upload/single', formData, {
+      const response = await api.post('/uploads/single', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
@@ -1108,7 +1116,7 @@ export default function ExpenseListPage() {
                 </h2>
                 {editingExpense && (
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {formatDateFull(editingExpense.expenseDate)} • {categoryLabels[editingExpense.category]}
+                    {formatDateFull(editingExpense.expenseDate)} • {categoryLabels[editingExpense.category as ExpenseCategory]}
                   </p>
                 )}
               </div>

@@ -60,7 +60,7 @@ export const Navigation: React.FC = () => {
             <a href="#features" className="text-sm font-medium text-slate-600 hover:text-violet-600 transition-colors">Features</a>
             <a href="#solutions" className="text-sm font-medium text-slate-600 hover:text-violet-600 transition-colors">Solutions</a>
             <a href="#pricing" className="text-sm font-medium text-slate-600 hover:text-violet-600 transition-colors">Pricing</a>
-            <Link to="/pricing" className="text-sm font-medium text-slate-600 hover:text-violet-600 transition-colors">Resources</Link>
+            <Link to="/docs" className="text-sm font-medium text-slate-600 hover:text-violet-600 transition-colors">Documentation</Link>
           </div>
 
           {/* CTA Buttons */}
@@ -89,6 +89,7 @@ export const Navigation: React.FC = () => {
               <a href="#features" className="text-base font-medium text-slate-700 py-2">Features</a>
               <a href="#solutions" className="text-base font-medium text-slate-700 py-2">Solutions</a>
               <a href="#pricing" className="text-base font-medium text-slate-700 py-2">Pricing</a>
+              <Link to="/docs" className="text-base font-medium text-slate-700 py-2">Documentation</Link>
               <div className="flex gap-3 pt-4 mt-2 border-t border-slate-100">
                 <Link to="/login" className="flex-1 text-center text-sm font-semibold text-slate-700 py-3 border border-slate-200 rounded-full">
                   Sign In
@@ -598,7 +599,7 @@ export const PricingPreviewSection: React.FC<PricingPreviewSectionProps> = ({ ti
       </div>
 
       <div className="grid md:grid-cols-4 gap-6 max-w-6xl mx-auto">
-        {tiers.map((tier, index) => (
+        {tiers.map((tier) => (
           <div
             key={tier.id}
             className={`relative rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 ${

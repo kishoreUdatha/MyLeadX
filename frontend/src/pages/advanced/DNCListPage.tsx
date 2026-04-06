@@ -159,7 +159,7 @@ export default function DNCListPage() {
       </div>
 
       {/* Quick Check */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
         <h2 className="text-lg font-semibold mb-3">Quick Number Check</h2>
         <div className="flex gap-3">
           <input
@@ -196,17 +196,17 @@ export default function DNCListPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-2xl font-bold text-red-600">{entries.length}</div>
           <div className="text-gray-500 text-sm">Total Numbers</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-2xl font-bold text-green-600">
             {entries.filter((e) => e.isActive).length}
           </div>
           <div className="text-gray-500 text-sm">Active</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-2xl font-bold text-yellow-600">
             {entries.filter((e) => e.expiresAt).length}
           </div>
@@ -215,7 +215,7 @@ export default function DNCListPage() {
       </div>
 
       {/* DNC List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>

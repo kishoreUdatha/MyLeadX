@@ -604,7 +604,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
         <button
           onClick={onSubmit}
           disabled={!scheduleData.date || !scheduleData.time}
-          className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+          className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
         >
           Schedule
         </button>

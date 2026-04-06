@@ -152,7 +152,7 @@ export default function RealTimeDashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-l-4 border-l-green-500">
           <div className="text-3xl font-bold text-green-600">
             {liveCalls.length || stats.activeCalls}
           </div>
@@ -162,26 +162,26 @@ export default function RealTimeDashboardPage() {
             <span className="text-xs text-green-600">Live</span>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <div className="text-3xl font-bold text-blue-600">{stats.callsToday}</div>
           <div className="text-gray-500 text-sm">Calls Today</div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="text-3xl font-bold text-purple-600">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="text-3xl font-bold text-indigo-600">
             {formatDuration(Math.round(stats.avgDuration))}
           </div>
           <div className="text-gray-500 text-sm">Avg Duration</div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <div className="text-3xl font-bold text-cyan-600">{stats.leadsToday}</div>
           <div className="text-gray-500 text-sm">Leads Today</div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <div className="text-3xl font-bold text-pink-600">{stats.appointmentsToday}</div>
           <div className="text-gray-500 text-sm">Appointments</div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="text-3xl font-bold text-orange-600">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="text-3xl font-bold text-amber-600">
             {(stats.conversionRate * 100).toFixed(1)}%
           </div>
           <div className="text-gray-500 text-sm">Conversion</div>
@@ -190,7 +190,7 @@ export default function RealTimeDashboardPage() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Active Calls Panel */}
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
           <div className="p-4 border-b flex justify-between items-center">
             <h2 className="text-lg font-semibold">Active Calls</h2>
             <span className="text-sm text-gray-500">
@@ -231,7 +231,7 @@ export default function RealTimeDashboardPage() {
         </div>
 
         {/* Recent Leads Panel */}
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
           <div className="p-4 border-b flex justify-between items-center">
             <h2 className="text-lg font-semibold">Recent Leads</h2>
             <Link to="/leads" className="text-sm text-blue-600 hover:underline">
@@ -272,7 +272,7 @@ export default function RealTimeDashboardPage() {
       </div>
 
       {/* Call Queue / Scheduled */}
-      <div className="mt-6 bg-white rounded-lg shadow">
+      <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100">
         <div className="p-4 border-b flex justify-between items-center">
           <h2 className="text-lg font-semibold">Quick Actions</h2>
         </div>

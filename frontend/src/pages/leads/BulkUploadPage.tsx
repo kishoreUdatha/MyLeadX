@@ -444,7 +444,7 @@ export default function BulkUploadPage() {
                     <button
                       onClick={handleStartAICampaign}
                       disabled={!selectedAgent}
-                      className="btn bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2"
+                      className="btn bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 rounded-xl"
                     >
                       <PhoneIcon className="h-5 w-5" />
                       Start AI Campaign

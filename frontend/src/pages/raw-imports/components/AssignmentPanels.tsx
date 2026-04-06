@@ -315,7 +315,7 @@ export const AICampaignPanel: React.FC<AICampaignPanelProps> = ({
         <button
           onClick={onCreateCampaign}
           disabled={!selectedAgent || !campaignName.trim() || isCreating}
-          className="w-full btn text-sm bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
+          className="w-full btn text-sm bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
         >
           {isCreating ? (
             <>

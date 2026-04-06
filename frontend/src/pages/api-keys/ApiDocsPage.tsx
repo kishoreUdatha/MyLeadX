@@ -345,7 +345,7 @@ const ApiDocsPage: React.FC = () => {
       </div>
 
       {/* Authentication */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Authentication</h2>
         <p className="text-gray-600 mb-4">
           All API requests require authentication using an API key. Include your API key in the Authorization header:
@@ -368,7 +368,7 @@ const ApiDocsPage: React.FC = () => {
       </div>
 
       {/* Base URL */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Base URL</h2>
         <div className="bg-gray-900 rounded-lg p-4">
           <code className="text-green-400 text-sm">{window.location.origin}/api/v1</code>
@@ -376,7 +376,7 @@ const ApiDocsPage: React.FC = () => {
       </div>
 
       {/* Rate Limiting */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Rate Limiting</h2>
         <p className="text-gray-600">
           API requests are rate limited based on your API key configuration. Default limit is 1000 requests per hour.
@@ -389,7 +389,7 @@ const ApiDocsPage: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-900">Endpoints</h2>
 
         {Object.entries(endpoints).map(([section, sectionEndpoints]) => (
-          <div key={section} className="bg-white rounded-lg shadow overflow-hidden">
+          <div key={section} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <button
               onClick={() => setExpandedSection(expandedSection === section ? '' : section)}
               className="w-full px-6 py-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100"
@@ -465,7 +465,7 @@ const ApiDocsPage: React.FC = () => {
       </div>
 
       {/* Error Codes */}
-      <div className="bg-white rounded-lg shadow p-6 mt-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Error Codes</h2>
         <table className="min-w-full">
           <thead>

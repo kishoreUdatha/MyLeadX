@@ -128,7 +128,7 @@ export const IvrListPage: React.FC = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg border p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
               <GitBranch className="text-blue-600" size={20} />
@@ -139,7 +139,7 @@ export const IvrListPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-100 rounded-lg">
               <CheckCircle className="text-green-600" size={20} />
@@ -152,7 +152,7 @@ export const IvrListPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
               <Phone className="text-purple-600" size={20} />
@@ -165,7 +165,7 @@ export const IvrListPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-100 rounded-lg">
               <BarChart2 className="text-orange-600" size={20} />
@@ -181,7 +181,7 @@ export const IvrListPage: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg border p-4 mb-6">
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -217,7 +217,7 @@ export const IvrListPage: React.FC = () => {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
       ) : flows.length === 0 ? (
-        <div className="bg-white rounded-lg border p-12 text-center">
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 shadow-sm text-center">
           <GitBranch className="mx-auto text-gray-400 mb-4" size={48} />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No IVR Flows</h3>
           <p className="text-gray-600 mb-4">
@@ -236,7 +236,7 @@ export const IvrListPage: React.FC = () => {
           {flows.map((flow) => (
             <div
               key={flow.id}
-              className="bg-white rounded-lg border hover:shadow-md transition-shadow"
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="p-4">
                 <div className="flex items-start justify-between">

@@ -185,14 +185,14 @@ export default function FollowUpRulesPage() {
       {/* Rules List */}
       <div className="grid gap-4">
         {rules.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center text-gray-500">
             No follow-up rules configured yet
           </div>
         ) : (
           rules.map((rule) => (
             <div
               key={rule.id}
-              className={`bg-white rounded-lg shadow p-6 ${
+              className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-6 ${
                 !rule.isActive ? 'opacity-60' : ''
               }`}
             >

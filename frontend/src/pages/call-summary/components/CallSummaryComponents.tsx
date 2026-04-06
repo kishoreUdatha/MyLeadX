@@ -1251,7 +1251,7 @@ export const LeadJourneyCard: React.FC<LeadJourneyCardProps> = ({
             <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-gray-200"></div>
 
             {/* Previous calls */}
-            {leadJourney.map((call, idx) => (
+            {leadJourney.map((call) => (
               <div key={call.id} className="relative mb-3 last:mb-0">
                 {/* Timeline dot */}
                 <div className={`absolute -left-4 top-1 w-3 h-3 rounded-full border-2 ${

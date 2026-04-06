@@ -358,6 +358,69 @@ export const verifySendGridWebhook = (req: Request, res: Response, next: NextFun
 };
 
 /**
+ * Verify Stripe webhook signature
+ * Stripe signs webhooks using Stripe-Signature header
+ * Documentation: https://stripe.com/docs/webhooks/signatures
+ */
+export const verifyStripeWebhook = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const signature = req.headers['stripe-signature'] as string;
+
+    if (!signature) {
+      console.warn('Missing Stripe signature');
+      return res.status(401).json({ success: false, message: 'Missing Stripe signature' });
+    }
+
+    const webhookSecret = config.stripe?.webhookSecret;
+    if (!webhookSecret) {
+      console.warn('Stripe webhook secret not configured - skipping verification');
+      return next(); // Skip verification if not configured (development mode)
+    }
+
+    // Parse Stripe signature header (format: t=timestamp,v1=signature)
+    const parts = signature.split(',');
+    const timestampPart = parts.find(p => p.startsWith('t='));
+    const signaturePart = parts.find(p => p.startsWith('v1='));
+
+    if (!timestampPart || !signaturePart) {
+      console.warn('Invalid Stripe signature format');
+      return res.status(401).json({ success: false, message: 'Invalid signature format' });
+    }
+
+    const timestamp = timestampPart.substring(2);
+    const expectedSignature = signaturePart.substring(3);
+
+    // Check timestamp to prevent replay attacks (5 minute tolerance)
+    const timestampAge = Math.abs(Date.now() / 1000 - parseInt(timestamp, 10));
+    if (timestampAge > 300) {
+      console.warn('Stripe webhook timestamp too old');
+      return res.status(401).json({ success: false, message: 'Webhook timestamp expired' });
+    }
+
+    // Construct signed payload
+    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    const signedPayload = `${timestamp}.${rawBody}`;
+
+    // Compute expected signature
+    const computedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(signedPayload)
+      .digest('hex');
+
+    // Use timing-safe comparison
+    if (!crypto.timingSafeEqual(Buffer.from(computedSignature), Buffer.from(expectedSignature))) {
+      console.warn('Invalid Stripe signature');
+      return res.status(401).json({ success: false, message: 'Invalid Stripe signature' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Stripe webhook verification error:', error);
+    return res.status(500).json({ success: false, message: 'Stripe verification failed' });
+  }
+};
+
+/**
  * Generic HMAC signature verification
  */
 export const verifyHmacSignature = (

@@ -135,7 +135,7 @@ export default function AppointmentsPage() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
         >
           Book Appointment
         </button>
@@ -143,23 +143,23 @@ export default function AppointmentsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-2xl font-bold text-blue-600">{upcomingCount}</div>
           <div className="text-gray-500 text-sm">Upcoming</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-2xl font-bold text-green-600">
             {appointments.filter((a) => a.status === 'CONFIRMED').length}
           </div>
           <div className="text-gray-500 text-sm">Confirmed</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-2xl font-bold text-gray-600">
             {appointments.filter((a) => a.status === 'COMPLETED').length}
           </div>
           <div className="text-gray-500 text-sm">Completed</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-2xl font-bold text-orange-600">
             {appointments.filter((a) => a.status === 'NO_SHOW').length}
           </div>
@@ -175,7 +175,7 @@ export default function AppointmentsPage() {
             onClick={() => setFilter(status)}
             className={`px-4 py-2 rounded-lg ${
               filter === status
-                ? 'bg-purple-600 text-white'
+                ? 'bg-indigo-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -185,7 +185,7 @@ export default function AppointmentsPage() {
       </div>
 
       {/* Appointments List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -391,7 +391,7 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
                   Book
                 </button>

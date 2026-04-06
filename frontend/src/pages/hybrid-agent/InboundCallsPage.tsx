@@ -135,7 +135,7 @@ export const InboundCallsPage: React.FC = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow border">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
               <Phone className="text-blue-600" size={24} />
@@ -146,7 +146,7 @@ export const InboundCallsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-100 rounded-lg">
               <PhoneIncoming className="text-green-600" size={24} />
@@ -157,7 +157,7 @@ export const InboundCallsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
               <PhoneOutgoing className="text-purple-600" size={24} />
@@ -168,7 +168,7 @@ export const InboundCallsPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow border">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-100 rounded-lg">
               <Clock className="text-orange-600" size={24} />
@@ -182,7 +182,7 @@ export const InboundCallsPage: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow border p-4 mb-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
         <div className="flex flex-wrap gap-4 items-center">
           {/* Direction Filter */}
           <div className="flex items-center gap-2">
@@ -248,7 +248,7 @@ export const InboundCallsPage: React.FC = () => {
       </div>
 
       {/* Calls Table */}
-      <div className="bg-white rounded-lg shadow border overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">

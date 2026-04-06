@@ -107,7 +107,7 @@ const ComplianceDashboardPage: React.FC = () => {
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <Link to="/compliance/consent" className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow">
+        <Link to="/compliance/consent" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Active Consents</p>
@@ -117,7 +117,7 @@ const ComplianceDashboardPage: React.FC = () => {
           </div>
         </Link>
 
-        <Link to="/compliance/consent?includeRevoked=true" className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow">
+        <Link to="/compliance/consent?includeRevoked=true" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Revoked Consents</p>
@@ -127,7 +127,7 @@ const ComplianceDashboardPage: React.FC = () => {
           </div>
         </Link>
 
-        <Link to="/advanced/dnc-list" className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow">
+        <Link to="/advanced/dnc-list" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">DNC List Size</p>
@@ -137,7 +137,7 @@ const ComplianceDashboardPage: React.FC = () => {
           </div>
         </Link>
 
-        <Link to="/compliance/audit-logs" className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow">
+        <Link to="/compliance/audit-logs" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Audit Logs</p>
@@ -151,7 +151,7 @@ const ComplianceDashboardPage: React.FC = () => {
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Recording Disclosure */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Recording Disclosure</h3>
           <p className="text-gray-600 mb-4">
             Configure how your voice agents disclose call recording to customers.
@@ -165,7 +165,7 @@ const ComplianceDashboardPage: React.FC = () => {
         </div>
 
         {/* Generate Report */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Compliance Report</h3>
           <p className="text-gray-600 mb-4">
             Generate a compliance report for auditing and regulatory purposes.
@@ -180,7 +180,7 @@ const ComplianceDashboardPage: React.FC = () => {
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Recent Compliance Activity</h3>
         </div>

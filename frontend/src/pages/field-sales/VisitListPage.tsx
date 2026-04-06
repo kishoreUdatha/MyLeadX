@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   MapPinIcon,
   CalendarDaysIcon,
-  ClockIcon,
   CheckCircleIcon,
   PlusIcon,
   EyeIcon,
   XMarkIcon,
   DocumentTextIcon,
   UsersIcon,
-  ArrowTrendingUpIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid';
 import { visitService, Visit, VisitFilter } from '../../services/fieldSales/visit.service';
@@ -72,9 +71,10 @@ export default function VisitListPage() {
       }
 
       const result = await visitService.getVisits(filterParams, 1, 50);
-      setVisits(result.visits);
-    } catch (error) {
+      setVisits(result.visits || []);
+    } catch (error: any) {
       console.error('Failed to load visits:', error);
+      toast.error(error?.response?.data?.message || 'Failed to load visits');
     } finally {
       setIsLoading(false);
     }
@@ -84,8 +84,9 @@ export default function VisitListPage() {
     try {
       const data = await visitService.getVisitStats();
       setStats(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load stats:', error);
+      // Stats failure is non-critical, don't show toast
     }
   };
 

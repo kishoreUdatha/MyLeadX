@@ -269,7 +269,7 @@ CRM Pro Team`}
               <button
                 onClick={handleSend}
                 disabled={sending || !subject.trim() || !body.trim()}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
               >
                 {sending ? (
                   <>

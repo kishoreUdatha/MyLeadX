@@ -132,19 +132,19 @@ const AuditLogsPage: React.FC = () => {
       {/* Summary Stats */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
             <div className="text-2xl font-bold text-gray-900">{summary.totalActions}</div>
             <div className="text-sm text-gray-500">Total Actions (30 days)</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
             <div className="text-2xl font-bold text-blue-600">{summary.byActor.user || 0}</div>
             <div className="text-sm text-gray-500">User Actions</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="text-2xl font-bold text-purple-600">{summary.byActor.api_key || 0}</div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div className="text-2xl font-bold text-indigo-600">{summary.byActor.api_key || 0}</div>
             <div className="text-sm text-gray-500">API Actions</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
             <div className="text-2xl font-bold text-gray-600">{summary.byActor.system || 0}</div>
             <div className="text-sm text-gray-500">System Actions</div>
           </div>
@@ -198,7 +198,7 @@ const AuditLogsPage: React.FC = () => {
           <p className="text-gray-600 mt-1">Actions will be logged here automatically</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>

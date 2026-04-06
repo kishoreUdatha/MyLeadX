@@ -198,7 +198,7 @@ export const HybridInboxPage: React.FC = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-180px)] flex bg-white rounded-lg shadow border overflow-hidden">
+    <div className="h-[calc(100vh-180px)] flex bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       {/* Conversations List */}
       <div className="w-80 border-r flex flex-col">
         <div className="p-4 border-b">

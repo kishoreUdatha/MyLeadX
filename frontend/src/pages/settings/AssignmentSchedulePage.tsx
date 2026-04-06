@@ -28,7 +28,6 @@ import {
 import toast from 'react-hot-toast';
 import {
   AssignmentSchedule,
-  AssignmentRunLog,
   ScheduleType,
   DistributionStrategy,
 } from '../../services/assignmentSchedule.service';
@@ -63,13 +62,13 @@ const initialFormData: ScheduleFormData = {
 
 export default function AssignmentSchedulePage() {
   const dispatch = useAppDispatch();
-  const { schedules, capacityStats, runLogs, runLogsTotal, isLoading, isRunning, error } =
+  const { schedules, capacityStats, runLogs, isLoading, isRunning, error } =
     useAppSelector((state) => state.assignmentSchedules);
 
   const [showModal, setShowModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<AssignmentSchedule | null>(null);
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
+  const [_selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ScheduleFormData>(initialFormData);
   const [newTime, setNewTime] = useState('09:00');
 
