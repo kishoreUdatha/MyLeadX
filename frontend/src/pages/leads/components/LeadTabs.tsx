@@ -350,33 +350,57 @@ export function CallsTab({ callLogs, loading, phone, onLogCallClick }: CallsTabP
           <EmptyState icon={PhoneIcon} message="No calls recorded yet" />
         ) : (
           <div className="space-y-4">
-            {callLogs.map((call) => (
-              <div key={call.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  call.status === 'COMPLETED' ? 'bg-green-100' :
-                  call.status === 'MISSED' || call.status === 'NO_ANSWER' ? 'bg-red-100' : 'bg-yellow-100'
-                }`}>
-                  <PhoneIcon className={`h-5 w-5 ${
-                    call.status === 'COMPLETED' ? 'text-green-600' :
-                    call.status === 'MISSED' || call.status === 'NO_ANSWER' ? 'text-red-600' : 'text-yellow-600'
-                  }`} />
+            {callLogs.map((call) => {
+              const anyCall = call as any;
+              const englishTranscript = anyCall.qualification?.englishTranscript;
+              return (
+                <div key={call.id} className="flex flex-col gap-3 p-4 bg-slate-50 rounded-lg">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      call.status === 'COMPLETED' ? 'bg-green-100' :
+                      call.status === 'MISSED' || call.status === 'NO_ANSWER' ? 'bg-red-100' : 'bg-yellow-100'
+                    }`}>
+                      <PhoneIcon className={`h-5 w-5 ${
+                        call.status === 'COMPLETED' ? 'text-green-600' :
+                        call.status === 'MISSED' || call.status === 'NO_ANSWER' ? 'text-red-600' : 'text-yellow-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-slate-900">
+                        {call.direction} Call - {call.status}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {formatDateTime(call.createdAt)} • Duration: {call.duration || 0}s
+                      </p>
+                      {call.notes && <p className="text-sm text-slate-600 mt-1">{call.notes}</p>}
+                    </div>
+                    {call.recordingUrl && (
+                      <button className="p-2 hover:bg-slate-200 rounded-lg">
+                        <PlayIcon className="h-5 w-5 text-slate-600" />
+                      </button>
+                    )}
+                  </div>
+                  {anyCall.summary && (
+                    <div className="bg-white border border-slate-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-slate-700 mb-1">Summary</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{anyCall.summary}</p>
+                    </div>
+                  )}
+                  {call.transcript && (
+                    <div className="bg-white border border-slate-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-slate-700 mb-1">Transcript</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{call.transcript}</p>
+                    </div>
+                  )}
+                  {englishTranscript && (
+                    <div className="bg-white border border-slate-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-slate-700 mb-1">English Translation</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{englishTranscript}</p>
+                    </div>
+                  )}
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-900">
-                    {call.direction} Call - {call.status}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {formatDateTime(call.createdAt)} • Duration: {call.duration || 0}s
-                  </p>
-                  {call.notes && <p className="text-sm text-slate-600 mt-1">{call.notes}</p>}
-                </div>
-                {call.recordingUrl && (
-                  <button className="p-2 hover:bg-slate-200 rounded-lg">
-                    <PlayIcon className="h-5 w-5 text-slate-600" />
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -207,15 +207,24 @@ class TelecallerCallFinalizationService {
       const preferredLanguage = call.telecaller?.organization?.preferredLanguage || 'te-IN';
       console.log(`[TelecallerAI] Using preferred language: ${preferredLanguage}`);
 
-      // Step 1: Transcribe the recording with preferred language
+      // Step 1: Transcribe the recording (auto-detect language)
       console.log(`[TelecallerAI] Step 1: Transcribing recording...`);
-      const transcript = await this.transcribeRecording(filePath, preferredLanguage);
+      const transcribed = await this.transcribeRecording(filePath, preferredLanguage);
 
-      if (!transcript) {
+      if (!transcribed || !transcribed.text) {
         console.error(`[TelecallerAI] Transcription failed for call ${callId}`);
         await this.updateCallWithError(callId, 'Transcription failed');
         return;
       }
+      const transcript = transcribed.text;
+      const detectedLanguage = transcribed.detectedLanguage;
+      console.log(`[TelecallerAI] Detected language: ${detectedLanguage}`);
+
+      // Step 1b: English translation of the audio (best-effort)
+      const englishTranscript =
+        detectedLanguage && detectedLanguage.toLowerCase().startsWith('en')
+          ? transcript
+          : (await this.translateToEnglish(filePath)) || '';
 
       // Step 1.5: Validate transcript has meaningful conversation
       const validationResult = this.validateTranscript(transcript, call.duration || 0);
@@ -253,7 +262,8 @@ class TelecallerCallFinalizationService {
         transcriptMessages,
         [], // mood history
         'neutral',
-        call.duration || 0
+        call.duration || 0,
+        detectedLanguage
       );
       console.log(`[TelecallerAI] Enhanced analysis complete:`, {
         callQualityScore: enhancedAnalysis.callQualityScore,
@@ -272,7 +282,8 @@ class TelecallerCallFinalizationService {
           enhancedAnalysis.outcome,
           enhancedAnalysis.sentiment,
           enhancedAnalysis.agentSpeakingTime,
-          enhancedAnalysis.customerSpeakingTime
+          enhancedAnalysis.customerSpeakingTime,
+          detectedLanguage
         );
       } catch (coachingError) {
         console.warn(`[TelecallerAI] Coaching suggestions failed, using defaults:`, coachingError);
@@ -308,7 +319,7 @@ class TelecallerCallFinalizationService {
       console.log(`[TelecallerAI] Step 4: Extracting structured call data...`);
       let extractedData: ExtractedCallData;
       try {
-        extractedData = await extractCallData(transcriptMessages);
+        extractedData = await extractCallData(transcriptMessages, undefined, detectedLanguage);
       } catch (extractError) {
         console.warn(`[TelecallerAI] Data extraction failed, using defaults:`, extractError);
         extractedData = { items: [], summary: '' };
@@ -369,6 +380,8 @@ class TelecallerCallFinalizationService {
             ...qualification,
             buyingSignals: buyingSignals.signals,
             objections: buyingSignals.objections,
+            detectedLanguage,
+            englishTranscript,
             aiAnalyzedAt: new Date().toISOString(),
           },
           aiAnalyzed: true,
@@ -517,88 +530,241 @@ class TelecallerCallFinalizationService {
    * @param filePath - Path to the audio file
    * @param language - Preferred language code (e.g., 'te-IN', 'hi-IN', 'en-IN')
    */
-  private async transcribeRecording(filePath: string, language: string = 'te-IN'): Promise<string | null> {
+  /**
+   * Translate audio directly to English using Whisper's translations endpoint.
+   * Returns null on any failure — caller should treat translation as best-effort.
+   */
+  private async translateToEnglish(filePath: string): Promise<string | null> {
+    if (!openai) return null;
     try {
-      // Check if file exists
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Whisper translation timeout (60s)')), 60000);
+      });
+      const response: any = await Promise.race([
+        openai.audio.translations.create({
+          file: fs.createReadStream(filePath),
+          model: 'whisper-1',
+        }),
+        timeoutPromise,
+      ]);
+      const text = (response?.text || '').trim();
+      console.log(`[TelecallerAI] English translation: ${text.substring(0, 100)}...`);
+      return text || null;
+    } catch (err: any) {
+      console.warn(`[TelecallerAI] English translation failed: ${err?.message || err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Convert any input audio file to 16kHz mono 16-bit PCM WAV.
+   * Sarvam (and most ASR engines) work best with this format. Returns a temp path the
+   * caller is responsible for cleaning up. Returns null on failure (so callers fall back).
+   */
+  private async convertToPcmWav(inputPath: string): Promise<string | null> {
+    try {
+      const ffmpeg = require('fluent-ffmpeg');
+      const ffmpegStatic = require('ffmpeg-static');
+      if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
+
+      const outPath = inputPath.replace(/\.[^.]+$/, '') + `-pcm-${Date.now()}.wav`;
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(inputPath)
+          .audioFrequency(16000)
+          .audioChannels(1)
+          .audioCodec('pcm_s16le')
+          .format('wav')
+          .on('error', (err: any) => reject(err))
+          .on('end', () => resolve())
+          .save(outPath);
+      });
+      return outPath;
+    } catch (err: any) {
+      console.warn(`[TelecallerAI] ffmpeg conversion failed: ${err?.message || err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Split a WAV file into N-second chunks. Returns the chunk paths in order.
+   * Used to work around Sarvam's 30s sync-STT limit.
+   */
+  private async splitWavIntoChunks(wavPath: string, chunkSeconds: number = 28): Promise<string[]> {
+    try {
+      const ffmpeg = require('fluent-ffmpeg');
+      const ffmpegStatic = require('ffmpeg-static');
+      if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
+
+      // Compute duration directly from the WAV header (we know it's 16kHz mono 16-bit PCM
+      // because we just generated it with convertToPcmWav). Avoids needing ffprobe binary.
+      const stats = fs.statSync(wavPath);
+      const dataBytes = Math.max(0, stats.size - 44); // strip RIFF header
+      const duration = dataBytes / (16000 * 2); // sampleRate * bytesPerSample(2) * channels(1)
+      console.log(`[TelecallerAI] WAV duration ~${duration.toFixed(1)}s (size=${stats.size})`);
+      if (!duration || duration <= chunkSeconds) return [wavPath];
+
+      const chunks: string[] = [];
+      const numChunks = Math.ceil(duration / chunkSeconds);
+      for (let i = 0; i < numChunks; i++) {
+        const start = i * chunkSeconds;
+        const out = wavPath.replace(/\.wav$/, `-chunk${i}.wav`);
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg(wavPath)
+            .setStartTime(start)
+            .setDuration(chunkSeconds)
+            .audioFrequency(16000)
+            .audioChannels(1)
+            .audioCodec('pcm_s16le')
+            .format('wav')
+            .on('error', reject)
+            .on('end', () => resolve())
+            .save(out);
+        });
+        chunks.push(out);
+      }
+      console.log(`[TelecallerAI] Split ${duration.toFixed(1)}s audio into ${chunks.length} chunks`);
+      return chunks;
+    } catch (err: any) {
+      console.warn(`[TelecallerAI] Audio chunking failed: ${err?.message || err}`);
+      return [wavPath];
+    }
+  }
+
+  /**
+   * Use GPT to clean up an ASR transcript: fix obvious mis-recognitions, repair word
+   * boundaries, drop noise/filler. Output is in the SAME language as the input.
+   * Falls back to the raw transcript on any failure.
+   */
+  private async cleanupTranscript(rawTranscript: string, language: string): Promise<string> {
+    if (!openai || !rawTranscript || rawTranscript.length < 10) return rawTranscript;
+    try {
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              `You are an expert ASR post-processor. The input is a raw speech-to-text transcript ` +
+              `from a phone conversation in ${language}. It may contain: garbled spellings, missing ` +
+              `word boundaries, filler sounds, repeated phrases, mis-detected words. Your job: ` +
+              `produce a cleaned, faithful version of the conversation in the SAME language and ` +
+              `script. Rules: (1) Do not add information that is not implied by the audio. ` +
+              `(2) Keep speaker turns if you can infer them, prefixed with "Agent:" / "Customer:". ` +
+              `(3) Fix obvious mis-spellings using context. (4) Remove pure filler/noise. ` +
+              `(5) Reply with ONLY the cleaned transcript text, no preamble or commentary.`,
+          },
+          { role: 'user', content: rawTranscript },
+        ],
+        temperature: 0.2,
+        max_tokens: 1500,
+      });
+      const cleaned = response.choices[0]?.message?.content?.trim();
+      if (cleaned && cleaned.length > 5) {
+        console.log(`[TelecallerAI] Transcript cleaned (${cleaned.length} chars)`);
+        return cleaned;
+      }
+    } catch (err: any) {
+      console.warn(`[TelecallerAI] Transcript cleanup failed: ${err?.message || err}`);
+    }
+    return rawTranscript;
+  }
+
+  private async transcribeRecording(
+    filePath: string,
+    _language: string = 'te-IN'
+  ): Promise<{ text: string; detectedLanguage: string } | null> {
+    let pcmPath: string | null = null;
+    try {
       if (!fs.existsSync(filePath)) {
         console.error(`[TelecallerAI] Recording file not found: ${filePath}`);
         return null;
       }
 
-      // Get file stats
       const stats = fs.statSync(filePath);
       console.log(`[TelecallerAI] Recording file size: ${stats.size} bytes`);
-
       if (stats.size < 1000) {
         console.error(`[TelecallerAI] Recording file too small (${stats.size} bytes), likely empty`);
         return null;
       }
 
-      // Read audio file
-      const audioBuffer = fs.readFileSync(filePath);
+      // Convert any input format to 16kHz mono PCM WAV — this is what Sarvam expects and
+      // gives much better results for Indic languages than feeding raw m4a.
+      pcmPath = await this.convertToPcmWav(filePath);
+      const sttSourcePath = pcmPath || filePath;
+      console.log(`[TelecallerAI] STT source: ${pcmPath ? 'converted PCM WAV' : 'original (conversion failed)'}`);
 
-      // Try Sarvam first (better for Indian languages)
+      // 1) Sarvam first — Saaras v3 with auto language detection (best for Indic).
+      // Sarvam's sync STT only accepts up to 30s, so we chunk if needed.
+      const chunkPaths: string[] = pcmPath
+        ? await this.splitWavIntoChunks(pcmPath, 28)
+        : [sttSourcePath];
       try {
-        // Pass the organization's preferred language for accurate transcription
-        console.log(`[TelecallerAI] Using Sarvam with language hint: ${language}`);
-        const result = await sarvamService.speechToText(audioBuffer, 8000, language);
-        if (result && result.text) {
-          console.log(`[TelecallerAI] Sarvam transcription successful (language: ${language}): ${result.text.substring(0, 100)}...`);
-          return result.text;
+        const sarvamFormat: 'wav' | 'm4a' | 'mp3' = pcmPath ? 'wav' : 'm4a';
+        console.log(`[TelecallerAI] Sarvam STT (${chunkPaths.length} chunk(s), format=${sarvamFormat}, sr=16000)`);
+        const pieces: string[] = [];
+        let detected = 'unknown';
+        for (const chunk of chunkPaths) {
+          const audioBuffer = fs.readFileSync(chunk);
+          const result = await sarvamService.speechToText(audioBuffer, 16000, undefined, sarvamFormat);
+          if (result?.text) {
+            pieces.push(result.text.trim());
+            if (result.detectedLanguage && detected === 'unknown') detected = result.detectedLanguage;
+          }
         }
+        const merged = pieces.filter(Boolean).join(' ');
+        if (merged.length > 0) {
+          console.log(`[TelecallerAI] Sarvam OK (${pieces.length} chunks), lang=${detected}: ${merged.substring(0, 100)}...`);
+          const cleaned = await this.cleanupTranscript(merged, detected);
+          // Clean up chunk files (but not the master PCM, that happens in finally)
+          if (chunkPaths.length > 1) {
+            for (const c of chunkPaths) { try { fs.unlinkSync(c); } catch {} }
+          }
+          return { text: cleaned, detectedLanguage: detected };
+        }
+        console.log('[TelecallerAI] Sarvam returned empty transcript, falling back to Whisper');
       } catch (sarvamError: any) {
         console.log(`[TelecallerAI] Sarvam failed: ${sarvamError?.message || 'Unknown error'}, trying Whisper...`);
+      } finally {
+        if (chunkPaths.length > 1) {
+          for (const c of chunkPaths) { try { fs.unlinkSync(c); } catch {} }
+        }
       }
 
-      // Fallback to Whisper with language hint
+      // 2) Whisper auto-detect via verbose_json
       if (openai) {
-        // Map Indian language codes to Whisper language codes
-        const whisperLangMap: Record<string, string> = {
-          'te-IN': 'te',  // Telugu
-          'hi-IN': 'hi',  // Hindi
-          'ta-IN': 'ta',  // Tamil
-          'kn-IN': 'kn',  // Kannada
-          'ml-IN': 'ml',  // Malayalam
-          'mr-IN': 'mr',  // Marathi
-          'bn-IN': 'bn',  // Bengali
-          'gu-IN': 'gu',  // Gujarati
-          'pa-IN': 'pa',  // Punjabi
-          'en-IN': 'en',  // English
-        };
-        const whisperLang = whisperLangMap[language] || language.split('-')[0];
-
-        console.log(`[TelecallerAI] Starting Whisper transcription with language: ${whisperLang}...`);
-
-        // Create a promise that rejects after timeout
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Whisper transcription timeout (60s)')), 60000);
         });
 
-        // Race between transcription and timeout
         try {
-          const response = await Promise.race([
+          const response: any = await Promise.race([
             openai.audio.transcriptions.create({
-              file: fs.createReadStream(filePath),
+              file: fs.createReadStream(sttSourcePath),
               model: 'whisper-1',
-              language: whisperLang, // Use preferred language
+              response_format: 'verbose_json',
             }),
             timeoutPromise,
           ]);
-
-          console.log(`[TelecallerAI] Whisper transcription successful (${whisperLang}): ${response.text.substring(0, 100)}...`);
-          return response.text;
+          const detected = response.language || 'unknown';
+          console.log(`[TelecallerAI] Whisper OK, lang=${detected}: ${(response.text || '').substring(0, 100)}...`);
+          const cleaned = await this.cleanupTranscript(response.text || '', detected);
+          return { text: cleaned, detectedLanguage: detected };
         } catch (whisperError: any) {
           console.error(`[TelecallerAI] Whisper transcription failed: ${whisperError?.message || 'Unknown error'}`);
           return null;
         }
-      } else {
-        console.error('[TelecallerAI] OpenAI client not initialized - missing OPENAI_API_KEY');
       }
 
+      console.error('[TelecallerAI] OpenAI client not initialized - missing OPENAI_API_KEY');
       return null;
     } catch (error: any) {
       console.error(`[TelecallerAI] Transcription error: ${error?.message || error}`);
       return null;
+    } finally {
+      // Clean up the temp PCM file if we made one.
+      if (pcmPath) {
+        try { fs.unlinkSync(pcmPath); } catch {}
+      }
     }
   }
 
@@ -1497,15 +1663,24 @@ ${call.summary}
       const preferredLanguage = call.telecaller?.organization?.preferredLanguage || 'te-IN';
       console.log(`[TelecallerAI] Using preferred language: ${preferredLanguage}`);
 
-      // Step 1: Transcribe the recording with preferred language
+      // Step 1: Transcribe the recording (auto-detect language)
       console.log(`[TelecallerAI] Step 1: Transcribing recording...`);
-      const transcript = await this.transcribeRecording(filePath, preferredLanguage);
+      const transcribed = await this.transcribeRecording(filePath, preferredLanguage);
 
-      if (!transcript) {
+      if (!transcribed || !transcribed.text) {
         console.error(`[TelecallerAI] Transcription failed for call ${callId}`);
         await this.updateRawImportCallError(callId, rawImportRecordId, 'Transcription failed');
         return;
       }
+      const transcript = transcribed.text;
+      const detectedLanguage = transcribed.detectedLanguage;
+      console.log(`[TelecallerAI] Detected language: ${detectedLanguage}`);
+
+      // Step 1b: English translation of the audio (best-effort)
+      const englishTranscript =
+        detectedLanguage && detectedLanguage.toLowerCase().startsWith('en')
+          ? transcript
+          : (await this.translateToEnglish(filePath)) || '';
 
       // Step 1.5: Validate transcript has meaningful conversation
       const validationResult = this.validateTranscript(transcript, call.duration || 0);
@@ -1561,7 +1736,8 @@ ${call.summary}
         transcriptMessages,
         [], // mood history
         'neutral',
-        call.duration || 0
+        call.duration || 0,
+        detectedLanguage
       );
       console.log(`[TelecallerAI] Enhanced analysis complete:`, {
         callQualityScore: enhancedAnalysis.callQualityScore,
@@ -1580,7 +1756,8 @@ ${call.summary}
           enhancedAnalysis.outcome,
           enhancedAnalysis.sentiment,
           enhancedAnalysis.agentSpeakingTime,
-          enhancedAnalysis.customerSpeakingTime
+          enhancedAnalysis.customerSpeakingTime,
+          detectedLanguage
         );
       } catch (coachingError) {
         console.warn(`[TelecallerAI] Coaching suggestions failed, using defaults:`, coachingError);
@@ -1616,7 +1793,7 @@ ${call.summary}
       console.log(`[TelecallerAI] Step 4: Extracting structured call data...`);
       let extractedData: ExtractedCallData;
       try {
-        extractedData = await extractCallData(transcriptMessages);
+        extractedData = await extractCallData(transcriptMessages, undefined, detectedLanguage);
       } catch (extractError) {
         console.warn(`[TelecallerAI] Data extraction failed, using defaults:`, extractError);
         extractedData = { items: [], summary: '' };

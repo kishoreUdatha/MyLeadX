@@ -127,18 +127,24 @@ export const checkPermission = async (permission: PermissionType): Promise<boole
  * Request all permissions needed for call recording
  */
 export const requestCallPermissions = async (): Promise<boolean> => {
+  const apiLevel = typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
+
   const permissions: PermissionType[] = [
     'RECORD_AUDIO',
     'READ_PHONE_STATE',
     'CALL_PHONE',
     'READ_CALL_LOG',
-    'READ_EXTERNAL_STORAGE',
   ];
 
-  // Also request READ_MEDIA_AUDIO on Android 13+
-  try {
-    const apiLevel = Platform.Version;
-    if (typeof apiLevel === 'number' && apiLevel >= 33) {
+  // Only request READ_EXTERNAL_STORAGE on Android 12 and below
+  // On Android 13+ it's deprecated and always denied
+  if (apiLevel < 33) {
+    permissions.push('READ_EXTERNAL_STORAGE');
+  }
+
+  // Request READ_MEDIA_AUDIO on Android 13+
+  if (apiLevel >= 33) {
+    try {
       await PermissionsAndroid.request(
         'android.permission.READ_MEDIA_AUDIO' as Permission,
         {
@@ -147,9 +153,9 @@ export const requestCallPermissions = async (): Promise<boolean> => {
           buttonPositive: 'OK',
         }
       );
+    } catch (e) {
+      console.log('READ_MEDIA_AUDIO request failed:', e);
     }
-  } catch (e) {
-    console.log('READ_MEDIA_AUDIO request failed:', e);
   }
 
   const results = await requestMultiplePermissions(permissions);

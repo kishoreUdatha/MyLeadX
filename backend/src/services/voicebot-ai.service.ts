@@ -141,6 +141,29 @@ export interface CallPrepSuggestions {
 /**
  * Detect if user is requesting a language switch
  */
+/**
+ * Build a directive that forces the LLM to respond entirely in the conversation's language.
+ * Pass this into system prompts whenever you want narrative fields (summary, coaching text,
+ * key questions, extracted labels) returned in the same language the call was conducted in.
+ */
+function languageDirective(lang?: string): string {
+  if (!lang || lang === 'unknown') return '';
+  const map: Record<string, string> = {
+    te: 'Telugu', 'te-in': 'Telugu',
+    hi: 'Hindi', 'hi-in': 'Hindi',
+    ta: 'Tamil', 'ta-in': 'Tamil',
+    kn: 'Kannada', 'kn-in': 'Kannada',
+    ml: 'Malayalam', 'ml-in': 'Malayalam',
+    mr: 'Marathi', 'mr-in': 'Marathi',
+    bn: 'Bengali', 'bn-in': 'Bengali',
+    gu: 'Gujarati', 'gu-in': 'Gujarati',
+    pa: 'Punjabi', 'pa-in': 'Punjabi',
+    en: 'English', 'en-in': 'English', 'en-us': 'English',
+  };
+  const name = map[lang.toLowerCase()] || lang;
+  return `\n\nIMPORTANT: The conversation is in ${name}. ALL natural-language string values you return (summary, key points, questions, issues, coaching text, labels, etc.) MUST be written in ${name} using its native script. Keep enum/category values (sentiment, outcome, category names) in English.`;
+}
+
 export async function detectLanguageSwitch(userMessage: string): Promise<LanguageSwitchResult> {
   const defaultResult = { switchRequested: false, newLanguage: null, languageName: '' };
 
@@ -549,7 +572,8 @@ IMPORTANT:
 export async function analyzeCall(
   transcript: Array<{ role: string; content: string }>,
   moodHistory: Array<{ mood: string; timestamp: string }>,
-  userMood: string
+  userMood: string,
+  outputLanguage?: string
 ): Promise<CallAnalysisResult> {
   const defaultResult: CallAnalysisResult = {
     summary: '',
@@ -597,7 +621,7 @@ OUTCOME CLASSIFICATION RULES:
 - NEEDS_FOLLOWUP: ONLY when none of the above apply
 
 Mood history during call: ${moodHistoryText}
-Current mood: ${userMood}`,
+Current mood: ${userMood}${languageDirective(outputLanguage)}`,
         },
         {
           role: 'user',
@@ -671,10 +695,11 @@ export async function analyzeCallEnhanced(
   transcript: Array<{ role: string; content: string }>,
   moodHistory: Array<{ mood: string; timestamp: string }>,
   userMood: string,
-  totalDuration: number = 0
+  totalDuration: number = 0,
+  outputLanguage?: string
 ): Promise<EnhancedCallAnalysisResult> {
-  // Get basic analysis first
-  const basicAnalysis = await analyzeCall(transcript, moodHistory, userMood);
+  // Get basic analysis first (also localized)
+  const basicAnalysis = await analyzeCall(transcript, moodHistory, userMood, outputLanguage);
 
   // Calculate speaking times
   const speakingTimes = estimateSpeakingTimes(transcript, totalDuration || 120);
@@ -725,7 +750,7 @@ CALL QUALITY SCORING RULES:
 
 KEY QUESTIONS: Extract questions the AGENT asked to understand customer needs
 KEY ISSUES: Extract main topics, concerns, or pain points discussed
-SENTIMENT per message: Analyze each message's emotional tone`,
+SENTIMENT per message: Analyze each message's emotional tone${languageDirective(outputLanguage)}`,
         },
         {
           role: 'user',
@@ -777,7 +802,8 @@ export async function generateCoachingSuggestions(
   outcome: string,
   sentiment: string,
   agentSpeakingTime: number,
-  customerSpeakingTime: number
+  customerSpeakingTime: number,
+  outputLanguage?: string
 ): Promise<CoachingSuggestions> {
   const defaultResult: CoachingSuggestions = {
     positiveHighlights: [],
@@ -837,7 +863,7 @@ COACHING GUIDELINES:
 - nextCallTips: 2-3 actionable tips for the next call based on customer's preferences/concerns
 - Scores: Be realistic - 70+ is good, 50-70 is average, below 50 needs work
 - If outcome is NOT_INTERESTED, focus on what could have been done differently
-- If outcome is INTERESTED/CONVERTED, highlight what worked well`,
+- If outcome is INTERESTED/CONVERTED, highlight what worked well${languageDirective(outputLanguage)}`,
         },
         {
           role: 'user',
@@ -1056,7 +1082,8 @@ export interface ExtractedCallData {
  */
 export async function extractCallData(
   transcript: Array<{ role: string; content: string }>,
-  agentIndustry?: string
+  agentIndustry?: string,
+  outputLanguage?: string
 ): Promise<ExtractedCallData> {
   const defaultResult: ExtractedCallData = {
     items: [],
@@ -1150,7 +1177,7 @@ Categories:
 - other: Anything else important
 
 Only extract information that was explicitly mentioned. Do not invent data.
-If no relevant data found, return empty items array.`
+If no relevant data found, return empty items array.${languageDirective(outputLanguage)}`
         },
         {
           role: 'user',

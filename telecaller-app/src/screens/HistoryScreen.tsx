@@ -208,9 +208,17 @@ const ExpandedCallContent: React.FC<{ item: Call }> = ({ item }) => {
       {item.transcript && (
         <View style={styles.transcriptSection}>
           <Text style={styles.transcriptLabel}>Transcript:</Text>
-          <Text style={styles.transcriptText} numberOfLines={5}>
+          <Text style={styles.transcriptText} selectable>
             {item.transcript}
           </Text>
+          {(item as any).qualification?.englishTranscript ? (
+            <View style={{ marginTop: 8 }}>
+              <Text style={styles.transcriptLabel}>English:</Text>
+              <Text style={styles.transcriptText} selectable>
+                {(item as any).qualification.englishTranscript}
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
 

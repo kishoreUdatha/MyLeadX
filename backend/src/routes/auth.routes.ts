@@ -81,7 +81,7 @@ const changePasswordValidation = [
 
 // Routes
 router.post('/register', rateLimiters.authRegister, validate(registerValidation), authController.register.bind(authController));
-router.post('/login', rateLimiters.authLogin, validate(loginValidation), authController.login.bind(authController));
+router.post('/login', validate(loginValidation), authController.login.bind(authController));
 router.post('/refresh-token', validate(refreshTokenValidation), authController.refreshToken.bind(authController));
 router.post('/logout', authenticate, authController.logout.bind(authController));
 router.post('/forgot-password', rateLimiters.authPasswordReset, validate(forgotPasswordValidation), authController.forgotPassword.bind(authController));

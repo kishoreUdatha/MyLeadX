@@ -10,11 +10,11 @@
 import axios from 'axios';
 import FormData from 'form-data';
 import { circuitBreakers, CircuitBreakerError } from '../utils/circuitBreaker';
-import { API_ENDPOINTS, TIMEOUTS, VOICE_AI } from '../utils/constants';
+import { API_ENDPOINTS, TIMEOUTS, VOICE_AI, getApiEndpoint } from '../utils/constants';
 
 // Sarvam API Configuration
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY || '';
-const SARVAM_BASE_URL = API_ENDPOINTS.SARVAM;
+const SARVAM_BASE_URL = getApiEndpoint('sarvam');
 
 // Supported languages
 export const SARVAM_LANGUAGES = {
@@ -82,7 +82,8 @@ class SarvamService {
   async speechToText(
     audioBuffer: Buffer,
     sampleRate: number = 8000,
-    language?: string
+    language?: string,
+    sourceFormat: 'wav' | 'm4a' | 'mp3' = 'wav'
   ): Promise<{ text: string; detectedLanguage?: string }> {
     if (!this.isConfigured) {
       throw new Error('Sarvam API key not configured');
@@ -92,23 +93,31 @@ class SarvamService {
       // Create form data with audio file
       const formData = new FormData();
 
-      // Add audio as a file
+      // Map source format to filename + content type so Sarvam picks the right decoder.
+      // (Hardcoding pcm_s16le for non-PCM containers caused empty transcripts.)
+      const fmtMeta: Record<string, { filename: string; contentType: string }> = {
+        wav: { filename: 'audio.wav', contentType: 'audio/wav' },
+        m4a: { filename: 'audio.m4a', contentType: 'audio/mp4' },
+        mp3: { filename: 'audio.mp3', contentType: 'audio/mpeg' },
+      };
+      const meta = fmtMeta[sourceFormat] || fmtMeta.wav;
+
       formData.append('file', audioBuffer, {
-        filename: 'audio.wav',
-        contentType: 'audio/wav',
+        filename: meta.filename,
+        contentType: meta.contentType,
       });
 
       // Use saaras:v3 for best quality with auto language detection
       formData.append('model', 'saaras:v3');
-
-      // Set mode to transcribe (or translate for translation)
       formData.append('mode', 'transcribe');
 
-      // Specify input codec for PCM
-      formData.append('input_audio_codec', 'pcm_s16le');
-      formData.append('sample_rate', sampleRate.toString());
+      // Only set codec/sample_rate when actually sending raw PCM
+      if (sourceFormat === 'wav') {
+        formData.append('input_audio_codec', 'pcm_s16le');
+        formData.append('sample_rate', sampleRate.toString());
+      }
 
-      // Optional language hint
+      // Optional language hint — omit to let Sarvam auto-detect
       if (language) {
         formData.append('language_code', language);
       }
@@ -138,7 +147,7 @@ class SarvamService {
         console.warn('[Sarvam STT] Circuit breaker OPEN');
         throw new Error('Speech recognition service is temporarily unavailable. Please try again later.');
       }
-      console.error('[Sarvam STT] Error:', error.response?.data || error.message);
+      console.error('[Sarvam STT] Error status:', error.response?.status, 'body:', JSON.stringify(error.response?.data) || error.message);
       throw new Error(`Sarvam STT failed: ${error.response?.data?.message || error.message}`);
     }
   }
