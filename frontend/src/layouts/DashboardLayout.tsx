@@ -128,9 +128,11 @@ const analyticsNavigation: NavItem[] = [
   { name: 'Performance', href: '/analytics/agents', icon: TrophyIcon, roles: ['admin', 'manager', 'team_lead'] },
 ];
 
-// 7. TEAM - Users & Management (All industries)
+// 7. TEAM - Users & Hierarchy Management (All industries)
 const teamNavigation: NavItem[] = [
   { name: 'Users', href: '/users', icon: UsersIcon, roles: ['admin'] },
+  { name: 'Roles', href: '/roles', icon: ShieldCheckIcon, roles: ['admin'] },
+  { name: 'My Team', href: '/team-management', icon: UserGroupIcon, roles: ['admin', 'manager', 'team_lead'] },
   { name: 'Leaderboard', href: '/performance', icon: TrophyIcon, roles: ['admin', 'manager', 'team_lead', 'telecaller'] },
 ];
 
