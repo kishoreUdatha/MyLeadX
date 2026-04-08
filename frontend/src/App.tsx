@@ -286,16 +286,23 @@ function HomeRoute() {
 
 // Super Admin Protected Route
 function SuperAdminProtectedRoute({ children }: { children: React.ReactNode }) {
-  // Check super admin service authentication (separate login)
-  const isSuperAdminAuthenticated = superAdminService.isAuthenticated();
+  // Only use regular auth - super_admin role users access this panel
+  const { isAuthenticated, user, isInitialized } = useSelector((state: RootState) => state.auth);
 
-  // Also check if user is authenticated via regular login with super_admin role
-  const { isAuthenticated: isRegularAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  if (!isInitialized) {
+    return <AuthLoadingSpinner />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
   const userRole = user?.role?.toLowerCase();
-  const isRegularSuperAdmin = isRegularAuthenticated && (userRole === 'super_admin' || userRole === 'superadmin');
+  const isSuperAdmin = userRole === 'super_admin' || userRole === 'superadmin';
 
-  if (!isSuperAdminAuthenticated && !isRegularSuperAdmin) {
-    return <Navigate to="/super-admin/login" replace />;
+  if (!isSuperAdmin) {
+    // Not a super admin, redirect to regular dashboard
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -661,7 +668,8 @@ function App() {
       </Route>
 
       {/* Super Admin Routes */}
-      <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
+      {/* Redirect old super-admin login to regular login */}
+      <Route path="/super-admin/login" element={<Navigate to="/login" replace />} />
       <Route
         element={
           <SuperAdminProtectedRoute>
