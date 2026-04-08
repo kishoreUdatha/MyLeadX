@@ -238,7 +238,7 @@ function ProtectedRoute({ children, skipOnboardingCheck = false }: { children: R
 
 // Public Route Component (redirects to dashboard if authenticated)
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isInitialized } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, isInitialized, user } = useSelector((state: RootState) => state.auth);
 
   // Wait for auth check to complete before deciding
   if (!isInitialized) {
@@ -246,6 +246,11 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (isAuthenticated) {
+    // Super Admin goes to Platform Admin dashboard
+    const role = user?.role?.toLowerCase();
+    if (role === 'super_admin' || role === 'superadmin') {
+      return <Navigate to="/super-admin/dashboard" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -254,7 +259,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 // Home Route - shows landing page for guests, redirects to dashboard for authenticated
 function HomeRoute() {
-  const { isAuthenticated, isInitialized } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, isInitialized, user } = useSelector((state: RootState) => state.auth);
 
   // Wait for auth check to complete before deciding
   if (!isInitialized) {
@@ -262,6 +267,11 @@ function HomeRoute() {
   }
 
   if (isAuthenticated) {
+    // Super Admin goes to Platform Admin dashboard
+    const role = user?.role?.toLowerCase();
+    if (role === 'super_admin' || role === 'superadmin') {
+      return <Navigate to="/super-admin/dashboard" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
 
