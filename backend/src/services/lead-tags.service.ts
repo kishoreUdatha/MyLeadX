@@ -145,7 +145,8 @@ export class LeadTagsService {
   async assignTagsToLead(
     leadId: string,
     tagIds: string[],
-    organizationId: string
+    organizationId: string,
+    userId?: string
   ): Promise<LeadTagAssignment[]> {
     // Verify lead belongs to organization
     const lead = await prisma.lead.findFirst({
@@ -156,7 +157,7 @@ export class LeadTagsService {
       throw new Error('Lead not found');
     }
 
-    // Verify all tags belong to organization
+    // Verify all tags belong to organization and get their names
     const tags = await prisma.leadTag.findMany({
       where: {
         id: { in: tagIds },
@@ -188,14 +189,22 @@ export class LeadTagsService {
       assignments.push(assignment);
     }
 
-    // Create activity log
+    // Get tag names for activity description
+    const tagNames = tags.map(t => t.name).join(', ');
+
+    // Create activity log with user info
     await prisma.leadActivity.create({
       data: {
         leadId,
-        type: 'TAGS_UPDATED',
-        title: 'Tags assigned',
-        description: `${tagIds.length} tag(s) assigned to lead`,
-        metadata: { tagIds },
+        userId,
+        type: 'CUSTOM',
+        title: 'Tag Added',
+        description: `Added tag${tags.length > 1 ? 's' : ''}: ${tagNames}`,
+        metadata: {
+          action: 'tags_assigned',
+          tagIds,
+          tagNames: tags.map(t => ({ id: t.id, name: t.name, color: t.color })),
+        },
       },
     });
 
@@ -208,7 +217,8 @@ export class LeadTagsService {
   async removeTagsFromLead(
     leadId: string,
     tagIds: string[],
-    organizationId: string
+    organizationId: string,
+    userId?: string
   ): Promise<void> {
     // Verify lead belongs to organization
     const lead = await prisma.lead.findFirst({
@@ -219,6 +229,14 @@ export class LeadTagsService {
       throw new Error('Lead not found');
     }
 
+    // Get tag names before deleting for activity log
+    const tags = await prisma.leadTag.findMany({
+      where: {
+        id: { in: tagIds },
+        organizationId,
+      },
+    });
+
     await prisma.leadTagAssignment.deleteMany({
       where: {
         leadId,
@@ -226,14 +244,22 @@ export class LeadTagsService {
       },
     });
 
-    // Create activity log
+    // Get tag names for activity description
+    const tagNames = tags.map(t => t.name).join(', ');
+
+    // Create activity log with user info
     await prisma.leadActivity.create({
       data: {
         leadId,
-        type: 'TAGS_UPDATED',
-        title: 'Tags removed',
-        description: `${tagIds.length} tag(s) removed from lead`,
-        metadata: { tagIds },
+        userId,
+        type: 'CUSTOM',
+        title: 'Tag Removed',
+        description: `Removed tag${tags.length > 1 ? 's' : ''}: ${tagNames}`,
+        metadata: {
+          action: 'tags_removed',
+          tagIds,
+          tagNames: tags.map(t => ({ id: t.id, name: t.name, color: t.color })),
+        },
       },
     });
   }
@@ -241,7 +267,18 @@ export class LeadTagsService {
   /**
    * Get tags for a lead
    */
-  async getLeadTags(leadId: string): Promise<LeadTag[]> {
+  async getLeadTags(leadId: string, organizationId?: string): Promise<LeadTag[]> {
+    // If organizationId provided, verify lead belongs to organization
+    if (organizationId) {
+      const lead = await prisma.lead.findFirst({
+        where: { id: leadId, organizationId },
+      });
+
+      if (!lead) {
+        throw new Error('Lead not found');
+      }
+    }
+
     const assignments = await prisma.leadTagAssignment.findMany({
       where: { leadId },
       include: { tag: true },
@@ -463,18 +500,107 @@ export class LeadTagsService {
   // ==================== System Tags ====================
 
   /**
-   * Create default system tags for an organization
+   * Industry-specific tag templates
    */
-  async createDefaultTags(organizationId: string): Promise<LeadTag[]> {
-    const defaultTags = [
+  private getIndustryTags(industry?: string): Array<{ name: string; color: string; description: string }> {
+    // Common tags for all industries
+    const commonTags = [
       { name: 'Hot Lead', color: '#EF4444', description: 'High priority lead ready to convert' },
       { name: 'VIP', color: '#8B5CF6', description: 'Very important contact' },
       { name: 'Follow Up', color: '#F59E0B', description: 'Needs follow-up' },
       { name: 'Not Interested', color: '#6B7280', description: 'Lead declined offer' },
       { name: 'Callback', color: '#3B82F6', description: 'Requested callback' },
-      { name: 'Documents Pending', color: '#EC4899', description: 'Waiting for documents' },
-      { name: 'Payment Pending', color: '#10B981', description: 'Payment awaited' },
     ];
+
+    // Industry-specific tags
+    const industryTags: Record<string, Array<{ name: string; color: string; description: string }>> = {
+      EDUCATION: [
+        { name: 'Scholarship Required', color: '#10B981', description: 'Needs financial aid' },
+        { name: 'Hostel Needed', color: '#06B6D4', description: 'Requires accommodation' },
+        { name: 'Parent Follow-up', color: '#EC4899', description: 'Need to contact parents' },
+        { name: 'Campus Visit Done', color: '#22C55E', description: 'Completed campus tour' },
+        { name: 'Documents Pending', color: '#F97316', description: 'Waiting for documents' },
+        { name: 'Fee Negotiation', color: '#EAB308', description: 'Discussing fee structure' },
+      ],
+      REAL_ESTATE: [
+        { name: 'Site Visit Done', color: '#22C55E', description: 'Property visit completed' },
+        { name: 'Site Visit Scheduled', color: '#06B6D4', description: 'Property visit planned' },
+        { name: 'Loan Required', color: '#F97316', description: 'Needs home loan' },
+        { name: 'NRI Buyer', color: '#8B5CF6', description: 'Non-resident buyer' },
+        { name: 'Ready to Move', color: '#10B981', description: 'Wants immediate possession' },
+        { name: 'Price Negotiation', color: '#EAB308', description: 'Discussing price' },
+      ],
+      HEALTHCARE: [
+        { name: 'Insurance Patient', color: '#3B82F6', description: 'Has health insurance' },
+        { name: 'Emergency', color: '#EF4444', description: 'Urgent medical need' },
+        { name: 'Second Opinion', color: '#F59E0B', description: 'Seeking second opinion' },
+        { name: 'Surgery Required', color: '#EC4899', description: 'Needs surgical procedure' },
+        { name: 'Follow-up Care', color: '#10B981', description: 'Post-treatment follow-up' },
+        { name: 'Reports Pending', color: '#F97316', description: 'Waiting for test results' },
+      ],
+      INSURANCE: [
+        { name: 'Policy Renewal', color: '#3B82F6', description: 'Existing policy renewal' },
+        { name: 'Claim Pending', color: '#F97316', description: 'Has pending claim' },
+        { name: 'High Coverage', color: '#8B5CF6', description: 'Needs high sum assured' },
+        { name: 'Family Floater', color: '#EC4899', description: 'Wants family coverage' },
+        { name: 'Documents Pending', color: '#EAB308', description: 'KYC documents awaited' },
+        { name: 'Medical Done', color: '#22C55E', description: 'Medical tests completed' },
+      ],
+      FINANCE: [
+        { name: 'High Net Worth', color: '#8B5CF6', description: 'HNI client' },
+        { name: 'Loan Approved', color: '#22C55E', description: 'Loan sanctioned' },
+        { name: 'KYC Pending', color: '#F97316', description: 'KYC verification pending' },
+        { name: 'CIBIL Issue', color: '#EF4444', description: 'Credit score concern' },
+        { name: 'Documents Pending', color: '#EAB308', description: 'Waiting for documents' },
+        { name: 'Disbursement Ready', color: '#10B981', description: 'Ready for disbursement' },
+      ],
+      IT_RECRUITMENT: [
+        { name: 'Immediate Joiner', color: '#22C55E', description: 'Can join immediately' },
+        { name: 'Notice Period', color: '#F59E0B', description: 'Currently serving notice' },
+        { name: 'Remote Preferred', color: '#3B82F6', description: 'Prefers remote work' },
+        { name: 'Salary Negotiation', color: '#EAB308', description: 'Discussing compensation' },
+        { name: 'Interview Scheduled', color: '#06B6D4', description: 'Interview planned' },
+        { name: 'Offer Released', color: '#8B5CF6', description: 'Offer letter sent' },
+      ],
+      ECOMMERCE: [
+        { name: 'Repeat Customer', color: '#8B5CF6', description: 'Previous buyer' },
+        { name: 'Cart Abandoned', color: '#EF4444', description: 'Left items in cart' },
+        { name: 'Bulk Order', color: '#10B981', description: 'Interested in bulk purchase' },
+        { name: 'COD Preferred', color: '#F97316', description: 'Cash on delivery' },
+        { name: 'Return Request', color: '#EAB308', description: 'Wants to return product' },
+        { name: 'Loyalty Member', color: '#EC4899', description: 'Loyalty program member' },
+      ],
+      GENERAL: [
+        { name: 'Documents Pending', color: '#EC4899', description: 'Waiting for documents' },
+        { name: 'Payment Pending', color: '#10B981', description: 'Payment awaited' },
+        { name: 'Meeting Scheduled', color: '#06B6D4', description: 'Meeting planned' },
+        { name: 'Proposal Sent', color: '#3B82F6', description: 'Proposal shared' },
+        { name: 'Decision Maker', color: '#8B5CF6', description: 'Key decision maker' },
+        { name: 'Budget Constraint', color: '#EAB308', description: 'Budget limitations' },
+      ],
+    };
+
+    const normalizedIndustry = industry?.toUpperCase() || 'GENERAL';
+    const specificTags = industryTags[normalizedIndustry] || industryTags.GENERAL;
+
+    return [...commonTags, ...specificTags];
+  }
+
+  /**
+   * Create default system tags for an organization based on industry
+   */
+  async createDefaultTags(organizationId: string, industry?: string): Promise<LeadTag[]> {
+    // If industry not provided, try to get from organization
+    let orgIndustry = industry;
+    if (!orgIndustry) {
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { industry: true },
+      });
+      orgIndustry = org?.industry || 'GENERAL';
+    }
+
+    const defaultTags = this.getIndustryTags(orgIndustry);
 
     const createdTags: LeadTag[] = [];
 

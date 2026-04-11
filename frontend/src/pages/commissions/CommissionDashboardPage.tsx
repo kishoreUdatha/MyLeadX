@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import {
   CurrencyRupeeIcon,
   PlusIcon,
@@ -26,6 +27,7 @@ import {
   CommissionStatus,
   CommissionType,
 } from '../../services/commission.service';
+import { RootState } from '../../store';
 
 const STATUS_COLORS: Record<CommissionStatus, { bg: string; text: string; icon: React.ElementType }> = {
   PENDING: { bg: 'bg-yellow-100', text: 'text-yellow-800', icon: ClockIcon },
@@ -42,7 +44,16 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+// Roles that can manage commissions (view all, approve, reject, etc.)
+const ADMIN_ROLES = ['superadmin', 'admin'];
+
 export default function CommissionDashboardPage() {
+  const { user } = useSelector((state: RootState) => state.auth);
+  // Role can be a string or object with slug - handle both cases
+  const rawRole = typeof user?.role === 'string' ? user.role : (user?.role as any)?.slug || '';
+  const userRole = rawRole.toLowerCase().trim().replace(/[_-]/g, '');
+  const isAdmin = ADMIN_ROLES.includes(userRole);
+
   const [activeTab, setActiveTab] = useState<'commissions' | 'rules'>('commissions');
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [rules, setRules] = useState<CommissionRule[]>([]);
@@ -73,14 +84,32 @@ export default function CommissionDashboardPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+
+      // Admin users see all commissions; others see only their own
+      const commissionsPromise = isAdmin
+        ? commissionService.getAllCommissions({
+            status: statusFilter || undefined,
+            limit: 50,
+          })
+        : commissionService.getMyCommissions({
+            status: statusFilter || undefined,
+            limit: 50,
+          });
+
+      // Only admins can manage rules
+      const rulesPromise = isAdmin ? commissionService.getRules() : Promise.resolve([]);
+
+      // Stats: admin sees org stats, others see their own stats
+      const statsPromise = isAdmin
+        ? commissionService.getStats()
+        : commissionService.getStats(user?.id);
+
       const [commissionsData, rulesData, statsData] = await Promise.all([
-        commissionService.getAllCommissions({
-          status: statusFilter || undefined,
-          limit: 50,
-        }),
-        commissionService.getRules(),
-        commissionService.getStats(),
+        commissionsPromise,
+        rulesPromise,
+        statsPromise,
       ]);
+
       setCommissions(commissionsData.commissions);
       setRules(rulesData);
       setStats(statsData);
@@ -89,7 +118,7 @@ export default function CommissionDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, isAdmin, user?.id]);
 
   useEffect(() => {
     fetchData();
@@ -169,169 +198,127 @@ export default function CommissionDashboardPage() {
   };
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <CurrencyRupeeIcon className="h-7 w-7 text-green-600" />
-            Commission Tracking
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Manage commissions, rules, and payouts</p>
-        </div>
-        <button
-          onClick={() => fetchData()}
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-        >
-          <ArrowPathIcon className="h-5 w-5" />
-        </button>
+    <div className="p-4">
+      {/* Header Row - Title + Stats */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <CurrencyRupeeIcon className="h-5 w-5 text-green-600" />
+          Commissions
+        </h1>
+        {stats && (
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-500">Total:</span>
+              <span className="font-semibold text-gray-900">{formatCurrency(stats.totalEarned)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-yellow-400"></span>
+              <span className="text-gray-600">Pending: {formatCurrency(stats.pending.amount)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-blue-400"></span>
+              <span className="text-gray-600">Approved: {formatCurrency(stats.approved.amount)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-green-400"></span>
+              <span className="text-gray-600">Paid: {formatCurrency(stats.paid.amount)}</span>
+            </div>
+            <button
+              onClick={() => fetchData()}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            >
+              <ArrowPathIcon className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <ChartBarIcon className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Total Earned</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.totalEarned)}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <ClockIcon className="h-5 w-5 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Pending ({stats.pending.count})</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.pending.amount)}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <CheckCircleIcon className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Approved ({stats.approved.count})</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.approved.amount)}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <BanknotesIcon className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Paid ({stats.paid.count})</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.paid.amount)}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <CurrencyRupeeIcon className="h-5 w-5 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">This Month ({stats.thisMonth.count})</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.thisMonth.amount)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
+      {/* Tabs + Filter Row */}
+      <div className="flex items-center justify-between mb-3 border-b border-gray-200">
+        <nav className="flex gap-6">
           <button
             onClick={() => setActiveTab('commissions')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+            className={`pb-2 text-sm font-medium border-b-2 ${
               activeTab === 'commissions'
                 ? 'border-green-500 text-green-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <CurrencyRupeeIcon className="h-5 w-5" />
-            Commissions
+            {isAdmin ? 'All Commissions' : 'My Commissions'}
           </button>
+          {isAdmin && (
           <button
             onClick={() => setActiveTab('rules')}
-            className={`pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+            className={`pb-2 text-sm font-medium border-b-2 ${
               activeTab === 'rules'
                 ? 'border-green-500 text-green-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Cog6ToothIcon className="h-5 w-5" />
-            Commission Rules
+            Rules
           </button>
+          )}
         </nav>
+        {activeTab === 'commissions' && (
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as CommissionStatus | '')}
+            className="border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500 mb-2"
+          >
+            <option value="">All Status</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="PAID">Paid</option>
+          </select>
+        )}
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <ArrowPathIcon className="h-8 w-8 text-gray-400 animate-spin" />
+        <div className="flex items-center justify-center py-8">
+          <ArrowPathIcon className="h-6 w-6 text-gray-400 animate-spin" />
         </div>
       ) : activeTab === 'commissions' ? (
         <>
-          {/* Filters */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex items-center gap-2">
-              <FunnelIcon className="h-5 w-5 text-gray-400" />
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value as CommissionStatus | '')}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">All Status</option>
-                <option value="PENDING">Pending</option>
-                <option value="APPROVED">Approved</option>
-                <option value="REJECTED">Rejected</option>
-                <option value="PAID">Paid</option>
-              </select>
-            </div>
-          </div>
-
           {/* Commissions Table */}
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="bg-white border border-gray-200 rounded-lg">
+            <table className="w-full divide-y divide-gray-200 table-fixed">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {isAdmin && (
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-[15%]">
                     User
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  )}
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-[22%]">
+                    Student / Admission
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-[12%]">
                     Base Value
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-[6%]">
                     Rate
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-[10%]">
                     Commission
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-[10%]">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-[10%]">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {isAdmin && (
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-[15%]">
                     Actions
                   </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {commissions.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={isAdmin ? 8 : 6} className="px-3 py-8 text-center text-gray-500 text-sm">
                       No commissions found
                     </td>
                   </tr>
@@ -342,56 +329,66 @@ export default function CommissionDashboardPage() {
 
                     return (
                       <tr key={commission.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
-                              <UserIcon className="h-4 w-4 text-green-600" />
+                        {isAdmin && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                              <UserIcon className="h-3 w-3 text-green-600" />
                             </div>
-                            <div>
-                              {commission.user ? (
-                                <p className="text-sm font-medium text-gray-900">
-                                  {commission.user.firstName} {commission.user.lastName}
-                                </p>
-                              ) : (
-                                <p className="text-sm text-gray-500">Unknown User</p>
-                              )}
-                            </div>
+                            <span className="text-sm text-gray-900 truncate">
+                              {commission.user ? `${commission.user.firstName} ${commission.user.lastName}` : 'Unknown'}
+                            </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        )}
+                        <td className="px-3 py-2">
+                          {commission.admission ? (
+                            <div>
+                              <p className="text-sm text-gray-900 truncate">
+                                {commission.admission.lead?.firstName} {commission.admission.lead?.lastName}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {commission.admission.admissionNumber}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-900">
                           {formatCurrency(commission.baseValue)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-3 py-2 text-sm text-gray-500">
                           {commission.rate}%
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
+                        <td className="px-3 py-2 text-sm font-medium text-green-600">
                           {formatCurrency(commission.amount)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-3 py-2">
                           <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
                           >
-                            <StatusIcon className="h-3.5 w-3.5" />
                             {commission.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-3 py-2 text-sm text-gray-500">
                           {new Date(commission.createdAt).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {isAdmin && (
+                        <td className="px-3 py-2 text-right">
                           {commission.status === 'PENDING' && (
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => handleApprove(commission)}
                                 disabled={actionLoading === commission.id}
-                                className="text-blue-600 hover:text-blue-900 disabled:opacity-50"
+                                className="px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
                               >
                                 Approve
                               </button>
                               <button
                                 onClick={() => setSelectedCommission(commission)}
                                 disabled={actionLoading === commission.id}
-                                className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                                className="px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
                               >
                                 Reject
                               </button>
@@ -401,12 +398,13 @@ export default function CommissionDashboardPage() {
                             <button
                               onClick={() => handleMarkAsPaid(commission)}
                               disabled={actionLoading === commission.id}
-                              className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                              className="px-2 py-0.5 text-xs text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
                             >
                               Mark Paid
                             </button>
                           )}
                         </td>
+                        )}
                       </tr>
                     );
                   })
@@ -418,36 +416,36 @@ export default function CommissionDashboardPage() {
       ) : (
         <>
           {/* Rules Header */}
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-end mb-4">
             <button
               onClick={() => setShowRuleModal(true)}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+              className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700"
             >
-              <PlusIcon className="h-5 w-5" />
+              <PlusIcon className="h-4 w-4" />
               Add Rule
             </button>
           </div>
 
           {/* Rules Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {rules.length === 0 ? (
-              <div className="col-span-full text-center py-12 bg-gray-50 rounded-lg">
-                <Cog6ToothIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No commission rules configured</p>
+              <div className="col-span-full text-center py-8 bg-gray-50 rounded-lg">
+                <Cog6ToothIcon className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">No commission rules configured</p>
               </div>
             ) : (
               rules.map(rule => (
                 <div
                   key={rule.id}
-                  className={`bg-white border rounded-xl p-5 ${
+                  className={`bg-white border rounded-lg p-4 ${
                     rule.isActive ? 'border-green-200' : 'border-gray-200 opacity-60'
                   }`}
                 >
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{rule.name}</h3>
+                      <h3 className="font-medium text-gray-900 text-sm">{rule.name}</h3>
                       {rule.description && (
-                        <p className="text-sm text-gray-500 mt-1">{rule.description}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{rule.description}</p>
                       )}
                     </div>
                     <button
@@ -455,39 +453,24 @@ export default function CommissionDashboardPage() {
                       className="relative"
                     >
                       <div
-                        className={`w-11 h-6 rounded-full transition-colors ${
+                        className={`w-9 h-5 rounded-full transition-colors ${
                           rule.isActive ? 'bg-green-500' : 'bg-gray-300'
                         }`}
                       >
                         <div
-                          className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                            rule.isActive ? 'translate-x-5' : 'translate-x-0.5'
+                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                            rule.isActive ? 'translate-x-4' : 'translate-x-0.5'
                           }`}
                         />
                       </div>
                     </button>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Type</span>
-                      <span className="font-medium text-gray-900">{rule.type}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Rate</span>
-                      <span className="font-medium text-green-600">
-                        {rule.type === 'PERCENTAGE' ? `${rule.rate}%` : formatCurrency(rule.rate)}
-                      </span>
-                    </div>
-                    {(rule.minValue || rule.maxValue) && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Value Range</span>
-                        <span className="font-medium text-gray-900">
-                          {rule.minValue ? formatCurrency(rule.minValue) : '0'} -{' '}
-                          {rule.maxValue ? formatCurrency(rule.maxValue) : 'No limit'}
-                        </span>
-                      </div>
-                    )}
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="text-gray-500">Type: <span className="text-gray-900">{rule.type}</span></span>
+                    <span className="text-gray-500">Rate: <span className="text-green-600 font-medium">
+                      {rule.type === 'PERCENTAGE' ? `${rule.rate}%` : formatCurrency(rule.rate)}
+                    </span></span>
                   </div>
                 </div>
               ))

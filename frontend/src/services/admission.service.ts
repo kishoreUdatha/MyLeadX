@@ -64,6 +64,7 @@ export interface AdmissionPayment {
   paymentMode?: 'CASH' | 'CHEQUE' | 'ONLINE' | 'UPI';
   referenceNumber?: string;
   paidAt?: string;
+  createdAt?: string;
   notes?: string;
   receiptUrl?: string;
   receivedBy?: {

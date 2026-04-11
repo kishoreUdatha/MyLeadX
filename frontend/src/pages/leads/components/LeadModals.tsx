@@ -3,7 +3,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { LeadPayment, LeadDocument } from '../../../services/leadDetails.service';
+import { CustomFieldsRenderer } from '../../../components/CustomFieldsRenderer';
 
 interface ModalWrapperProps {
   isOpen: boolean;
@@ -449,6 +451,25 @@ interface EditLeadModalProps {
     designation?: string;
     source?: string;
     priority?: string;
+    gender?: string;
+    dateOfBirth?: string;
+    alternateEmail?: string;
+    alternatePhone?: string;
+    walkinDate?: string;
+    lineupDate?: string;
+    preferredLocation?: string;
+    totalFees?: number | string;
+    // New direct columns
+    fatherName?: string;
+    fatherPhone?: string;
+    motherName?: string;
+    motherPhone?: string;
+    whatsapp?: string;
+    occupation?: string;
+    budget?: number | string;
+    preferredContactMethod?: string;
+    preferredContactTime?: string;
+    customFields?: Record<string, any>;
   } | null;
 }
 
@@ -466,9 +487,39 @@ export interface EditLeadFormData {
   designation: string;
   source: string;
   priority: string;
+  // Personal Information
+  gender: string;
+  dateOfBirth: string;
+  alternateEmail: string;
+  alternatePhone: string;
+  // Family & Contact Details (direct columns)
+  fatherName: string;
+  fatherPhone: string;
+  motherName: string;
+  motherPhone: string;
+  whatsapp: string;
+  occupation: string;
+  budget: string;
+  preferredContactMethod: string;
+  preferredContactTime: string;
+  // Additional Information
+  walkinDate: string;
+  lineupDate: string;
+  preferredLocation: string;
+  totalFees: string;
+  // Custom Fields (dynamic)
+  customFields: Record<string, any>;
 }
 
+// Email validation helper
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModalProps) {
+  const [emailError, setEmailError] = useState('');
+  const [alternateEmailError, setAlternateEmailError] = useState('');
   const [form, setForm] = useState<EditLeadFormData>({
     firstName: '',
     lastName: '',
@@ -483,11 +534,55 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
     designation: '',
     source: '',
     priority: '',
+    gender: '',
+    dateOfBirth: '',
+    alternateEmail: '',
+    alternatePhone: '',
+    // Family & Contact Details
+    fatherName: '',
+    fatherPhone: '',
+    motherName: '',
+    motherPhone: '',
+    whatsapp: '',
+    occupation: '',
+    budget: '',
+    preferredContactMethod: '',
+    preferredContactTime: '',
+    // Additional
+    walkinDate: '',
+    lineupDate: '',
+    preferredLocation: '',
+    totalFees: '',
+    customFields: {},
   });
 
   // Reset form when modal opens with lead data
   useEffect(() => {
     if (isOpen && lead) {
+      // Reset email errors
+      setEmailError('');
+      setAlternateEmailError('');
+
+      // Helper to get custom field value
+      const getCustomFieldValue = (key: string) => {
+        if (lead.customFields && lead.customFields[key]) {
+          return String(lead.customFields[key]);
+        }
+        return '';
+      };
+
+      // Format date for input field (YYYY-MM-DD)
+      const formatDateForInput = (date: string | undefined) => {
+        if (!date) return '';
+        try {
+          const d = new Date(date);
+          if (isNaN(d.getTime())) return '';
+          return d.toISOString().split('T')[0];
+        } catch {
+          return '';
+        }
+      };
+
       setForm({
         firstName: lead.firstName || '',
         lastName: lead.lastName || '',
@@ -502,17 +597,75 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
         designation: lead.designation || '',
         source: lead.source || '',
         priority: lead.priority || '',
+        gender: lead.gender || getCustomFieldValue('gender'),
+        dateOfBirth: formatDateForInput(lead.dateOfBirth) || formatDateForInput(getCustomFieldValue('dateOfBirth')),
+        alternateEmail: lead.alternateEmail || '',
+        alternatePhone: lead.alternatePhone || '',
+        // Family & Contact Details - read from direct columns first, fallback to customFields
+        fatherName: lead.fatherName || getCustomFieldValue('fatherName') || getCustomFieldValue('father_name') || '',
+        fatherPhone: lead.fatherPhone || getCustomFieldValue('fatherPhone') || getCustomFieldValue('father_phone') || '',
+        motherName: lead.motherName || getCustomFieldValue('motherName') || getCustomFieldValue('mother_name') || '',
+        motherPhone: lead.motherPhone || getCustomFieldValue('motherPhone') || getCustomFieldValue('mother_phone') || '',
+        whatsapp: lead.whatsapp || getCustomFieldValue('whatsapp') || '',
+        occupation: lead.occupation || getCustomFieldValue('occupation') || '',
+        budget: lead.budget ? String(lead.budget) : getCustomFieldValue('budget') || '',
+        preferredContactMethod: lead.preferredContactMethod || getCustomFieldValue('preferredContactMethod') || getCustomFieldValue('preferred_contact_method') || '',
+        preferredContactTime: lead.preferredContactTime || getCustomFieldValue('preferredContactTime') || getCustomFieldValue('preferred_contact_time') || '',
+        // Additional
+        walkinDate: formatDateForInput(lead.walkinDate),
+        lineupDate: formatDateForInput(lead.lineupDate),
+        preferredLocation: lead.preferredLocation || '',
+        totalFees: lead.totalFees ? String(lead.totalFees) : '',
+        customFields: lead.customFields || {},
       });
     }
   }, [isOpen, lead]);
 
+  // Handle custom field change
+  const handleCustomFieldChange = (fieldSlug: string, value: any) => {
+    setForm(prev => ({
+      ...prev,
+      customFields: {
+        ...prev.customFields,
+        [fieldSlug]: value,
+      },
+    }));
+  };
+
   const handleSubmit = () => {
+    // Validate email before submit
+    if (form.email && form.email.trim() && !isValidEmail(form.email.trim())) {
+      setEmailError('Please enter a valid email address');
+      toast.error('Please enter a valid email address');
+      return;
+    }
+    if (form.alternateEmail && form.alternateEmail.trim() && !isValidEmail(form.alternateEmail.trim())) {
+      setAlternateEmailError('Please enter a valid alternate email address');
+      toast.error('Please enter a valid alternate email address');
+      return;
+    }
     onSubmit(form);
     onClose();
   };
 
   const handleChange = (field: keyof EditLeadFormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
+
+    // Real-time email validation
+    if (field === 'email') {
+      if (value.trim() && !isValidEmail(value.trim())) {
+        setEmailError('Please enter a valid email address');
+      } else {
+        setEmailError('');
+      }
+    }
+    if (field === 'alternateEmail') {
+      if (value.trim() && !isValidEmail(value.trim())) {
+        setAlternateEmailError('Please enter a valid alternate email address');
+      } else {
+        setAlternateEmailError('');
+      }
+    }
   };
 
   if (!isOpen) return null;
@@ -567,8 +720,64 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
               type="email"
               value={form.email}
               onChange={(e) => handleChange('email', e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${
+                emailError
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'border-slate-200 focus:ring-primary-500 focus:border-transparent'
+              }`}
               placeholder="email@example.com"
+            />
+            {emailError && <p className="mt-1 text-xs text-red-500">{emailError}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Gender</label>
+            <select
+              value={form.gender}
+              onChange={(e) => handleChange('gender', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Date of Birth</label>
+            <input
+              type="date"
+              value={form.dateOfBirth}
+              onChange={(e) => handleChange('dateOfBirth', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Alternate Email</label>
+            <input
+              type="email"
+              value={form.alternateEmail}
+              onChange={(e) => handleChange('alternateEmail', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${
+                alternateEmailError
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'border-slate-200 focus:ring-primary-500 focus:border-transparent'
+              }`}
+              placeholder="alternate@example.com"
+            />
+            {alternateEmailError && <p className="mt-1 text-xs text-red-500">{alternateEmailError}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Alternate Phone</label>
+            <input
+              type="tel"
+              value={form.alternatePhone}
+              onChange={(e) => handleChange('alternatePhone', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
             />
           </div>
 
@@ -659,6 +868,118 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
             />
           </div>
 
+          {/* Family & Contact Details */}
+          <div className="col-span-2 mt-2">
+            <p className="text-sm font-medium text-slate-700 mb-2">Family & Contact Details</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Father's Name</label>
+            <input
+              type="text"
+              value={form.fatherName}
+              onChange={(e) => handleChange('fatherName', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Father's Name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Father's Phone</label>
+            <input
+              type="tel"
+              value={form.fatherPhone}
+              onChange={(e) => handleChange('fatherPhone', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Mother's Name</label>
+            <input
+              type="text"
+              value={form.motherName}
+              onChange={(e) => handleChange('motherName', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Mother's Name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Mother's Phone</label>
+            <input
+              type="tel"
+              value={form.motherPhone}
+              onChange={(e) => handleChange('motherPhone', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">WhatsApp Number</label>
+            <input
+              type="tel"
+              value={form.whatsapp}
+              onChange={(e) => handleChange('whatsapp', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Occupation</label>
+            <input
+              type="text"
+              value={form.occupation}
+              onChange={(e) => handleChange('occupation', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Occupation"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Budget</label>
+            <input
+              type="number"
+              value={form.budget}
+              onChange={(e) => handleChange('budget', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="0"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preferred Contact Method</label>
+            <select
+              value={form.preferredContactMethod}
+              onChange={(e) => handleChange('preferredContactMethod', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select Method</option>
+              <option value="phone">Phone Call</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="email">Email</option>
+              <option value="sms">SMS</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preferred Contact Time</label>
+            <select
+              value={form.preferredContactTime}
+              onChange={(e) => handleChange('preferredContactTime', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select Time</option>
+              <option value="morning">Morning (9 AM - 12 PM)</option>
+              <option value="afternoon">Afternoon (12 PM - 5 PM)</option>
+              <option value="evening">Evening (5 PM - 9 PM)</option>
+              <option value="anytime">Anytime</option>
+            </select>
+          </div>
+
           {/* Lead Info */}
           <div className="col-span-2 mt-2">
             <p className="text-sm font-medium text-slate-700 mb-2">Lead Information</p>
@@ -719,6 +1040,64 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
               <option value="HIGH">High</option>
               <option value="URGENT">Urgent</option>
             </select>
+          </div>
+
+          {/* Additional Information */}
+          <div className="col-span-2 mt-2">
+            <p className="text-sm font-medium text-slate-700 mb-2">Additional Information</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Walkin Date</label>
+            <input
+              type="date"
+              value={form.walkinDate}
+              onChange={(e) => handleChange('walkinDate', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Lineup Date</label>
+            <input
+              type="date"
+              value={form.lineupDate}
+              onChange={(e) => handleChange('lineupDate', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preferred Location</label>
+            <input
+              type="text"
+              value={form.preferredLocation}
+              onChange={(e) => handleChange('preferredLocation', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Preferred Location"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Total Fees</label>
+            <input
+              type="number"
+              value={form.totalFees}
+              onChange={(e) => handleChange('totalFees', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="0"
+            />
+          </div>
+
+          {/* Custom Fields (from Settings > Custom Contact Property) */}
+          <div className="col-span-2 mt-2">
+            <p className="text-sm font-medium text-slate-700 mb-2">Custom Fields</p>
+          </div>
+          <div className="col-span-2">
+            <CustomFieldsRenderer
+              values={form.customFields}
+              onChange={handleCustomFieldChange}
+            />
           </div>
         </div>
 

@@ -1,29 +1,5 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-
-// Create a separate axios instance for super admin with httpOnly cookie auth
-const superAdminApi = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // Send cookies for authentication
-});
-
-// Response interceptor for error handling
-superAdminApi.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear any legacy localStorage items
-      localStorage.removeItem('superAdminToken');
-      localStorage.removeItem('superAdmin');
-      window.location.href = '/super-admin/login';
-    }
-    return Promise.reject(error);
-  }
-);
+// Use the main api service for consistent cookie-based authentication
+import api from './api';
 
 export interface SuperAdmin {
   id: string;
@@ -153,7 +129,7 @@ export interface RevenueData {
 export const superAdminService = {
   // Auth - tokens are now in httpOnly cookies, only store non-sensitive admin info
   async login(email: string, password: string) {
-    const response = await superAdminApi.post('/super-admin/login', { email, password });
+    const response = await api.post('/super-admin/login', { email, password });
     const { admin } = response.data;
 
     // Only store non-sensitive admin info in sessionStorage (not tokens)
@@ -167,7 +143,7 @@ export const superAdminService = {
 
   async logout() {
     try {
-      await superAdminApi.post('/super-admin/logout');
+      await api.post('/super-admin/logout');
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -186,7 +162,7 @@ export const superAdminService = {
   async isAuthenticated(): Promise<boolean> {
     try {
       // Verify auth status with server
-      await superAdminApi.get('/super-admin/me');
+      await api.get('/super-admin/me');
       return true;
     } catch {
       return false;
@@ -195,12 +171,12 @@ export const superAdminService = {
 
   // Dashboard Stats
   async getStats(): Promise<PlatformStats> {
-    const response = await superAdminApi.get('/super-admin/stats');
+    const response = await api.get('/super-admin/stats');
     return response.data;
   },
 
   async getRevenueAnalytics(months: number = 12): Promise<RevenueData[]> {
-    const response = await superAdminApi.get('/super-admin/revenue', { params: { months } });
+    const response = await api.get('/super-admin/revenue', { params: { months } });
     return response.data.data;
   },
 
@@ -212,12 +188,12 @@ export const superAdminService = {
     status?: string;
     plan?: string;
   }) {
-    const response = await superAdminApi.get('/super-admin/organizations', { params });
+    const response = await api.get('/super-admin/organizations', { params });
     return response.data;
   },
 
   async getOrganizationDetails(orgId: string) {
-    const response = await superAdminApi.get(`/super-admin/organizations/${orgId}`);
+    const response = await api.get(`/super-admin/organizations/${orgId}`);
     return response.data;
   },
 
@@ -226,7 +202,7 @@ export const superAdminService = {
     activePlanId?: string;
     subscriptionStatus?: string;
   }) {
-    const response = await superAdminApi.patch(`/super-admin/organizations/${orgId}`, data);
+    const response = await api.patch(`/super-admin/organizations/${orgId}`, data);
     return response.data;
   },
 
@@ -238,13 +214,13 @@ export const superAdminService = {
     adminLastName: string;
     planId?: string;
   }) {
-    const response = await superAdminApi.post('/super-admin/organizations', data);
+    const response = await api.post('/super-admin/organizations', data);
     return response.data;
   },
 
   // Impersonation - tokens handled via httpOnly cookies
   async impersonateUser(userId: string) {
-    const response = await superAdminApi.post(`/super-admin/impersonate/${userId}`);
+    const response = await api.post(`/super-admin/impersonate/${userId}`);
 
     // Store non-sensitive impersonation info in sessionStorage
     const { user } = response.data;
@@ -257,7 +233,7 @@ export const superAdminService = {
   },
 
   async exitImpersonation() {
-    const response = await superAdminApi.post('/super-admin/exit-impersonation');
+    const response = await api.post('/super-admin/exit-impersonation');
 
     // Clear impersonation state
     sessionStorage.removeItem('impersonatedUser');
@@ -290,13 +266,13 @@ export const superAdminService = {
       orgIds?: string[];
     };
   }) {
-    const response = await superAdminApi.post('/super-admin/bulk-email', data);
+    const response = await api.post('/super-admin/bulk-email', data);
     return response.data;
   },
 
   // Plans
   async getPlans() {
-    const response = await superAdminApi.get('/super-admin/plans');
+    const response = await api.get('/super-admin/plans');
     return response.data;
   },
 
@@ -308,20 +284,20 @@ export const superAdminService = {
     page?: number;
     limit?: number;
   }) {
-    const response = await superAdminApi.get('/super-admin/audit-logs', { params });
+    const response = await api.get('/super-admin/audit-logs', { params });
     return response.data;
   },
 
   // Exports
   async exportOrganizations() {
-    const response = await superAdminApi.get('/super-admin/export/organizations', {
+    const response = await api.get('/super-admin/export/organizations', {
       responseType: 'blob',
     });
     return response.data;
   },
 
   async exportRevenue(months: number = 12) {
-    const response = await superAdminApi.get('/super-admin/export/revenue', {
+    const response = await api.get('/super-admin/export/revenue', {
       params: { months },
       responseType: 'blob',
     });
@@ -329,7 +305,7 @@ export const superAdminService = {
   },
 
   async exportUsage() {
-    const response = await superAdminApi.get('/super-admin/export/usage', {
+    const response = await api.get('/super-admin/export/usage', {
       responseType: 'blob',
     });
     return response.data;
@@ -340,7 +316,7 @@ export const superAdminService = {
     endDate?: string;
     organizationId?: string;
   }) {
-    const response = await superAdminApi.get('/super-admin/export/audit-logs', {
+    const response = await api.get('/super-admin/export/audit-logs', {
       params,
       responseType: 'blob',
     });

@@ -29,7 +29,8 @@ export interface Commission {
   userId: string;
   leadId?: string;
   paymentId?: string;
-  ruleId: string;
+  admissionId?: string;
+  ruleId?: string;
   amount: number;
   rate: number;
   baseValue: number;
@@ -43,6 +44,13 @@ export interface Commission {
     id: string;
     firstName: string;
     lastName: string;
+  };
+  admission?: {
+    id: string;
+    admissionNumber: string;
+    universityId: string;
+    university?: { name: string };
+    lead?: { firstName: string; lastName: string };
   };
 }
 

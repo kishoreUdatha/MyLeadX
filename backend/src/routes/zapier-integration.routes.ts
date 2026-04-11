@@ -4,7 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { authenticate as authenticateToken, authorize as requireRole } from '../middlewares/auth';
+import { authenticate as authenticateToken, authorize as authorize } from '../middlewares/auth';
 import { zapierService } from '../integrations/zapier.service';
 
 const router = Router();
@@ -119,7 +119,7 @@ router.get('/triggers/:event/sample', authenticateToken, async (req: Request, re
 /**
  * List active subscriptions
  */
-router.get('/subscriptions', authenticateToken, requireRole(['admin', 'manager']), async (req: Request, res: Response) => {
+router.get('/subscriptions', authenticateToken, authorize(['admin', 'manager']), async (req: Request, res: Response) => {
   try {
     const organizationId = req.user?.organizationId;
 
@@ -321,7 +321,7 @@ router.post('/actions/schedule-call', authenticateToken, async (req: Request, re
 /**
  * Generate a new webhook token for the organization
  */
-router.post('/webhook-token/generate', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.post('/webhook-token/generate', authenticateToken, authorize(['admin']), async (req: Request, res: Response) => {
   try {
     const organizationId = req.user?.organizationId;
 

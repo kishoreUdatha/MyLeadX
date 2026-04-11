@@ -24,6 +24,7 @@ import {
   getIndustryConfig,
   separateStages,
   isLostStage,
+  isWonStage,
 } from '../industry-stages.constants';
 
 // Icon mapping
@@ -86,7 +87,7 @@ export function IndustryJourneyTracker({
 
     const targetStep = progressStages.findIndex((s) => s.id === stage.id) + 1;
 
-    if (currentStage?.autoSyncStatus === 'WON' && targetStep < currentStep) {
+    if (currentStage && isWonStage(currentStage) && targetStep < currentStep) {
       toast.error(`Cannot move back from ${config.wonLabel} status`);
       return;
     }
@@ -172,6 +173,17 @@ export function IndustryJourneyTracker({
                 {currentStage.name}
               </span>
             ) : null}
+
+            {/* Close Button - shown when in won stage and not yet closed */}
+            {showCloseButton && onClose && currentStage && isWonStage(currentStage) && !closedAt && (
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-semibold shadow-sm shadow-emerald-200 transition-all"
+              >
+                <CheckCircleSolidIcon className="h-4 w-4" />
+                Close {config.journeyTitle.split(' ')[0]}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -198,7 +210,7 @@ export function IndustryJourneyTracker({
                 const isCompleted = index + 1 < currentStep;
                 const isCurrent = stage.id === currentStageId;
                 const isClickable = !isUpdating && index + 1 <= currentStep + 1;
-                const isWon = stage.autoSyncStatus === 'WON';
+                const isWon = isWonStage(stage);
                 const isHovered = hoveredStage === stage.id;
 
                 return (
@@ -307,33 +319,17 @@ export function IndustryJourneyTracker({
         </div>
       )}
 
-      {/* Action Footer */}
-      {((!isCurrentlyLost && lostStage && currentStage?.autoSyncStatus !== 'WON') ||
-        (showCloseButton && onClose && currentStage?.autoSyncStatus === 'WON' && !closedAt)) && (
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <div>
-            {!isCurrentlyLost && lostStage && currentStage?.autoSyncStatus !== 'WON' && (
-              <button
-                onClick={handleMarkLost}
-                disabled={isUpdating}
-                className="inline-flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 font-medium disabled:opacity-50 transition-colors"
-              >
-                <ExclamationTriangleIcon className="h-4 w-4" />
-                Mark as {config.lostLabel}
-              </button>
-            )}
-          </div>
-          <div>
-            {showCloseButton && onClose && currentStage?.autoSyncStatus === 'WON' && !closedAt && (
-              <button
-                onClick={onClose}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-semibold shadow-sm shadow-emerald-200 transition-all"
-              >
-                <CheckCircleSolidIcon className="h-4 w-4" />
-                Close {config.journeyTitle.split(' ')[0]}
-              </button>
-            )}
-          </div>
+      {/* Action Footer - Mark as Lost button */}
+      {!isCurrentlyLost && lostStage && currentStage && !isWonStage(currentStage) && (
+        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+          <button
+            onClick={handleMarkLost}
+            disabled={isUpdating}
+            className="inline-flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 font-medium disabled:opacity-50 transition-colors"
+          >
+            <ExclamationTriangleIcon className="h-4 w-4" />
+            Mark as {config.lostLabel}
+          </button>
         </div>
       )}
     </div>

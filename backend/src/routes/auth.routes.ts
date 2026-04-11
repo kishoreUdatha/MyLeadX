@@ -4,6 +4,7 @@ import { authController } from '../controllers/auth.controller';
 import { validate } from '../middlewares/validate';
 import { authenticate } from '../middlewares/auth';
 import { rateLimiters } from '../services/rate-limit.service';
+import { subdomainTenant } from '../middlewares/subdomain';
 
 const router = Router();
 
@@ -80,7 +81,7 @@ const changePasswordValidation = [
 
 // Routes
 router.post('/register', rateLimiters.authRegister, validate(registerValidation), authController.register.bind(authController));
-router.post('/login', validate(loginValidation), authController.login.bind(authController));
+router.post('/login', subdomainTenant, validate(loginValidation), authController.login.bind(authController));
 router.post('/refresh-token', authController.refreshToken.bind(authController));
 router.post('/logout', authenticate, authController.logout.bind(authController));
 router.post('/forgot-password', rateLimiters.authPasswordReset, validate(forgotPasswordValidation), authController.forgotPassword.bind(authController));

@@ -109,185 +109,36 @@ const getDateRange = (option: DateRangeOption, customStart?: Date, customEnd?: D
   }
 };
 
-// Generate mock hourly/daily data based on date range
-const generateChartData = (option: DateRangeOption) => {
-  switch (option) {
-    case 'today':
-      return [
-        { label: '9AM', ai: 12, human: 8 },
-        { label: '10AM', ai: 18, human: 14 },
-        { label: '11AM', ai: 24, human: 19 },
-        { label: '12PM', ai: 15, human: 12 },
-        { label: '1PM', ai: 20, human: 16 },
-        { label: '2PM', ai: 28, human: 22 },
-        { label: '3PM', ai: 32, human: 25 },
-        { label: 'Now', ai: 5, human: 5 },
-      ];
-    case 'yesterday':
-      return [
-        { label: '9AM', ai: 15, human: 10 },
-        { label: '10AM', ai: 22, human: 18 },
-        { label: '11AM', ai: 28, human: 24 },
-        { label: '12PM', ai: 18, human: 15 },
-        { label: '1PM', ai: 25, human: 20 },
-        { label: '2PM', ai: 35, human: 28 },
-        { label: '3PM', ai: 30, human: 22 },
-        { label: '5PM', ai: 20, human: 15 },
-      ];
-    case 'last7days':
-      return [
-        { label: 'Mon', ai: 145, human: 89 },
-        { label: 'Tue', ai: 168, human: 102 },
-        { label: 'Wed', ai: 155, human: 95 },
-        { label: 'Thu', ai: 178, human: 112 },
-        { label: 'Fri', ai: 162, human: 98 },
-        { label: 'Sat', ai: 85, human: 45 },
-        { label: 'Sun', ai: 42, human: 22 },
-      ];
-    case 'last30days':
-      return [
-        { label: 'Week 1', ai: 845, human: 520 },
-        { label: 'Week 2', ai: 920, human: 580 },
-        { label: 'Week 3', ai: 890, human: 545 },
-        { label: 'Week 4', ai: 975, human: 615 },
-      ];
-    case 'custom':
-      return [
-        { label: 'Day 1', ai: 150, human: 95 },
-        { label: 'Day 2', ai: 165, human: 105 },
-        { label: 'Day 3', ai: 140, human: 88 },
-        { label: 'Day 4', ai: 180, human: 115 },
-        { label: 'Day 5', ai: 155, human: 98 },
-      ];
-    default:
-      return [];
-  }
+// Return empty data - no mock data
+const generateChartData = (_option: DateRangeOption) => {
+  return []; // No mock data - show empty state
 };
 
-const getTotalCalls = (option: DateRangeOption, type: 'AI' | 'HUMAN') => {
-  const data = generateChartData(option);
-  return data.reduce((sum, d) => sum + (type === 'AI' ? d.ai : d.human), 0);
+const getTotalCalls = (_option: DateRangeOption, _type: 'AI' | 'HUMAN') => {
+  return 0; // No mock data
 };
 
-// Generate status distribution data based on date range
-const generateStatusData = (option: DateRangeOption, type: 'AI' | 'HUMAN') => {
-  const multiplier = type === 'AI' ? 1.2 : 1;
-  switch (option) {
-    case 'today':
-      return [
-        { name: 'Completed', count: Math.round(85 * multiplier), color: '#10B981' },
-        { name: 'In Progress', count: Math.round(12 * multiplier), color: '#3B82F6' },
-        { name: 'Failed', count: Math.round(8 * multiplier), color: '#EF4444' },
-        { name: 'Missed', count: Math.round(15 * multiplier), color: '#F59E0B' },
-      ];
-    case 'yesterday':
-      return [
-        { name: 'Completed', count: Math.round(142 * multiplier), color: '#10B981' },
-        { name: 'In Progress', count: 0, color: '#3B82F6' },
-        { name: 'Failed', count: Math.round(12 * multiplier), color: '#EF4444' },
-        { name: 'Missed', count: Math.round(24 * multiplier), color: '#F59E0B' },
-      ];
-    case 'last7days':
-      return [
-        { name: 'Completed', count: Math.round(720 * multiplier), color: '#10B981' },
-        { name: 'In Progress', count: Math.round(45 * multiplier), color: '#3B82F6' },
-        { name: 'Failed', count: Math.round(65 * multiplier), color: '#EF4444' },
-        { name: 'Missed', count: Math.round(105 * multiplier), color: '#F59E0B' },
-      ];
-    case 'last30days':
-      return [
-        { name: 'Completed', count: Math.round(2850 * multiplier), color: '#10B981' },
-        { name: 'In Progress', count: Math.round(120 * multiplier), color: '#3B82F6' },
-        { name: 'Failed', count: Math.round(245 * multiplier), color: '#EF4444' },
-        { name: 'Missed', count: Math.round(415 * multiplier), color: '#F59E0B' },
-      ];
-    case 'custom':
-      return [
-        { name: 'Completed', count: Math.round(520 * multiplier), color: '#10B981' },
-        { name: 'In Progress', count: Math.round(35 * multiplier), color: '#3B82F6' },
-        { name: 'Failed', count: Math.round(48 * multiplier), color: '#EF4444' },
-        { name: 'Missed', count: Math.round(87 * multiplier), color: '#F59E0B' },
-      ];
-    default:
-      return [];
-  }
+// Return empty status data - no mock data
+const generateStatusData = (_option: DateRangeOption, _type: 'AI' | 'HUMAN') => {
+  return []; // No mock data - show empty state
 };
 
-// Generate queue distribution data based on date range
-const generateQueueData = (option: DateRangeOption, type: 'AI' | 'HUMAN') => {
-  const multiplier = type === 'AI' ? 1.3 : 1;
-  switch (option) {
-    case 'today':
-      return [
-        { name: 'Sales', count: Math.round(45 * multiplier), color: '#3B82F6' },
-        { name: 'Support', count: Math.round(32 * multiplier), color: '#10B981' },
-        { name: 'Admissions', count: Math.round(28 * multiplier), color: '#F59E0B' },
-      ];
-    case 'yesterday':
-      return [
-        { name: 'Sales', count: Math.round(68 * multiplier), color: '#3B82F6' },
-        { name: 'Support', count: Math.round(52 * multiplier), color: '#10B981' },
-        { name: 'Admissions', count: Math.round(45 * multiplier), color: '#F59E0B' },
-      ];
-    case 'last7days':
-      return [
-        { name: 'Sales', count: Math.round(385 * multiplier), color: '#3B82F6' },
-        { name: 'Support', count: Math.round(295 * multiplier), color: '#10B981' },
-        { name: 'Admissions', count: Math.round(255 * multiplier), color: '#F59E0B' },
-      ];
-    case 'last30days':
-      return [
-        { name: 'Sales', count: Math.round(1520 * multiplier), color: '#3B82F6' },
-        { name: 'Support', count: Math.round(1180 * multiplier), color: '#10B981' },
-        { name: 'Admissions', count: Math.round(930 * multiplier), color: '#F59E0B' },
-      ];
-    case 'custom':
-      return [
-        { name: 'Sales', count: Math.round(280 * multiplier), color: '#3B82F6' },
-        { name: 'Support', count: Math.round(215 * multiplier), color: '#10B981' },
-        { name: 'Admissions', count: Math.round(195 * multiplier), color: '#F59E0B' },
-      ];
-    default:
-      return [];
-  }
+// Return empty queue data - no mock data
+const generateQueueData = (_option: DateRangeOption, _type: 'AI' | 'HUMAN') => {
+  return []; // No mock data - show empty state
 };
 
 // Interfaces imported from call-monitoring.service.ts
 
-// Mock data
-const mockCalls: ActiveCall[] = [
-  { id: '1', agentName: 'AI Agent - Sales', callerNumber: '+91 98765 43210', callerName: 'Rahul Kumar', queueName: 'Sales', startTime: new Date(Date.now() - 180000).toISOString(), duration: 180, status: 'IN_PROGRESS', type: 'AI', isMonitored: false },
-  { id: '2', agentName: 'AI Agent - Support', callerNumber: '+91 87654 32109', callerName: 'Sneha Reddy', queueName: 'Support', startTime: new Date(Date.now() - 95000).toISOString(), duration: 95, status: 'IN_PROGRESS', type: 'AI', isMonitored: false },
-  { id: '3', agentName: 'AI Agent - Admissions', callerNumber: '+91 76543 21098', callerName: null, queueName: 'Admissions', startTime: new Date(Date.now() - 45000).toISOString(), duration: 45, status: 'RINGING', type: 'AI', isMonitored: false },
-  { id: '4', agentName: 'AI Agent - Sales', callerNumber: '+91 65432 10987', callerName: 'Anita Desai', queueName: 'Sales', startTime: new Date(Date.now() - 320000).toISOString(), duration: 320, status: 'IN_PROGRESS', type: 'AI', isMonitored: true },
-  { id: '5', agentName: 'AI Agent - Support', callerNumber: '+91 54321 09876', callerName: 'Manish Verma', queueName: 'Support', startTime: new Date(Date.now() - 60000).toISOString(), duration: 60, status: 'ON_HOLD', type: 'AI', isMonitored: false },
-  { id: '6', agentName: 'Priya Sharma', callerNumber: '+91 43210 98765', callerName: 'Pooja Mehta', queueName: 'Sales', startTime: new Date(Date.now() - 150000).toISOString(), duration: 150, status: 'IN_PROGRESS', type: 'HUMAN', isMonitored: false },
-  { id: '7', agentName: 'Amit Patel', callerNumber: '+91 32109 87654', callerName: 'Arun Nair', queueName: 'Admissions', startTime: new Date(Date.now() - 25000).toISOString(), duration: 25, status: 'RINGING', type: 'HUMAN', isMonitored: false },
-  { id: '8', agentName: 'Neha Gupta', callerNumber: '+91 21098 76543', callerName: 'Lakshmi Iyer', queueName: 'Support', startTime: new Date(Date.now() - 480000).toISOString(), duration: 480, status: 'IN_PROGRESS', type: 'HUMAN', isMonitored: false },
-  { id: '9', agentName: 'Vikram Singh', callerNumber: '+91 10987 65432', callerName: 'Vijay Pillai', queueName: 'Sales', startTime: new Date(Date.now() - 200000).toISOString(), duration: 200, status: 'IN_PROGRESS', type: 'HUMAN', isMonitored: false },
-  { id: '10', agentName: 'Kavita Joshi', callerNumber: '+91 09876 54321', callerName: null, queueName: 'Admissions', startTime: new Date(Date.now() - 15000).toISOString(), duration: 15, status: 'ON_HOLD', type: 'HUMAN', isMonitored: false },
-];
-
-const mockAgents: AgentStatus[] = [
-  { userId: 'ai1', name: 'AI Agent - Sales', status: 'ON_CALL', type: 'AI', callsToday: 145, avgHandleTime: 120 },
-  { userId: 'ai2', name: 'AI Agent - Support', status: 'ON_CALL', type: 'AI', callsToday: 98, avgHandleTime: 90 },
-  { userId: 'ai3', name: 'AI Agent - Admissions', status: 'AVAILABLE', type: 'AI', callsToday: 76, avgHandleTime: 150 },
-  { userId: 'h1', name: 'Priya Sharma', status: 'ON_CALL', type: 'HUMAN', callsToday: 24, avgHandleTime: 185 },
-  { userId: 'h2', name: 'Amit Patel', status: 'ON_CALL', type: 'HUMAN', callsToday: 18, avgHandleTime: 210 },
-  { userId: 'h3', name: 'Neha Gupta', status: 'ON_CALL', type: 'HUMAN', callsToday: 22, avgHandleTime: 165 },
-  { userId: 'h4', name: 'Vikram Singh', status: 'ON_CALL', type: 'HUMAN', callsToday: 15, avgHandleTime: 240 },
-  { userId: 'h5', name: 'Kavita Joshi', status: 'ON_CALL', type: 'HUMAN', callsToday: 20, avgHandleTime: 195 },
-  { userId: 'h6', name: 'Meera Krishnan', status: 'AVAILABLE', type: 'HUMAN', callsToday: 19, avgHandleTime: 175 },
-  { userId: 'h7', name: 'Sanjay Kapoor', status: 'AVAILABLE', type: 'HUMAN', callsToday: 16, avgHandleTime: 200 },
-  { userId: 'h8', name: 'Divya Menon', status: 'WRAP_UP', type: 'HUMAN', callsToday: 21, avgHandleTime: 180 },
-  { userId: 'h9', name: 'Arjun Bhat', status: 'AWAY', type: 'HUMAN', callsToday: 14, avgHandleTime: 190 },
-];
+// Empty initial data - will be populated from API
+const initialCalls: ActiveCall[] = [];
+const initialAgents: AgentStatus[] = [];
 
 
 
 export const CallMonitoringPage: React.FC = () => {
-  const [activeCalls, setActiveCalls] = useState<ActiveCall[]>(mockCalls);
-  const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(mockAgents);
+  const [activeCalls, setActiveCalls] = useState<ActiveCall[]>(initialCalls);
+  const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgents);
   const [analytics, setAnalytics] = useState<CallAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'AI' | 'HUMAN'>('AI');
@@ -469,14 +320,13 @@ export const CallMonitoringPage: React.FC = () => {
         setAnalytics(analyticsData);
       }
 
-      // Only update calls if we got valid data with actual calls from API
-      // Keep mock data if API returns empty
-      if (calls && Array.isArray(calls) && calls.length > 0) {
+      // Update calls from API (show empty if no data)
+      if (calls && Array.isArray(calls)) {
         setActiveCalls(calls);
       }
 
-      // Only update agents if we got valid data from API
-      if (agents && Array.isArray(agents) && agents.length > 0) {
+      // Update agents from API (show empty if no data)
+      if (agents && Array.isArray(agents)) {
         setAgentStatuses(agents);
       }
     } catch (error) {
@@ -587,8 +437,7 @@ export const CallMonitoringPage: React.FC = () => {
       const endDate = new Date(dateToISO);
       callMonitoringService.getCallsByDateRange('AI', startDate, endDate)
         .then((calls) => {
-          // Only update if we have actual data, don't clear with empty array
-          if (calls && calls.length > 0) {
+          if (calls && Array.isArray(calls)) {
             setActiveCalls(calls);
           }
         }).catch(() => {});

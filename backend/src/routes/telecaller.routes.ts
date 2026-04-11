@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import { telecallerCallFinalizationService } from '../services/telecaller-call-finalization.service';
 import { calendarService } from '../services/calendar.service';
+import { workSessionService } from '../services/work-session.service';
 
 const router = Router();
 
@@ -1185,6 +1186,16 @@ router.put('/calls/:id', async (req: TenantRequest, res: Response) => {
       });
     }
 
+    // Track active time in work session (for user activity reports)
+    if (duration && duration > 0) {
+      try {
+        await workSessionService.addActiveTime(userId, req.organization!.id, duration);
+      } catch (err) {
+        console.error('Failed to track active time:', err);
+        // Don't fail the call update if session tracking fails
+      }
+    }
+
     ApiResponse.success(res, 'Call updated', call);
   } catch (error) {
     ApiResponse.error(res, (error as Error).message, 500);
@@ -1585,6 +1596,65 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
       }),
     ]);
 
+    // Count leads that need follow-up (in early/active stages, not completed stages)
+    // EXCLUDE leads that already have a pending FollowUp record to avoid double counting
+    const completedStages = ['Admitted', 'ADMITTED', 'Enrolled', 'ENROLLED', 'Won', 'WON', 'Dropped', 'DROPPED', 'Lost', 'LOST', 'Closed', 'CLOSED'];
+    const leadsNeedingFollowUp = await prisma.lead.count({
+      where: {
+        organizationId,
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
+        // Exclude leads that already have pending follow-ups (to avoid double counting)
+        followUps: { none: { status: 'UPCOMING', assigneeId: { in: targetUserIds } } },
+        OR: [
+          // Leads with nextFollowUpAt set for today or past
+          { nextFollowUpAt: { lte: todayEnd } },
+          // Leads in active stages (not completed) - these need follow-up
+          { stage: { name: { notIn: completedStages } } }
+        ]
+      },
+    });
+
+    // Total pending follow-ups = FollowUp table records + leads in active stages without scheduled follow-ups
+    const totalPendingFollowUps = pendingFollowUps + leadsNeedingFollowUp;
+
+    // Get follow-up details for display (scheduled follow-ups + leads needing attention)
+    const pendingFollowUpDetails = await prisma.followUp.findMany({
+      where: {
+        assigneeId: { in: targetUserIds },
+        status: 'UPCOMING',
+      },
+      select: {
+        id: true,
+        scheduledAt: true,
+        notes: true,
+        lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: 10,
+    });
+
+    // Also get leads in active stages without scheduled follow-ups
+    const leadsNeedingAttention = await prisma.lead.findMany({
+      where: {
+        organizationId,
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
+        followUps: { none: { status: 'UPCOMING', assigneeId: { in: targetUserIds } } },
+        OR: [
+          { nextFollowUpAt: { lte: todayEnd } },
+          { stage: { name: { notIn: completedStages } } }
+        ]
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        nextFollowUpAt: true,
+        stage: { select: { name: true } },
+      },
+      take: 10,
+    });
+
     // 4. Get call outcomes distribution
     const callOutcomes = await prisma.telecallerCall.groupBy({
       by: ['outcome'],
@@ -1597,20 +1667,29 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
       if (o.outcome) outcomes[o.outcome] = o._count.outcome;
     });
 
-    // 5. Get conversion stats (leads moved from New to other stages)
-    const convertedLeads = await prisma.lead.count({
-      where: {
-        organizationId,
-        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
-        stage: { name: { notIn: ['New', 'NEW', 'new'] } },
-      },
-    });
-
+    // 5. Get conversion stats
+    // Won = leads in completed/success stages (Admitted, Enrolled, Won)
     const wonLeads = await prisma.lead.count({
       where: {
         organizationId,
         assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
-        stage: { name: { in: ['Won', 'WON', 'Enrolled', 'ENROLLED'] } },
+        OR: [
+          { stage: { name: { in: ['Won', 'WON', 'Enrolled', 'ENROLLED', 'Admitted', 'ADMITTED'] } } },
+          { isConverted: true }, // Also count leads marked as converted
+        ],
+      },
+    });
+
+    // Converted = leads that progressed beyond initial stages (not New/Inquiry)
+    const initialStages = ['New', 'NEW', 'new', 'Inquiry', 'INQUIRY', 'inquiry'];
+    const convertedLeads = await prisma.lead.count({
+      where: {
+        organizationId,
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
+        OR: [
+          { stage: { name: { notIn: initialStages } } },
+          { isConverted: true },
+        ],
       },
     });
 
@@ -1646,12 +1725,35 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
       today: {
         calls: todayCalls,
         followUpsCompleted: todayFollowUpsCompleted,
-        pendingFollowUps,
+        pendingFollowUps: totalPendingFollowUps, // Includes FollowUp table + leads needing attention
         target: {
           calls: dailyCallTarget || 1, // From assigned leads + raw records + queue
           followUps: dailyFollowUpTarget || 0, // From today's scheduled follow-ups
         },
       },
+      // Pending follow-up details for display
+      pendingFollowUpsList: [
+        // Scheduled follow-ups from FollowUp table
+        ...pendingFollowUpDetails.map(f => ({
+          id: f.id,
+          leadId: f.lead.id,
+          leadName: `${f.lead.firstName} ${f.lead.lastName || ''}`.trim(),
+          phone: f.lead.phone,
+          scheduledAt: f.scheduledAt,
+          notes: f.notes,
+          type: 'scheduled' as const,
+        })),
+        // Leads needing attention (no scheduled follow-up)
+        ...leadsNeedingAttention.map(l => ({
+          id: l.id,
+          leadId: l.id,
+          leadName: `${l.firstName} ${l.lastName || ''}`.trim(),
+          phone: l.phone,
+          scheduledAt: l.nextFollowUpAt,
+          notes: l.stage?.name ? `Stage: ${l.stage.name}` : null,
+          type: 'needs_attention' as const,
+        })),
+      ],
       // Assigned data breakdown (for transparency)
       assignedData: {
         leads: assignedLeadsCount,
@@ -1738,7 +1840,18 @@ router.get('/team-dashboard-stats', async (req: TenantRequest, res: Response) =>
         const totalAssigned = assignedCounts.reduce((sum, c) => sum + c._count, 0);
         const pending = assignedCounts.find(c => c.status === 'ASSIGNED' || c.status === 'PENDING')?._count || 0;
         const interested = assignedCounts.find(c => c.status === 'INTERESTED')?._count || 0;
-        const converted = assignedCounts.find(c => c.status === 'CONVERTED')?._count || 0;
+
+        // Count actual conversions: leads with isConverted=true OR in success stages
+        const converted = await prisma.lead.count({
+          where: {
+            organizationId,
+            assignments: { some: { assignedToId: member.id, isActive: true } },
+            OR: [
+              { isConverted: true },
+              { stage: { name: { in: ['Admitted', 'ADMITTED', 'Enrolled', 'ENROLLED', 'Won', 'WON'] } } },
+            ],
+          },
+        });
 
         // Count calls today
         const callsToday = await prisma.telecallerCall.count({
@@ -1749,7 +1862,14 @@ router.get('/team-dashboard-stats', async (req: TenantRequest, res: Response) =>
           },
         });
 
-        const conversionRate = totalAssigned > 0 ? Math.round((converted / totalAssigned) * 100 * 10) / 10 : 0;
+        // Calculate conversion rate based on total leads assigned
+        const totalLeads = await prisma.lead.count({
+          where: {
+            organizationId,
+            assignments: { some: { assignedToId: member.id, isActive: true } },
+          },
+        });
+        const conversionRate = totalLeads > 0 ? Math.round((converted / totalLeads) * 100 * 10) / 10 : 0;
 
         return {
           id: member.id,

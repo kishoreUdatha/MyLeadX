@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
 import {
   AcademicCapIcon,
   MagnifyingGlassIcon,
@@ -12,6 +14,10 @@ import {
 } from '@heroicons/react/24/outline';
 import { admissionService, Admission, AdmissionType, RecordPaymentInput } from '../../services/admission.service';
 import { universityService, University } from '../../services/university.service';
+import { RootState } from '../../store';
+
+// Roles that can see commission and payment details (normalized - no underscores)
+const ADMIN_ROLES = ['superadmin', 'admin', 'manager'];
 
 const ADMISSION_TYPE_LABELS: Record<AdmissionType, string> = {
   DONATION: 'Donation',
@@ -34,6 +40,13 @@ const PAYMENT_STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdmissionsPage() {
+  const { user } = useSelector((state: RootState) => state.auth);
+  // Role can be a string or object with slug - handle both cases
+  const rawRole = typeof user?.role === 'string' ? user.role : (user?.role as any)?.slug || '';
+  const userRole = rawRole.toLowerCase().trim().replace(/[_-]/g, '');
+  // Admin roles that can see payment and commission details
+  const canSeePaymentDetails = ADMIN_ROLES.includes(userRole);
+
   const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [universities, setUniversities] = useState<University[]>([]);
   const [academicYears, setAcademicYears] = useState<string[]>([]);
@@ -127,12 +140,12 @@ export default function AdmissionsPage() {
   };
 
   const handleMarkCommissionReceived = async (admission: Admission) => {
-    if (!confirm('Mark commission as received?')) return;
     try {
       await admissionService.markCommissionReceived(admission.id);
+      toast.success('Commission marked as received');
       loadAdmissions();
     } catch (err: any) {
-      setError(err.message || 'Failed to update commission status');
+      toast.error(err.message || 'Failed to update commission status');
     }
   };
 
@@ -241,9 +254,13 @@ export default function AdmissionsPage() {
                 <th className="px-4 py-3 text-left font-medium text-slate-600">University</th>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">Type</th>
                 <th className="px-4 py-3 text-right font-medium text-slate-600">Total Fee</th>
+                {canSeePaymentDetails && (
                 <th className="px-4 py-3 text-right font-medium text-slate-600">Paid / Pending</th>
+                )}
                 <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
+                {canSeePaymentDetails && (
                 <th className="px-4 py-3 text-right font-medium text-slate-600">Commission</th>
+                )}
                 <th className="px-4 py-3 text-right font-medium text-slate-600">Actions</th>
               </tr>
             </thead>
@@ -273,15 +290,18 @@ export default function AdmissionsPage() {
                       <p className="text-xs text-slate-500">+{formatCurrency(admission.donationAmount)} donation</p>
                     )}
                   </td>
+                  {canSeePaymentDetails && (
                   <td className="px-4 py-3 text-right">
                     <p className="text-green-600 font-medium">{formatCurrency(admission.paidAmount)}</p>
                     <p className="text-xs text-red-600">{formatCurrency(admission.pendingAmount)} pending</p>
                   </td>
+                  )}
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${PAYMENT_STATUS_COLORS[admission.paymentStatus]}`}>
                       {admission.paymentStatus}
                     </span>
                   </td>
+                  {canSeePaymentDetails && (
                   <td className="px-4 py-3 text-right">
                     <p className="font-medium text-slate-900">{formatCurrency(admission.commissionAmount)}</p>
                     <span className={`inline-flex items-center gap-1 text-xs ${admission.commissionStatus === 'RECEIVED' ? 'text-green-600' : 'text-yellow-600'}`}>
@@ -289,6 +309,7 @@ export default function AdmissionsPage() {
                       {admission.commissionStatus}
                     </span>
                   </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -298,7 +319,7 @@ export default function AdmissionsPage() {
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>
-                      {admission.paymentStatus !== 'PAID' && (
+                      {canSeePaymentDetails && admission.paymentStatus !== 'PAID' && (
                         <button
                           onClick={() => {
                             setPaymentData({ amount: admission.pendingAmount, paymentType: 'FEE', paymentMode: 'ONLINE', referenceNumber: '', notes: '' });
@@ -310,7 +331,7 @@ export default function AdmissionsPage() {
                           <BanknotesIcon className="w-4 h-4" />
                         </button>
                       )}
-                      {admission.commissionStatus === 'PENDING' && (
+                      {canSeePaymentDetails && admission.commissionStatus === 'PENDING' && (
                         <button
                           onClick={() => handleMarkCommissionReceived(admission)}
                           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded"
@@ -526,7 +547,8 @@ export default function AdmissionsPage() {
                 </div>
               </div>
 
-              {/* Financial Info */}
+              {/* Financial Info - Only visible to admin/manager */}
+              {canSeePaymentDetails && (
               <div>
                 <h4 className="text-sm font-semibold text-slate-800 mb-3">Financial Summary</h4>
                 <div className="bg-slate-50 rounded-lg p-4 grid grid-cols-3 gap-4 text-sm">
@@ -558,9 +580,10 @@ export default function AdmissionsPage() {
                   </div>
                 </div>
               </div>
+              )}
 
-              {/* Payment History */}
-              {showDetailModal.payments && showDetailModal.payments.length > 0 && (
+              {/* Payment History - Only visible to admin/manager */}
+              {canSeePaymentDetails && showDetailModal.payments && showDetailModal.payments.length > 0 && (
                 <div>
                   <h4 className="text-sm font-semibold text-slate-800 mb-3">Payment History</h4>
                   <div className="border border-slate-200 rounded-lg overflow-hidden">

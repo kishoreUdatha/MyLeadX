@@ -4,8 +4,11 @@
  */
 
 export const formatDate = (date: string | Date | null | undefined): string => {
-  if (!date) return '--';
-  return new Date(date).toLocaleDateString('en-US', {
+  if (!date || date === '--' || date === '') return '--';
+  const dateObj = new Date(date);
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) return '--';
+  return dateObj.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -13,8 +16,11 @@ export const formatDate = (date: string | Date | null | undefined): string => {
 };
 
 export const formatDateTime = (date: string | Date | null | undefined): string => {
-  if (!date) return '--';
-  return new Date(date).toLocaleString('en-US', {
+  if (!date || date === '--' || date === '') return '--';
+  const dateObj = new Date(date);
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) return '--';
+  return dateObj.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

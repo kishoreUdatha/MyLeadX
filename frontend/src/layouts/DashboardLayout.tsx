@@ -1,11 +1,13 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { AppDispatch, RootState } from '../store';
 import { logout } from '../store/slices/authSlice';
+import { usePermission } from '../hooks/usePermission';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import VoiceMinutesIndicator from '../components/VoiceMinutesIndicator';
+import { workSessionService, WorkSession, TeamWorkStatus } from '../services/work-session.service';
 import FloatingChatButton from '../components/FloatingChatButton';
 import {
   HomeIcon,
@@ -52,13 +54,20 @@ import {
   InboxIcon,
   ClockIcon,
   AtSymbolIcon,
+  CalendarIcon,
+  ArrowsUpDownIcon,
+  FlagIcon,
+  TagIcon,
+  PauseCircleIcon,
+  PlayCircleIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles: string[]; // Which roles can see this item
+  roles: string[]; // Which roles can see this item (legacy)
+  permission?: string; // Required permission to see this item
 }
 
 // WhatsApp Icon component
@@ -69,103 +78,241 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 );
 
 // ===========================================
-// NAVIGATION - Industry-Aware & Simplified
+// NAVIGATION - Dynamic Industry-Specific Menus
 // ===========================================
 
 // Industry types
-type Industry = 'education' | 'real_estate' | 'healthcare' | 'insurance' | 'finance' | 'recruitment' | 'ecommerce' | 'b2b_sales' | 'generic' | string;
+type Industry = 'EDUCATION' | 'REAL_ESTATE' | 'HEALTHCARE' | 'INSURANCE' | 'FINANCE' | 'RECRUITMENT' | 'ECOMMERCE' | 'AUTOMOTIVE' | 'IT_SERVICES' | 'GENERIC' | string;
 
-// Define which sections are relevant for each industry
-const industrySections: Record<Industry, string[]> = {
-  education: ['main', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'admissions', 'settings'],
-  real_estate: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'settings'],
-  healthcare: ['main', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'settings'],
-  insurance: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'settings'],
-  finance: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'settings'],
-  recruitment: ['main', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'settings'],
-  ecommerce: ['main', 'sales', 'communication', 'data', 'analytics', 'team', 'settings'],
-  b2b_sales: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'fieldSales', 'integrations', 'settings'],
-  generic: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'settings'],
+// Industry-specific labels for dynamic terminology
+const industryLabels: Record<string, { lead: string; leads: string; deal: string; pipeline: string; team: string }> = {
+  EDUCATION: { lead: 'Student', leads: 'Students', deal: 'Admission', pipeline: 'Admission Pipeline', team: 'Counselors' },
+  REAL_ESTATE: { lead: 'Buyer', leads: 'Buyers', deal: 'Booking', pipeline: 'Sales Pipeline', team: 'Agents' },
+  HEALTHCARE: { lead: 'Patient', leads: 'Patients', deal: 'Appointment', pipeline: 'Patient Pipeline', team: 'Staff' },
+  INSURANCE: { lead: 'Prospect', leads: 'Prospects', deal: 'Policy', pipeline: 'Policy Pipeline', team: 'Advisors' },
+  AUTOMOTIVE: { lead: 'Buyer', leads: 'Buyers', deal: 'Sale', pipeline: 'Sales Pipeline', team: 'Sales Team' },
+  IT_SERVICES: { lead: 'Client', leads: 'Clients', deal: 'Project', pipeline: 'Project Pipeline', team: 'Team' },
+  RECRUITMENT: { lead: 'Candidate', leads: 'Candidates', deal: 'Placement', pipeline: 'Hiring Pipeline', team: 'Recruiters' },
+  FINANCE: { lead: 'Client', leads: 'Clients', deal: 'Account', pipeline: 'Client Pipeline', team: 'Advisors' },
+  ECOMMERCE: { lead: 'Customer', leads: 'Customers', deal: 'Order', pipeline: 'Order Pipeline', team: 'Support' },
+  GENERIC: { lead: 'Lead', leads: 'Leads', deal: 'Deal', pipeline: 'Pipeline', team: 'Team' },
 };
 
-// 1. MAIN - Core daily workflow (always visible)
-const mainNavigation: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor', 'telecaller'] },
-  { name: 'Platform Admin', href: '/super-admin/dashboard', icon: ShieldCheckIcon, roles: ['super_admin'] }, // Super Admin only - manage all tenants
-  { name: 'My Tasks', href: '/assigned-data', icon: ClipboardDocumentCheckIcon, roles: ['telecaller', 'counselor'] },
-  { name: 'Leads', href: '/leads', icon: UserGroupIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor', 'telecaller'] },
+// Define which sections are relevant for each industry
+const industrySections: Record<string, string[]> = {
+  EDUCATION: ['main', 'education', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  REAL_ESTATE: ['main', 'realestate', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  HEALTHCARE: ['main', 'healthcare', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  INSURANCE: ['main', 'insurance', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  AUTOMOTIVE: ['main', 'automotive', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  IT_SERVICES: ['main', 'itservices', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  RECRUITMENT: ['main', 'recruitment', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  FINANCE: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  ECOMMERCE: ['main', 'sales', 'communication', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  GENERIC: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+};
+
+// Helper to get label based on industry
+const getLabel = (industry: string, key: keyof typeof industryLabels.GENERIC) => {
+  const labels = industryLabels[industry?.toUpperCase()] || industryLabels.GENERIC;
+  return labels[key];
+};
+
+// ============================================
+// 1. MAIN - Core workflow (dynamic labels)
+// ============================================
+const getMainNavigation = (industry: string): NavItem[] => [
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor', 'telecaller'] }, // No permission needed - all authenticated users
+  { name: 'Platform Admin', href: '/super-admin/dashboard', icon: ShieldCheckIcon, roles: ['super_admin'], permission: 'super_admin' },
+  { name: 'My Tasks', href: '/assigned-data', icon: ClipboardDocumentCheckIcon, roles: ['telecaller', 'counselor'], permission: 'tasks_view' },
+  { name: getLabel(industry, 'leads'), href: '/leads', icon: UserGroupIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor', 'telecaller'], permission: 'leads_view' },
+  { name: getLabel(industry, 'pipeline'), href: '/pipeline', icon: FunnelIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
 ];
 
-// 2. SALES - Pipeline & Revenue (Real Estate, Insurance, Finance, B2B, Ecommerce)
+// ============================================
+// EDUCATION - Admissions & Academic
+// ============================================
+const educationNavigation: NavItem[] = [
+  { name: 'Universities', href: '/universities', icon: BuildingOffice2Icon, roles: ['super_admin', 'admin', 'manager'], permission: 'settings_view' },
+  { name: 'Courses', href: '/courses', icon: AcademicCapIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'settings_view' },
+  { name: 'Applications', href: '/admissions', icon: ClipboardDocumentCheckIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor'], permission: 'admissions_view' },
+  { name: 'Campus Visits', href: '/student-visits', icon: MapPinIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor'], permission: 'admissions_view' },
+  { name: 'Fee Collection', href: '/fees', icon: BanknotesIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
+  { name: 'Scholarships', href: '/scholarships', icon: AcademicCapIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
+  { name: 'Commission', href: '/commissions', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor', 'telecaller'] },
+];
+
+// ============================================
+// REAL ESTATE - Properties & Bookings
+// ============================================
+const realEstateNavigation: NavItem[] = [
+  { name: 'Properties', href: '/properties', icon: BuildingOffice2Icon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'settings_view' },
+  { name: 'Site Visits', href: '/site-visits', icon: MapPinIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'field_sales'], permission: 'leads_view' },
+  { name: 'Bookings', href: '/bookings', icon: ClipboardDocumentCheckIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+  { name: 'Inventory', href: '/inventory', icon: QueueListIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'settings_view' },
+  { name: 'Brokerage', href: '/brokerage', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
+];
+
+// ============================================
+// HEALTHCARE - Patients & Appointments
+// ============================================
+const healthcareNavigation: NavItem[] = [
+  { name: 'Appointments', href: '/appointments', icon: CalendarIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Consultations', href: '/consultations', icon: ChatBubbleLeftRightIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+  { name: 'Follow-up Care', href: '/patient-followups', icon: ArrowPathRoundedSquareIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'followups_view' },
+  { name: 'Billing', href: '/patient-billing', icon: CreditCardIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
+];
+
+// ============================================
+// INSURANCE - Policies & Claims
+// ============================================
+const insuranceNavigation: NavItem[] = [
+  { name: 'Policies', href: '/policies', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Quotations', href: '/quotations', icon: ReceiptPercentIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Claims', href: '/claims', icon: ClipboardDocumentCheckIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+  { name: 'Renewals', href: '/renewals', icon: ArrowPathRoundedSquareIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'followups_view' },
+  { name: 'Commission', href: '/commissions', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor', 'telecaller'] },
+];
+
+// ============================================
+// AUTOMOTIVE - Vehicles & Test Drives
+// ============================================
+const automotiveNavigation: NavItem[] = [
+  { name: 'Vehicles', href: '/vehicles', icon: BriefcaseIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'settings_view' },
+  { name: 'Test Drives', href: '/test-drives', icon: MapPinIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Quotations', href: '/quotations', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Bookings', href: '/vehicle-bookings', icon: ClipboardDocumentCheckIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+  { name: 'Exchange', href: '/exchange', icon: ArrowsRightLeftIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+];
+
+// ============================================
+// IT SERVICES - Projects & Clients
+// ============================================
+const itServicesNavigation: NavItem[] = [
+  { name: 'Projects', href: '/projects', icon: BriefcaseIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Proposals', href: '/proposals', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Contracts', href: '/contracts', icon: ClipboardDocumentCheckIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+  { name: 'Invoicing', href: '/invoicing', icon: ReceiptPercentIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
+  { name: 'Support Tickets', href: '/tickets', icon: ChatBubbleLeftRightIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+];
+
+// ============================================
+// RECRUITMENT - Candidates & Placements
+// ============================================
+const recruitmentNavigation: NavItem[] = [
+  { name: 'Job Openings', href: '/jobs', icon: BriefcaseIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'settings_view' },
+  { name: 'Applications', href: '/applications', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Interviews', href: '/interviews', icon: CalendarIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Placements', href: '/placements', icon: ClipboardDocumentCheckIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+  { name: 'Clients', href: '/hiring-clients', icon: BuildingOffice2Icon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_view' },
+];
+
+// ============================================
+// GENERIC SALES - Default for other industries
+// ============================================
 const salesNavigation: NavItem[] = [
-  { name: 'Pipeline', href: '/pipeline', icon: FunnelIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'Quotations', href: '/quotations', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'Payments', href: '/payments', icon: CreditCardIcon, roles: ['super_admin', 'admin', 'manager'] },
+  { name: 'Quotations', href: '/quotations', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_view' },
+  { name: 'Payments', href: '/payments', icon: CreditCardIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
+  { name: 'Invoices', href: '/invoices', icon: ReceiptPercentIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
 ];
 
-// 3. OUTREACH - Communication (All industries)
+// ============================================
+// COMMON SECTIONS (All Industries)
+// ============================================
+
+// Communication - Outreach & Messaging
 const communicationNavigation: NavItem[] = [
-  { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'WhatsApp Bulk', href: '/whatsapp/bulk', icon: WhatsAppIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager'] },
+  { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'campaigns_view' },
+  { name: 'WhatsApp', href: '/whatsapp/bulk', icon: WhatsAppIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'whatsapp_view' },
+  { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'settings_view' },
+  { name: 'Follow-ups', href: '/reports/followup', icon: ArrowPathRoundedSquareIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'], permission: 'followups_view' },
 ];
 
-// 4. CALLING - Voice & Calls (All industries except Ecommerce)
+// Calling - Voice & AI Calls
 const voiceAINavigation: NavItem[] = [
-  { name: 'AI Agents', href: '/voice-ai', icon: SparklesIcon, roles: ['super_admin', 'admin', 'manager'] },
-  { name: 'Outbound Calls', href: '/outbound-calls', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'] },
-  { name: 'Call Queue', href: '/telecaller-queue', icon: QueueListIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'] },
+  { name: 'Call Center', href: '/outbound-calls', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'], permission: 'calls_view' },
+  { name: 'AI Voice Agents', href: '/voice-ai', icon: SparklesIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'voice_ai_view' },
+  { name: 'Call Queue', href: '/telecaller-queue', icon: QueueListIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'], permission: 'calls_view' },
+  { name: 'Call Monitoring', href: '/call-monitoring', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'calls_view' },
 ];
 
-// 5. DATA - Import & Management (All industries)
+// Data - Import & Management
 const dataNavigation: NavItem[] = [
-  { name: 'Import', href: '/raw-imports', icon: DocumentArrowUpIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'Distribution', href: '/assignments', icon: ShareIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
+  { name: 'Import Data', href: '/raw-imports', icon: DocumentArrowUpIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_import' },
+  { name: 'Distribution', href: '/assignments', icon: ShareIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'leads_assign' },
+  { name: 'Export Data', href: '/export', icon: ArrowDownTrayIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'leads_export' },
 ];
 
-// 6. REPORTS - Analytics (All industries)
-const analyticsNavigation: NavItem[] = [
-  { name: 'Dashboard', href: '/analytics', icon: PresentationChartLineIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'Performance', href: '/analytics/agents', icon: TrophyIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
+// Reports - Analytics & Insights
+const getAnalyticsNavigation = (industry: string): NavItem[] => [
+  { name: 'Analytics', href: '/analytics', icon: PresentationChartLineIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'reports_view' },
+  { name: 'Reports', href: '/reports', icon: ChartBarIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'reports_view' },
+  { name: `${getLabel(industry, 'team')} Performance`, href: '/reports/user-performance', icon: TrophyIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'reports_view' },
+  { name: 'Revenue', href: '/reports/payments', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'reports_view' },
+  { name: 'Audit Logs', href: '/reports/audit', icon: EyeIcon, roles: ['super_admin', 'admin'], permission: 'reports_view' },
 ];
 
-// 7. TEAM - Users & Hierarchy Management (All industries)
-const teamNavigation: NavItem[] = [
-  { name: 'Users', href: '/users', icon: UsersIcon, roles: ['super_admin', 'admin'] },
-  { name: 'Roles', href: '/roles', icon: ShieldCheckIcon, roles: ['super_admin', 'admin'] },
-  { name: 'My Team', href: '/team-management', icon: UserGroupIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'Leaderboard', href: '/performance', icon: TrophyIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'] },
+// Team - Users & Management
+const getTeamNavigation = (industry: string): NavItem[] => [
+  { name: `All ${getLabel(industry, 'team')}`, href: '/users', icon: UsersIcon, roles: ['super_admin', 'admin'], permission: 'users_view' },
+  { name: 'Roles & Access', href: '/roles', icon: ShieldCheckIcon, roles: ['super_admin', 'admin'], permission: 'roles_view' },
+  { name: 'My Team', href: '/team-management', icon: UserGroupIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'users_view' },
+  { name: 'Leaderboard', href: '/performance', icon: TrophyIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'], permission: 'reports_view' },
 ];
 
-// 8. INTEGRATIONS - External connections (B2B only, Super Admin sees all)
+// Integrations - External Connections
 const integrationsNavigation: NavItem[] = [
-  { name: 'Ad Platforms', href: '/ad-integrations', icon: MegaphoneIcon, roles: ['super_admin', 'admin', 'manager'] },
-  { name: 'Lead Portals', href: '/integrations/indian-sources', icon: ArrowDownTrayIcon, roles: ['super_admin', 'admin', 'manager'] },
-  { name: 'WhatsApp Setup', href: '/settings/whatsapp', icon: WhatsAppIcon, roles: ['super_admin', 'admin'] },
+  { name: 'Facebook/Google Ads', href: '/ad-integrations', icon: MegaphoneIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'integrations_view' },
+  { name: 'Lead Sources', href: '/integrations/indian-sources', icon: ArrowDownTrayIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'integrations_view' },
+  { name: 'WhatsApp API', href: '/settings/whatsapp', icon: WhatsAppIcon, roles: ['super_admin', 'admin'], permission: 'integrations_view' },
+  { name: 'Webhooks', href: '/settings/webhooks', icon: ArrowsRightLeftIcon, roles: ['super_admin', 'admin'], permission: 'integrations_view' },
 ];
 
-// 9. SETTINGS - Configuration (All industries)
+// Settings - Configuration
 const settingsNavigation: NavItem[] = [
-  { name: 'Organization', href: '/settings/institution', icon: BuildingOffice2Icon, roles: ['super_admin', 'admin'] },
-  { name: 'Lead Stages', href: '/settings/lead-management', icon: QueueListIcon, roles: ['super_admin', 'admin', 'manager'] },
-  { name: 'Auto-Assignment', href: '/settings/auto-assign', icon: BoltIcon, roles: ['super_admin', 'admin', 'manager'] },
-  { name: 'Billing', href: '/subscription', icon: CreditCardIcon, roles: ['super_admin', 'admin'] },
+  { name: 'All Settings', href: '/settings', icon: Cog6ToothIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller', 'counselor'], permission: 'settings_view' },
+  { name: 'Profile', href: '/settings/profile', icon: UsersIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller', 'counselor'] }, // No permission needed - everyone can edit their profile
+  { name: 'Pipeline', href: '/settings/pipeline', icon: FunnelIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
+  { name: 'Lead Tags', href: '/settings/tags', icon: TagIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
+  { name: 'Commission', href: '/settings/commission', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
+  { name: 'Notifications', href: '/settings/notification-preferences', icon: BellIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller', 'counselor'] }, // Everyone can manage their notifications
+  { name: 'Billing', href: '/subscription', icon: CreditCardIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
 ];
 
-// INDUSTRY SPECIFIC SECTIONS (Super Admin sees all)
-// Field Sales (B2B only)
-const fieldSalesNavigation: NavItem[] = [
-  { name: 'Dashboard', href: '/field-sales', icon: BriefcaseIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'field_sales'] },
-  { name: 'Visits', href: '/field-sales/visits', icon: MapPinIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'field_sales'] },
-  { name: 'Expenses', href: '/field-sales/expenses', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'field_sales'] },
-];
+// Get industry-specific navigation based on industry type
+const getIndustryNavigation = (industry: string): NavItem[] => {
+  switch (industry?.toUpperCase()) {
+    case 'EDUCATION': return educationNavigation;
+    case 'REAL_ESTATE': return realEstateNavigation;
+    case 'HEALTHCARE': return healthcareNavigation;
+    case 'INSURANCE': return insuranceNavigation;
+    case 'AUTOMOTIVE': return automotiveNavigation;
+    case 'IT_SERVICES': return itServicesNavigation;
+    case 'RECRUITMENT': return recruitmentNavigation;
+    default: return salesNavigation;
+  }
+};
 
-// Admissions (Education only)
-const admissionsNavigation: NavItem[] = [
-  { name: 'Universities', href: '/universities', icon: AcademicCapIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'] },
-  { name: 'Campus Visits', href: '/student-visits', icon: MapPinIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor'] },
-  { name: 'Applications', href: '/admissions', icon: AcademicCapIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor'] },
-];
+// Get industry section title
+const getIndustrySectionTitle = (industry: string): string => {
+  switch (industry?.toUpperCase()) {
+    case 'EDUCATION': return 'Admissions';
+    case 'REAL_ESTATE': return 'Properties';
+    case 'HEALTHCARE': return 'Patient Care';
+    case 'INSURANCE': return 'Policies';
+    case 'AUTOMOTIVE': return 'Showroom';
+    case 'IT_SERVICES': return 'Projects';
+    case 'RECRUITMENT': return 'Hiring';
+    default: return 'Sales';
+  }
+};
+
+// Legacy navigation arrays for backward compatibility
+const mainNavigation = getMainNavigation('GENERIC');
+const analyticsNavigation = getAnalyticsNavigation('GENERIC');
+const teamNavigation = getTeamNavigation('GENERIC');
+const fieldSalesNavigation = realEstateNavigation;
+const admissionsNavigation = educationNavigation;
 
 // Routes where top header should be hidden
 const headerHiddenRoutes = ['/voice-ai/create', '/voice-ai/create-from-template', '/voice-ai/agents', '/call-flows/builder'];
@@ -176,6 +323,12 @@ const SIDEBAR_SCROLL_KEY = 'sidebarScrollPosition';
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [workStatus, setWorkStatus] = useState<'active' | 'break' | 'offline'>('active');
+  const [currentSession, setCurrentSession] = useState<WorkSession | null>(null);
+  const [breakStartTime, setBreakStartTime] = useState<Date | null>(null);
+  const [breakDuration, setBreakDuration] = useState<number>(0);
+  const [teamStatus, setTeamStatus] = useState<TeamWorkStatus | null>(null);
+  const [showTeamStatus, setShowTeamStatus] = useState(false);
   // Collapsible sidebar state - persisted in localStorage
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebarCollapsed');
@@ -191,6 +344,18 @@ export default function DashboardLayout() {
   const location = useLocation();
   const { user } = useSelector((state: RootState) => state.auth);
   const { t } = useTranslation(['navigation', 'common']);
+
+  // Permission hook for checking user permissions
+  const { hasPermission, isAdmin: permIsAdmin, isManager: permIsManager, isTeamLead: permIsTeamLead, role } = usePermission();
+
+  // Get user's role slug (lowercase) - needed early for team status fetch
+  const rawRole = user?.role || '';
+  const userRole = rawRole.toLowerCase().trim().replace(/[_-]/g, '');
+  const isSuperAdmin = userRole === 'superadmin' || role === 'super_admin';
+  const isOrgAdmin = userRole === 'orgadmin' || userRole === 'organizationadmin' || role === 'org_admin';
+  const isAdmin = userRole === 'admin' || isSuperAdmin || isOrgAdmin || permIsAdmin;
+  const isManager = userRole === 'manager' || permIsManager;
+  const isTeamLead = userRole === 'teamlead' || userRole === 'teamleader' || permIsTeamLead;
 
   // Callback ref for sidebar scroll - restores position when element mounts
   const sidebarRefCallback = (node: HTMLElement | null) => {
@@ -218,9 +383,129 @@ export default function DashboardLayout() {
   }, [expandedSections]);
 
   // Scroll main content to top on route change (sidebar scroll is preserved via callback ref)
+  // Also close any open dropdowns when navigating
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    // Close dropdowns when route changes
+    setShowUserMenu(false);
+    setShowTeamStatus(false);
   }, [location.pathname]);
+
+  // Function to check and update session status
+  const checkSessionStatus = useCallback(async () => {
+    try {
+      const session = await workSessionService.getCurrentSession();
+      console.log('[WorkSession] Current session:', session);
+      console.log('[WorkSession] Session status:', session?.status);
+      console.log('[WorkSession] Session breaks:', session?.breaks);
+
+      if (session) {
+        setCurrentSession(session);
+        if (session.status === 'ON_BREAK') {
+          setWorkStatus('break');
+          // Get break start time from session.breaks array (active breaks)
+          if (session.breaks && session.breaks.length > 0) {
+            const activeBreak = session.breaks[0]; // First active break
+            console.log('[WorkSession] Active break:', activeBreak);
+            console.log('[WorkSession] Break startedAt:', activeBreak.startedAt);
+            const startTime = new Date(activeBreak.startedAt);
+            console.log('[WorkSession] Parsed start time:', startTime);
+            setBreakStartTime(startTime);
+            // Calculate duration immediately
+            const now = new Date();
+            const durationSec = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+            console.log('[WorkSession] Immediate duration:', durationSec);
+            setBreakDuration(durationSec);
+          } else {
+            console.log('[WorkSession] No breaks in session, fetching from API...');
+            // Fallback: fetch breaks separately
+            try {
+              const breaks = await workSessionService.getBreaks();
+              const activeBreak = breaks.find(b => !b.endedAt);
+              if (activeBreak) {
+                console.log('[WorkSession] Found active break from API:', activeBreak);
+                const startTime = new Date(activeBreak.startedAt);
+                setBreakStartTime(startTime);
+                // Calculate duration immediately
+                const now = new Date();
+                const durationSec = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+                setBreakDuration(durationSec);
+              }
+            } catch (e) {
+              console.error('[WorkSession] Failed to fetch breaks:', e);
+            }
+          }
+        } else {
+          setWorkStatus('active');
+          setBreakStartTime(null);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check session status:', error);
+    }
+  }, []);
+
+  // Check current work session status on load and when tab becomes visible
+  useEffect(() => {
+    checkSessionStatus();
+
+    // Also refresh when tab becomes visible (user switches back)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkSessionStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [checkSessionStatus]);
+
+  // Update break duration every second when on break
+  useEffect(() => {
+    if (workStatus === 'break' && breakStartTime) {
+      const interval = setInterval(() => {
+        const now = new Date();
+        const durationSec = Math.floor((now.getTime() - breakStartTime.getTime()) / 1000);
+        setBreakDuration(durationSec);
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setBreakDuration(0);
+    }
+  }, [workStatus, breakStartTime]);
+
+  // Fetch team status for admins/managers
+  useEffect(() => {
+    const fetchTeamStatus = async () => {
+      // Only fetch for admins/managers
+      if (!isAdmin && !isManager && !isTeamLead && !isSuperAdmin) return;
+
+      try {
+        const status = await workSessionService.getTeamWorkStatus();
+        setTeamStatus(status);
+      } catch (error) {
+        console.error('Failed to fetch team status:', error);
+      }
+    };
+
+    fetchTeamStatus();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchTeamStatus, 30000);
+    return () => clearInterval(interval);
+  }, [isAdmin, isManager, isTeamLead, isSuperAdmin]);
+
+  // Format duration as mm:ss or hh:mm:ss
+  const formatBreakDuration = (seconds: number): string => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) {
+      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Toggle sidebar collapsed state
   const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed);
@@ -245,49 +530,115 @@ export default function DashboardLayout() {
   // Check if current route should hide header
   const hideHeader = headerHiddenRoutes.some(route => location.pathname.startsWith(route));
 
-  // Get user's role slug (lowercase)
-  const rawRole = user?.role || '';
-  const userRole = rawRole.toLowerCase().trim();
-  const isSuperAdmin = userRole === 'super_admin' || userRole === 'superadmin';
-  const isAdmin = userRole === 'admin' || isSuperAdmin;
-  const isManager = userRole === 'manager';
-  const isTeamLead = userRole === 'team_lead' || userRole === 'teamlead';
-  const showAdvancedSections = isAdmin || isManager || isTeamLead;
+  // Derived value for showing advanced sections
+  const showAdvancedSections = isSuperAdmin || isOrgAdmin || isAdmin || isManager || isTeamLead;
 
-  // Get organization industry (default to 'generic' if not set)
-  const orgIndustry = (user?.organizationIndustry || 'generic').toLowerCase().replace(/\s+/g, '_') as Industry;
-  const allowedSections = industrySections[orgIndustry] || industrySections.generic;
+  // Get organization industry (default to 'GENERIC' if not set)
+  const orgIndustry = (user?.organizationIndustry || 'GENERIC').toUpperCase().replace(/\s+/g, '_');
+  const allowedSections = industrySections[orgIndustry] || industrySections.GENERIC;
+
+  // Get industry-specific section key
+  const industrySection = orgIndustry === 'EDUCATION' ? 'education' :
+                          orgIndustry === 'REAL_ESTATE' ? 'realestate' :
+                          orgIndustry === 'HEALTHCARE' ? 'healthcare' :
+                          orgIndustry === 'INSURANCE' ? 'insurance' :
+                          orgIndustry === 'AUTOMOTIVE' ? 'automotive' :
+                          orgIndustry === 'IT_SERVICES' ? 'itservices' :
+                          orgIndustry === 'RECRUITMENT' ? 'recruitment' : 'sales';
 
   // Super Admin sees ALL sections regardless of industry
-  const allSections = ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'fieldSales', 'admissions', 'settings'];
+  const allSections = ['main', 'sales', 'education', 'realestate', 'healthcare', 'insurance', 'automotive', 'itservices', 'recruitment', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'];
 
-  // Check if a section should be shown for this industry (Super Admin sees all)
-  const isSectionAllowed = (sectionKey: string) => isSuperAdmin ? allSections.includes(sectionKey) : allowedSections.includes(sectionKey);
+  // Check if a section should be shown for this industry (Super Admin / Admin sees all)
+  const isSectionAllowed = useCallback((sectionKey: string) => {
+    if (isSuperAdmin || isAdmin) return allSections.includes(sectionKey);
+    return allowedSections.includes(sectionKey);
+  }, [isSuperAdmin, isAdmin, allowedSections]);
 
   // Check if telecaller/counselor on dashboard (for dark theme header)
   const isTelecallerDashboard = (userRole === 'telecaller' || userRole === 'counselor') && location.pathname === '/dashboard';
 
-  // Filter navigation based on user role
-  const filterByRole = (items: NavItem[], alwaysShowNames: string[] = []) => {
-    if (!userRole) return items.filter(item => ['Dashboard', 'Leads'].includes(item.name));
-    return items.filter(item => alwaysShowNames.includes(item.name) || item.roles.includes(userRole));
-  };
+  // Filter navigation based on user role AND permissions
+  const filterByRole = useCallback((items: NavItem[], alwaysShowNames: string[] = []) => {
+    if (!userRole) return items.filter(item => ['Dashboard'].includes(item.name));
+    return items.filter(item => {
+      // Always show certain items (like Dashboard)
+      if (alwaysShowNames.includes(item.name)) return true;
 
-  const filteredMain = useMemo(() => filterByRole(mainNavigation, ['Dashboard', 'Leads']), [userRole]);
-  const filteredSales = useMemo(() => isSectionAllowed('sales') ? filterByRole(salesNavigation) : [], [userRole, orgIndustry]);
-  const filteredCommunication = useMemo(() => isSectionAllowed('communication') ? filterByRole(communicationNavigation) : [], [userRole, orgIndustry]);
-  const filteredVoiceAI = useMemo(() => isSectionAllowed('voiceAI') ? filterByRole(voiceAINavigation) : [], [userRole, orgIndustry]);
-  const filteredData = useMemo(() => isSectionAllowed('data') ? filterByRole(dataNavigation) : [], [userRole, orgIndustry]);
-  const filteredAnalytics = useMemo(() => isSectionAllowed('analytics') ? filterByRole(analyticsNavigation) : [], [userRole, orgIndustry]);
-  const filteredTeam = useMemo(() => isSectionAllowed('team') ? filterByRole(teamNavigation) : [], [userRole, orgIndustry]);
-  const filteredIntegrations = useMemo(() => isSectionAllowed('integrations') ? filterByRole(integrationsNavigation) : [], [userRole, orgIndustry]);
-  const filteredSettings = useMemo(() => isSectionAllowed('settings') ? filterByRole(settingsNavigation) : [], [userRole, orgIndustry]);
-  const filteredFieldSales = useMemo(() => isSectionAllowed('fieldSales') ? filterByRole(fieldSalesNavigation) : [], [userRole, orgIndustry]);
-  const filteredAdmissions = useMemo(() => isSectionAllowed('admissions') ? filterByRole(admissionsNavigation) : [], [userRole, orgIndustry]);
+      // Special case for super_admin permission - only super_admin can see
+      if (item.permission === 'super_admin') {
+        return isSuperAdmin;
+      }
+
+      // Check if user's role is in the allowed roles list
+      const roleAllowed = item.roles.some(r => {
+        const normalizedRole = r.toLowerCase().replace(/[_-]/g, '');
+        if (isSuperAdmin && (normalizedRole === 'superadmin' || normalizedRole === 'admin')) return true;
+        if (isOrgAdmin && (normalizedRole === 'orgadmin' || normalizedRole === 'admin')) return true;
+        if (isAdmin && normalizedRole === 'admin') return true;
+        return normalizedRole === userRole;
+      });
+
+      // Role must be allowed first
+      if (!roleAllowed) return false;
+
+      // Super admin / org_admin / admin bypasses permission checks (but not role checks)
+      if (isSuperAdmin || isOrgAdmin || isAdmin) return true;
+
+      // For other users: check permission if defined
+      if (item.permission) {
+        return hasPermission(item.permission);
+      }
+
+      // Role is allowed and no specific permission required
+      return true;
+    });
+  }, [userRole, isSuperAdmin, isOrgAdmin, isAdmin, hasPermission]);
+
+  // Dynamic navigation based on industry
+  const filteredMain = useMemo(() => filterByRole(getMainNavigation(orgIndustry), ['Dashboard']), [filterByRole, orgIndustry]);
+  const filteredIndustry = useMemo(() => isSectionAllowed(industrySection) ? filterByRole(getIndustryNavigation(orgIndustry)) : [], [filterByRole, orgIndustry, industrySection]);
+  const industrySectionTitle = getIndustrySectionTitle(orgIndustry);
+  const filteredCommunication = useMemo(() => isSectionAllowed('communication') ? filterByRole(communicationNavigation) : [], [filterByRole, isSectionAllowed]);
+  const filteredVoiceAI = useMemo(() => isSectionAllowed('voiceAI') ? filterByRole(voiceAINavigation) : [], [filterByRole, isSectionAllowed]);
+  const filteredData = useMemo(() => isSectionAllowed('data') ? filterByRole(dataNavigation) : [], [filterByRole, isSectionAllowed]);
+  const filteredAnalytics = useMemo(() => isSectionAllowed('analytics') ? filterByRole(getAnalyticsNavigation(orgIndustry)) : [], [filterByRole, orgIndustry, isSectionAllowed]);
+  const filteredTeam = useMemo(() => isSectionAllowed('team') ? filterByRole(getTeamNavigation(orgIndustry)) : [], [filterByRole, orgIndustry, isSectionAllowed]);
+  const filteredIntegrations = useMemo(() => isSectionAllowed('integrations') ? filterByRole(integrationsNavigation) : [], [filterByRole, isSectionAllowed]);
+  const filteredSettings = useMemo(() => isSectionAllowed('settings') ? filterByRole(settingsNavigation) : [], [filterByRole, isSectionAllowed]);
+
+  // Legacy - kept for backward compatibility but now use filteredIndustry
+  const filteredSales = useMemo(() => [], []);
+  const filteredFieldSales = useMemo(() => [], []);
+  const filteredAdmissions = useMemo(() => [], []);
 
   const handleLogout = async () => {
+    // Close the dropdown menu immediately
+    setShowUserMenu(false);
     await dispatch(logout());
     navigate('/login');
+  };
+
+  // Toggle work status (Take Break / Go Active)
+  const handleToggleWorkStatus = async () => {
+    // Close the dropdown menu immediately
+    setShowUserMenu(false);
+    try {
+      if (workStatus === 'break') {
+        // End break - go active
+        await workSessionService.endBreak();
+        setWorkStatus('active');
+        setBreakStartTime(null);
+        setBreakDuration(0);
+      } else {
+        // Start break
+        const breakRecord = await workSessionService.startBreak('SHORT', 'Break from dashboard');
+        setWorkStatus('break');
+        setBreakStartTime(new Date(breakRecord.startedAt));
+      }
+    } catch (error) {
+      console.error('Failed to update work status:', error);
+    }
   };
 
   // NavItem for expanded sidebar
@@ -440,12 +791,12 @@ export default function DashboardLayout() {
               ))}
             </div>
 
-            {/* Sales */}
-            {filteredSales.length > 0 && (
+            {/* Industry-Specific Section (dynamic based on organization industry) */}
+            {filteredIndustry.length > 0 && (
               <CollapsibleSection
-                title="Sales"
-                sectionKey="sales"
-                items={filteredSales}
+                title={industrySectionTitle}
+                sectionKey="industry"
+                items={filteredIndustry}
                 colorClass="text-emerald-400"
                 onClick={() => setSidebarOpen(false)}
               />
@@ -677,12 +1028,12 @@ export default function DashboardLayout() {
                 ))}
               </div>
 
-              {/* Sales */}
-              {filteredSales.length > 0 && (
+              {/* Industry-Specific Section */}
+              {filteredIndustry.length > 0 && (
                 <CollapsibleSection
-                  title="Sales"
-                  sectionKey="sales"
-                  items={filteredSales}
+                  title={industrySectionTitle}
+                  sectionKey="industry"
+                  items={filteredIndustry}
                   colorClass="text-emerald-400"
                 />
               )}
@@ -813,6 +1164,123 @@ export default function DashboardLayout() {
 
             {/* Right side actions */}
             <div className="flex items-center gap-2">
+              {/* Team Status Indicator (for admins/managers) - Shows who is Active, On Break, Offline */}
+              {teamStatus && (isAdmin || isManager || isTeamLead || isSuperAdmin) && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowTeamStatus(!showTeamStatus)}
+                    className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    <UsersIcon className="h-4 w-4 text-slate-600" />
+                    <div className="flex items-center gap-1 text-xs">
+                      <span className="flex items-center gap-0.5">
+                        <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                        <span className="font-medium">{teamStatus.active.length}</span>
+                      </span>
+                      <span className="flex items-center gap-0.5">
+                        <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                        <span className="font-medium">{teamStatus.onBreak.length}</span>
+                      </span>
+                      <span className="flex items-center gap-0.5">
+                        <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                        <span className="font-medium">{teamStatus.offline.length}</span>
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Team Status Dropdown */}
+                  {showTeamStatus && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowTeamStatus(false)} />
+                      <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-96 overflow-y-auto">
+                        <div className="p-3 border-b border-slate-100">
+                          <h3 className="font-semibold text-slate-800">Team Status</h3>
+                        </div>
+
+                        {/* Active Members */}
+                        {teamStatus.active.length > 0 && (
+                          <div className="p-2">
+                            <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded">
+                              <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                              Active ({teamStatus.active.length})
+                            </div>
+                            <div className="mt-1 space-y-1">
+                              {teamStatus.active.map(member => (
+                                <div key={member.id} className="flex items-center gap-2 px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 rounded">
+                                  <span className="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-medium">
+                                    {member.name.charAt(0)}
+                                  </span>
+                                  <span>{member.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* On Break Members */}
+                        {teamStatus.onBreak.length > 0 && (
+                          <div className="p-2 border-t border-slate-100">
+                            <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded">
+                              <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+                              On Break ({teamStatus.onBreak.length})
+                            </div>
+                            <div className="mt-1 space-y-1">
+                              {teamStatus.onBreak.map(member => (
+                                <div key={member.id} className="flex items-center justify-between px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 rounded">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-6 h-6 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center text-xs font-medium">
+                                      {member.name.charAt(0)}
+                                    </span>
+                                    <span>{member.name}</span>
+                                  </div>
+                                  <span className="text-xs text-amber-600">{member.breakType}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Offline Members */}
+                        {teamStatus.offline.length > 0 && (
+                          <div className="p-2 border-t border-slate-100">
+                            <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded">
+                              <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                              Offline ({teamStatus.offline.length})
+                            </div>
+                            <div className="mt-1 space-y-1">
+                              {teamStatus.offline.map(member => (
+                                <div key={member.id} className="flex items-center gap-2 px-2 py-1.5 text-sm text-slate-500 hover:bg-slate-50 rounded">
+                                  <span className="w-6 h-6 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center text-xs font-medium">
+                                    {member.name.charAt(0)}
+                                  </span>
+                                  <span>{member.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Break Status Indicator */}
+              {workStatus === 'break' && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-100 border border-amber-300 rounded-full animate-pulse">
+                  <PauseCircleIcon className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-700">
+                    On Break <span className="font-mono">({formatBreakDuration(breakDuration)})</span>
+                  </span>
+                  <button
+                    onClick={handleToggleWorkStatus}
+                    className="ml-1 px-2 py-0.5 text-xs font-medium text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded transition-colors"
+                  >
+                    Resume
+                  </button>
+                </div>
+              )}
+
               {/* Voice Minutes Indicator */}
               <VoiceMinutesIndicator />
 
@@ -837,8 +1305,15 @@ export default function DashboardLayout() {
                     isTelecallerDashboard ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
                   }`}
                 >
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-xs font-semibold text-white">
-                    {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  <div className="relative">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-xs font-semibold text-white">
+                      {user?.firstName?.[0]}{user?.lastName?.[0]}
+                    </div>
+                    {/* Work Status Indicator */}
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                      workStatus === 'active' ? 'bg-emerald-500' :
+                      workStatus === 'break' ? 'bg-amber-500' : 'bg-gray-400'
+                    }`} />
                   </div>
                   <ChevronDownIcon className={`h-4 w-4 hidden sm:block ${
                     isTelecallerDashboard ? 'text-slate-400' : 'text-slate-400'
@@ -861,6 +1336,27 @@ export default function DashboardLayout() {
                         <p className="text-xs text-primary-600 capitalize mt-1">{user?.role}</p>
                       </div>
                       <div className="py-1">
+                        {/* Work Status Toggle */}
+                        <button
+                          onClick={handleToggleWorkStatus}
+                          className={`dropdown-item w-full ${
+                            workStatus === 'break'
+                              ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                              : 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                          }`}
+                        >
+                          {workStatus === 'break' ? (
+                            <>
+                              <PlayCircleIcon className="dropdown-item-icon" />
+                              Go Active
+                            </>
+                          ) : (
+                            <>
+                              <PauseCircleIcon className="dropdown-item-icon" />
+                              Take Break
+                            </>
+                          )}
+                        </button>
                         <button className="dropdown-item w-full">
                           <Cog6ToothIcon className="dropdown-item-icon" />
                           {t('navigation:userMenu.settings')}

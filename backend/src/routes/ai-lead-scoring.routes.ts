@@ -4,7 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { authenticate as authenticateToken, authorize as requireRole } from '../middlewares/auth';
+import { authenticate as authenticateToken, authorize as authorize } from '../middlewares/auth';
 import { aiLeadScoringService } from '../services/ai-lead-scoring.service';
 
 const router = Router();
@@ -78,7 +78,7 @@ router.get('/leads/:leadId/next-actions', authenticateToken, async (req: Request
 /**
  * Batch score leads for organization
  */
-router.post('/batch-score', authenticateToken, requireRole(['admin', 'manager']), async (req: Request, res: Response) => {
+router.post('/batch-score', authenticateToken, authorize(['admin', 'manager']), async (req: Request, res: Response) => {
   try {
     const organizationId = req.user?.organizationId;
     const { limit = 100 } = req.body;
@@ -105,7 +105,7 @@ router.post('/batch-score', authenticateToken, requireRole(['admin', 'manager'])
 /**
  * Get organization scoring insights
  */
-router.get('/insights', authenticateToken, requireRole(['admin', 'manager']), async (req: Request, res: Response) => {
+router.get('/insights', authenticateToken, authorize(['admin', 'manager']), async (req: Request, res: Response) => {
   try {
     const organizationId = req.user?.organizationId;
 

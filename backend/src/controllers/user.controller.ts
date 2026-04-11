@@ -37,6 +37,10 @@ export class UserController {
         roleSlug: req.query.role as string | undefined,
         isActive: req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined,
         search: req.query.search as string | undefined,
+        // Pass current user info for role-based filtering
+        currentUserId: req.user!.id,
+        currentUserRole: req.user!.role || req.user!.roleSlug,
+        currentUserBranchId: req.user!.branchId,
       };
 
       const { users, total } = await userService.findAll(filter, page, limit);

@@ -49,6 +49,7 @@ import {
   getActivityIcon,
 } from '../lead-detail.constants';
 import { formatDateTime, formatDate, formatFileSize, getCustomField } from '../lead-detail.utils';
+import { CustomFieldsDisplay } from '../../../components/CustomFieldsRenderer';
 
 // Loading Spinner Component
 const LoadingSpinner = () => (
@@ -68,40 +69,115 @@ const EmptyState = ({ icon: Icon, message }: { icon: React.ElementType; message:
 // Overview Tab
 interface OverviewTabProps {
   lead: any;
+  onEdit?: () => void;
 }
 
-export function OverviewTab({ lead }: OverviewTabProps) {
+export function OverviewTab({ lead, onEdit }: OverviewTabProps) {
+  // Check if any extended contact fields have values
+  const hasExtendedContactInfo = lead.fatherName || lead.motherName || lead.fatherPhone ||
+    lead.motherPhone || lead.whatsapp || lead.occupation || lead.budget ||
+    lead.preferredContactMethod || lead.preferredContactTime;
+
+  // Format currency
+  const formatCurrency = (value: any) => {
+    if (!value) return '--';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return isNaN(num) ? '--' : `₹${num.toLocaleString('en-IN')}`;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Personal Information */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        <div className="px-6 py-4 border-b border-slate-100">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-primary-600">Personal Information</h3>
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+              Edit
+            </button>
+          )}
         </div>
         <div className="p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div><label className="block text-sm text-slate-500 mb-1">Gender</label><p className="text-sm text-slate-900">{getCustomField(lead.customFields, 'gender')}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Date of Birth</label><p className="text-sm text-slate-900">{formatDate(getCustomField(lead.customFields, 'dateOfBirth'))}</p></div>
+            <div><label className="block text-sm text-slate-500 mb-1">Gender</label><p className="text-sm text-slate-900">{lead.gender || getCustomField(lead.customFields, 'gender') || '--'}</p></div>
+            <div><label className="block text-sm text-slate-500 mb-1">Date of Birth</label><p className="text-sm text-slate-900">{formatDate(lead.dateOfBirth || getCustomField(lead.customFields, 'dateOfBirth')) || '--'}</p></div>
             <div><label className="block text-sm text-slate-500 mb-1">Alternate Email</label><p className="text-sm text-slate-900">{lead.alternateEmail || '--'}</p></div>
             <div><label className="block text-sm text-slate-500 mb-1">Alternate Phone</label><p className="text-sm text-slate-900">{lead.alternatePhone || '--'}</p></div>
             <div><label className="block text-sm text-slate-500 mb-1">City</label><p className="text-sm text-slate-900">{lead.city || '--'}</p></div>
             <div><label className="block text-sm text-slate-500 mb-1">State</label><p className="text-sm text-slate-900">{lead.state || '--'}</p></div>
+            <div><label className="block text-sm text-slate-500 mb-1">Occupation</label><p className="text-sm text-slate-900">{lead.occupation || getCustomField(lead.customFields, 'occupation') || '--'}</p></div>
+            <div><label className="block text-sm text-slate-500 mb-1">Budget</label><p className="text-sm text-slate-900">{formatCurrency(lead.budget || getCustomField(lead.customFields, 'budget'))}</p></div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-semibold text-primary-600">Additional Information</h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div><label className="block text-sm text-slate-500 mb-1">Walkin Date</label><p className="text-sm text-slate-900">{formatDate(lead.walkinDate)}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Lineup Date</label><p className="text-sm text-slate-900">{formatDate(lead.lineupDate)}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Preferred Location</label><p className="text-sm text-slate-900">{lead.preferredLocation || '--'}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Total Fees</label><p className="text-sm text-slate-900">{lead.totalFees ? `₹${lead.totalFees}` : '--'}</p></div>
+      {/* Family & Contact Details - Only show if any values exist */}
+      {hasExtendedContactInfo && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-primary-600">Family & Contact Details</h3>
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
+              >
+                <PencilIcon className="h-3.5 w-3.5" />
+                Edit
+              </button>
+            )}
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {(lead.fatherName || getCustomField(lead.customFields, 'fatherName') || getCustomField(lead.customFields, 'father_name')) && (
+                <div><label className="block text-sm text-slate-500 mb-1">Father's Name</label><p className="text-sm text-slate-900">{lead.fatherName || getCustomField(lead.customFields, 'fatherName') || getCustomField(lead.customFields, 'father_name')}</p></div>
+              )}
+              {(lead.fatherPhone || getCustomField(lead.customFields, 'fatherPhone') || getCustomField(lead.customFields, 'father_phone')) && (
+                <div><label className="block text-sm text-slate-500 mb-1">Father's Phone</label><p className="text-sm text-slate-900">{lead.fatherPhone || getCustomField(lead.customFields, 'fatherPhone') || getCustomField(lead.customFields, 'father_phone')}</p></div>
+              )}
+              {(lead.motherName || getCustomField(lead.customFields, 'motherName') || getCustomField(lead.customFields, 'mother_name')) && (
+                <div><label className="block text-sm text-slate-500 mb-1">Mother's Name</label><p className="text-sm text-slate-900">{lead.motherName || getCustomField(lead.customFields, 'motherName') || getCustomField(lead.customFields, 'mother_name')}</p></div>
+              )}
+              {(lead.motherPhone || getCustomField(lead.customFields, 'motherPhone') || getCustomField(lead.customFields, 'mother_phone')) && (
+                <div><label className="block text-sm text-slate-500 mb-1">Mother's Phone</label><p className="text-sm text-slate-900">{lead.motherPhone || getCustomField(lead.customFields, 'motherPhone') || getCustomField(lead.customFields, 'mother_phone')}</p></div>
+              )}
+              {(lead.whatsapp || getCustomField(lead.customFields, 'whatsapp')) && (
+                <div><label className="block text-sm text-slate-500 mb-1">WhatsApp</label><p className="text-sm text-slate-900">{lead.whatsapp || getCustomField(lead.customFields, 'whatsapp')}</p></div>
+              )}
+              {(lead.preferredContactMethod || getCustomField(lead.customFields, 'preferredContactMethod') || getCustomField(lead.customFields, 'preferred_contact_method')) && (
+                <div><label className="block text-sm text-slate-500 mb-1">Preferred Contact</label><p className="text-sm text-slate-900 capitalize">{lead.preferredContactMethod || getCustomField(lead.customFields, 'preferredContactMethod') || getCustomField(lead.customFields, 'preferred_contact_method')}</p></div>
+              )}
+              {(lead.preferredContactTime || getCustomField(lead.customFields, 'preferredContactTime') || getCustomField(lead.customFields, 'preferred_contact_time')) && (
+                <div><label className="block text-sm text-slate-500 mb-1">Preferred Time</label><p className="text-sm text-slate-900 capitalize">{lead.preferredContactTime || getCustomField(lead.customFields, 'preferredContactTime') || getCustomField(lead.customFields, 'preferred_contact_time')}</p></div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Custom Fields (from Settings > Custom Contact Property) */}
+      {lead.customFields && Object.keys(lead.customFields).length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-primary-600">Additional Fields</h3>
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
+              >
+                <PencilIcon className="h-3.5 w-3.5" />
+                Edit
+              </button>
+            )}
+          </div>
+          <div className="p-6">
+            <CustomFieldsDisplay values={lead.customFields} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

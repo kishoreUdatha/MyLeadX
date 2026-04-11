@@ -144,7 +144,27 @@ class CommissionService {
       prisma.commission.count({ where }),
     ]);
 
-    return { commissions, total };
+    // Fetch admission details for commissions that have admissionId
+    const commissionsWithAdmissions = await Promise.all(
+      commissions.map(async (commission: any) => {
+        if (commission.admissionId) {
+          const admission = await prisma.admission.findUnique({
+            where: { id: commission.admissionId },
+            select: {
+              id: true,
+              admissionNumber: true,
+              universityId: true,
+              university: { select: { name: true } },
+              lead: { select: { firstName: true, lastName: true } },
+            },
+          });
+          return { ...commission, admission };
+        }
+        return commission;
+      })
+    );
+
+    return { commissions: commissionsWithAdmissions, total };
   }
 
   /**
@@ -182,7 +202,27 @@ class CommissionService {
       prisma.commission.count({ where }),
     ]);
 
-    return { commissions, total };
+    // Fetch admission details for commissions that have admissionId
+    const commissionsWithAdmissions = await Promise.all(
+      commissions.map(async (commission: any) => {
+        if (commission.admissionId) {
+          const admission = await prisma.admission.findUnique({
+            where: { id: commission.admissionId },
+            select: {
+              id: true,
+              admissionNumber: true,
+              universityId: true,
+              university: { select: { name: true } },
+              lead: { select: { firstName: true, lastName: true } },
+            },
+          });
+          return { ...commission, admission };
+        }
+        return commission;
+      })
+    );
+
+    return { commissions: commissionsWithAdmissions, total };
   }
 
   /**

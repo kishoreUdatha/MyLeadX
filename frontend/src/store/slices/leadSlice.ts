@@ -71,7 +71,11 @@ export const updateLead = createAsyncThunk(
       const response = await leadService.update(id, data);
       return response;
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
+      const err = error as { response?: { data?: { message?: string; errors?: Array<{ msg?: string; message?: string }> } } };
+      // Return full error data for validation errors
+      if (err.response?.data?.errors) {
+        return rejectWithValue(err.response.data);
+      }
       return rejectWithValue(err.response?.data?.message || 'Failed to update lead');
     }
   }

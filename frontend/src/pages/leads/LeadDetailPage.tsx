@@ -35,6 +35,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
 
 // Local imports - extracted components and hooks
 import { useLeadDetailData } from './hooks';
+import TagSelector from '../../components/tags/TagSelector';
 // Status options removed - now using industry-specific stages
 import SmartCallPrep from '../../components/SmartCallPrep';
 import {
@@ -168,21 +169,31 @@ export default function LeadDetailPage() {
     }
   }, [dispatch, id]);
 
-  // Load organization industry and lead stages
+  // Load organization industry and pipeline stages (unified system)
   useEffect(() => {
     const loadIndustryAndStages = async () => {
       try {
         setLoadingStages(true);
         const [industryRes, stagesRes] = await Promise.all([
           api.get('/lead-stages/industry'),
-          api.get('/lead-stages/journey'),
+          api.get('/lead-pipeline/stages'),
         ]);
         setOrganizationIndustry(industryRes.data.data?.industry || 'GENERAL');
-        const allStages = [
-          ...(stagesRes.data.data?.progressStages || []),
-          ...(stagesRes.data.data?.lostStage ? [stagesRes.data.data.lostStage] : []),
-        ];
-        setLeadStages(allStages);
+
+        // Map pipeline stages to the format expected by journey tracker
+        const pipelineStages = (stagesRes.data.data || []).map((stage: any) => ({
+          id: stage.id,
+          name: stage.name,
+          slug: stage.slug,
+          color: stage.color || '#6B7280',
+          order: stage.order,
+          journeyOrder: stage.order, // Use order as journeyOrder
+          stageType: stage.stageType || 'active', // Include stageType for journey tracker
+          autoSyncStatus: stage.stageType === 'won' ? 'WON' : stage.stageType === 'lost' ? 'LOST' : null,
+          isActive: stage.isActive,
+        }));
+
+        setLeadStages(pipelineStages);
       } catch (error) {
         console.error('Failed to load industry/stages:', error);
       } finally {
@@ -192,10 +203,11 @@ export default function LeadDetailPage() {
     loadIndustryAndStages();
   }, []);
 
-  // Sync stage with lead data
+  // Sync stage with lead data (use pipelineStageId for unified system)
   useEffect(() => {
     if (currentLead) {
-      setSelectedStageId(currentLead.stageId || '');
+      // Prefer pipelineStageId (unified system), fallback to stageId (deprecated)
+      setSelectedStageId(currentLead.pipelineStageId || currentLead.stageId || '');
     }
   }, [currentLead]);
 
@@ -204,36 +216,20 @@ export default function LeadDetailPage() {
     leadData.loadTabData(activeTab);
   }, [activeTab, leadData.loadTabData]);
 
-  // Stage change handler - updates stage and auto-syncs status
+  // Stage change handler - uses unified pipeline system
   const handleStageChange = async (newStageId: string) => {
     if (!id) return;
     try {
-      // Find the selected stage to determine auto-sync status
-      const selectedStage = leadStages.find(s => s.id === newStageId);
-
-      // Determine status based on stage position
-      let newStatus = 'NEW';
-      if (selectedStage) {
-        if (selectedStage.journeyOrder < 0) {
-          newStatus = 'LOST'; // Lost stage
-        } else if (selectedStage.autoSyncStatus === 'WON') {
-          newStatus = 'WON';
-        } else if (selectedStage.autoSyncStatus === 'LOST') {
-          newStatus = 'LOST';
-        } else if (selectedStage.journeyOrder > 1) {
-          newStatus = 'CONTACTED'; // After first stage
-        }
-      }
-
-      // Update both stage and status
-      await api.put(`/lead-stages/lead/${id}/stage`, { stageId: newStageId });
+      // Use unified pipeline API to move lead to new stage
+      await api.post(`/lead-pipeline/${id}/move`, { toStageId: newStageId });
 
       setSelectedStageId(newStageId);
       setIsEditingStage(false);
       dispatch(fetchLeadById(id)); // Refresh lead data
       toast.success('Lead stage updated successfully');
-    } catch {
-      toast.error('Failed to update lead stage');
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to update lead stage';
+      toast.error(message);
     }
   };
 
@@ -282,8 +278,26 @@ export default function LeadDetailPage() {
       await dispatch(updateLead({ id, data })).unwrap();
       dispatch(fetchLeadById(id));
       toast.success('Lead details updated successfully');
-    } catch {
-      toast.error('Failed to update lead details');
+    } catch (error: any) {
+      // The error from rejectWithValue could be:
+      // 1. An object with errors array (validation errors)
+      // 2. A string message
+      // 3. An object with message property
+
+      if (error?.errors && Array.isArray(error.errors)) {
+        // Validation errors - show each error
+        const errorMessages = error.errors
+          .map((err: any) => err.msg || err.message || err.param)
+          .filter(Boolean)
+          .join(', ');
+        toast.error(errorMessages || 'Validation failed');
+      } else if (error?.message) {
+        toast.error(error.message);
+      } else if (typeof error === 'string') {
+        toast.error(error);
+      } else {
+        toast.error('Failed to update lead details');
+      }
     }
   };
 
@@ -511,6 +525,11 @@ export default function LeadDetailPage() {
                 {new Date(currentLead.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
             </div>
+            {/* Tags Section */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">Tags:</span>
+              <TagSelector leadId={id!} compact />
+            </div>
             {currentLead.convertedAt && (
               <div className="flex items-center gap-1.5 text-emerald-600">
                 <CheckBadgeSolidIcon className="h-3.5 w-3.5" />
@@ -638,12 +657,12 @@ export default function LeadDetailPage() {
           <IndustryJourneyTracker
             industry={organizationIndustry}
             stages={leadStages}
-            currentStageId={currentLead.stageId || null}
+            currentStageId={currentLead.pipelineStageId || currentLead.stageId || null}
             onStageChange={handleStageChange}
             onMarkLost={() => {}}
             isConverted={currentLead.isConverted}
-            closedAt={currentLead.admissionClosedAt}
-            showCloseButton={organizationIndustry === 'EDUCATION'}
+            closedAt={currentLead.admissionClosedAt || null}
+            showCloseButton={true}
             onClose={() => setShowCloseAdmissionModal(true)}
           />
         ) : organizationIndustry === 'EDUCATION' ? (
@@ -659,8 +678,8 @@ export default function LeadDetailPage() {
 
         {activeTab === 'overview' && (
           <div className="space-y-4">
-            <OverviewTab lead={currentLead} />
-            {/* Industry-specific custom fields - show for all industries except EDUCATION (has dedicated models) */}
+            <OverviewTab lead={currentLead} onEdit={() => setShowEditModal(true)} />
+            {/* Industry-specific custom fields edit form - show for all industries except EDUCATION (has dedicated models) */}
             {organizationIndustry !== 'EDUCATION' && organizationIndustry !== 'GENERAL' && (
               <IndustryFieldsForm
                 leadId={currentLead.id}
@@ -858,6 +877,7 @@ export default function LeadDetailPage() {
         leadId={currentLead.id}
         leadName={`${currentLead.firstName} ${currentLead.lastName || ''}`}
         onSuccess={handleAdmissionSuccess}
+        industry={organizationIndustry}
       />
 
       <PaymentModal

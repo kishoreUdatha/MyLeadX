@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
 import { NotFoundError } from '../utils/errors';
 import { LeadSource, LeadPriority, Prisma, AdmissionStatus, AdmissionType } from '@prisma/client';
+import { leadPipelineService } from './lead-pipeline.service';
 
 interface CreateLeadInput {
   organizationId: string;
@@ -15,6 +16,21 @@ interface CreateLeadInput {
   priority?: LeadPriority;
   notes?: string;
   customFields?: Record<string, unknown>;
+  // Common fields (proper columns)
+  whatsapp?: string;
+  fatherName?: string;
+  fatherPhone?: string;
+  motherName?: string;
+  motherPhone?: string;
+  occupation?: string;
+  budget?: number;
+  preferredContactMethod?: string;
+  preferredContactTime?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
 }
 
 interface UpdateLeadInput {
@@ -38,16 +54,28 @@ interface UpdateLeadInput {
   enrollmentNumber?: string;
   academicYear?: string;
   preferredUniversities?: string[];
+  // Common fields (now proper columns)
   fatherName?: string;
-  fatherMobile?: string;
+  fatherPhone?: string;
+  motherName?: string;
+  motherPhone?: string;
+  whatsapp?: string;
+  occupation?: string;
+  budget?: number;
+  preferredContactMethod?: string;
+  preferredContactTime?: string;
   address?: string;
   city?: string;
   state?: string;
+  country?: string;
+  pincode?: string;
 }
 
 interface LeadFilter {
   organizationId: string;
   stageId?: string;
+  pipelineStageId?: string; // Unified Pipeline Stage filter
+  filterUnassignedCounselor?: boolean; // Filter leads with no counselor assigned
   source?: LeadSource;
   priority?: LeadPriority;
   assignedToId?: string;
@@ -55,9 +83,20 @@ interface LeadFilter {
   dateFrom?: Date;
   dateTo?: Date;
   isConverted?: boolean;
+  tagId?: string; // Filter by tag ID
+  customFieldFilters?: Record<string, any>; // Custom field filters
   // Role-based filtering
   userRole?: string;
   userId?: string;
+  // Filter for leads with pending follow-ups
+  pendingFollowUp?: boolean;
+  // Direct column filters (new approach)
+  city?: string;
+  state?: string;
+  fatherName?: string;
+  motherName?: string;
+  occupation?: string;
+  companyName?: string;
 }
 
 export class LeadService {
@@ -121,6 +160,14 @@ export class LeadService {
       },
     });
 
+    // Auto-assign lead to default pipeline (Unified Pipeline System)
+    try {
+      await leadPipelineService.assignLeadToPipeline(lead.id, input.organizationId);
+    } catch (err) {
+      console.warn('[Lead] Failed to assign to pipeline:', err);
+      // Don't fail lead creation if pipeline assignment fails
+    }
+
     return lead;
   }
 
@@ -152,6 +199,20 @@ export class LeadService {
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
+        admissions: {
+          where: { status: 'ACTIVE' },
+          orderBy: { closedAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            admissionNumber: true,
+            closedAt: true,
+            status: true,
+            university: {
+              select: { name: true }
+            }
+          }
+        },
       },
     });
 
@@ -159,7 +220,12 @@ export class LeadService {
       throw new NotFoundError('Lead not found');
     }
 
-    return lead;
+    // Add admissionClosedAt from the most recent active admission
+    const latestAdmission = lead.admissions?.[0];
+    return {
+      ...lead,
+      admissionClosedAt: latestAdmission?.closedAt || null,
+    };
   }
 
   async findAll(filter: LeadFilter, page = 1, limit = 20) {
@@ -167,8 +233,19 @@ export class LeadService {
       organizationId: filter.organizationId,
     };
 
-    if (filter.stageId) {
+    // Filter by unified pipeline stage (new system)
+    if (filter.pipelineStageId) {
+      where.pipelineStageId = filter.pipelineStageId;
+    } else if (filter.stageId) {
+      // Fallback to old lead stage system
       where.stageId = filter.stageId;
+    }
+
+    // Filter leads with no counselor assigned (no active assignment)
+    if (filter.filterUnassignedCounselor) {
+      where.assignments = {
+        none: { isActive: true },
+      };
     }
 
     if (filter.source) {
@@ -250,8 +327,29 @@ export class LeadService {
           { assignments: { some: { assignedToId: { in: allMemberIds }, isActive: true } } },
         ],
       };
-    } else if (normalizedRole === 'telecaller' || normalizedRole === 'counselor') {
-      // Telecaller/Counselor: only see their own assigned leads
+    } else if (
+      normalizedRole === 'telecaller' ||
+      normalizedRole === 'counselor' ||
+      normalizedRole === 'counsellor' ||
+      normalizedRole === 'agent' ||
+      normalizedRole === 'salesagent' ||
+      normalizedRole === 'salesrep' ||
+      normalizedRole === 'sales' ||
+      normalizedRole === 'user'
+    ) {
+      // Telecaller/Counselor/Agent: only see their own assigned leads
+      if (filter.userId) {
+        roleCondition = {
+          assignments: {
+            some: {
+              assignedToId: filter.userId,
+              isActive: true,
+            },
+          },
+        };
+      }
+    } else if (normalizedRole && normalizedRole !== 'admin' && normalizedRole !== 'superadmin') {
+      // Any other non-admin role: only see their own assigned leads
       if (filter.userId) {
         roleCondition = {
           assignments: {
@@ -263,7 +361,7 @@ export class LeadService {
         };
       }
     }
-    // Admin sees all leads (no filter)
+    // Admin/SuperAdmin sees all leads (no filter)
 
     // Build search condition separately
     let searchCondition: Prisma.LeadWhereInput | null = null;
@@ -293,15 +391,187 @@ export class LeadService {
     if (filter.dateFrom || filter.dateTo) {
       where.createdAt = {};
       if (filter.dateFrom) {
-        where.createdAt.gte = filter.dateFrom;
+        // Start of day
+        const startDate = new Date(filter.dateFrom);
+        startDate.setHours(0, 0, 0, 0);
+        where.createdAt.gte = startDate;
       }
       if (filter.dateTo) {
-        where.createdAt.lte = filter.dateTo;
+        // End of day (23:59:59.999)
+        const endDate = new Date(filter.dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        where.createdAt.lte = endDate;
       }
     }
 
     if (filter.isConverted !== undefined) {
       where.isConverted = filter.isConverted;
+    }
+
+    // Filter for leads with pending follow-ups
+    if (filter.pendingFollowUp) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Include leads that have:
+      // 1. A pending FollowUp record (status = UPCOMING)
+      // 2. OR nextFollowUpAt set for today or past
+      // 3. OR are in active stages (not completed)
+      const completedStages = ['Admitted', 'ADMITTED', 'Enrolled', 'ENROLLED', 'Won', 'WON', 'Dropped', 'DROPPED', 'Lost', 'LOST', 'Closed', 'CLOSED'];
+
+      andConditions.push({
+        OR: [
+          // Has a pending follow-up scheduled
+          { followUps: { some: { status: 'UPCOMING' } } },
+          // Has nextFollowUpAt set for today or past
+          { nextFollowUpAt: { lte: todayEnd } },
+          // Is in an active stage (needs attention)
+          { stage: { name: { notIn: completedStages } } },
+        ],
+      });
+    }
+
+    // Filter by tag - leads that have this tag assigned
+    if (filter.tagId) {
+      where.tagAssignments = {
+        some: {
+          tagId: filter.tagId,
+        },
+      };
+    }
+
+    // Filter by custom fields
+    // First, handle fields that are now proper columns (use Prisma native filtering)
+    // Then, handle remaining custom fields (use raw SQL for JSON)
+    if (filter.customFieldFilters && Object.keys(filter.customFieldFilters).length > 0) {
+      console.log('[LeadService] Custom field filters received:', JSON.stringify(filter.customFieldFilters));
+
+      // Fields that are now proper columns in the Lead table
+      const columnFields: Record<string, string> = {
+        'father_name': 'fatherName',
+        'fatherName': 'fatherName',
+        'father_phone': 'fatherPhone',
+        'fatherPhone': 'fatherPhone',
+        'mother_name': 'motherName',
+        'motherName': 'motherName',
+        'mother_phone': 'motherPhone',
+        'motherPhone': 'motherPhone',
+        'occupation': 'occupation',
+        'budget': 'budget',
+        'whatsapp': 'whatsapp',
+        'preferred_contact_method': 'preferredContactMethod',
+        'preferredContactMethod': 'preferredContactMethod',
+        'preferred_contact_time': 'preferredContactTime',
+        'preferredContactTime': 'preferredContactTime',
+        'city': 'city',
+        'state': 'state',
+        'country': 'country',
+        'company_name': 'companyName',
+        'companyName': 'companyName',
+        'job_title': 'jobTitle',
+        'jobTitle': 'jobTitle',
+      };
+
+      // Separate column filters from true custom field filters
+      const nativeFilters: Record<string, any> = {};
+      const jsonFilters: Record<string, any> = {};
+
+      for (const [key, value] of Object.entries(filter.customFieldFilters)) {
+        if (value === undefined || value === null || value === '') continue;
+
+        // Check if this field maps to a column
+        const columnName = columnFields[key];
+        if (columnName) {
+          nativeFilters[columnName] = value;
+        } else {
+          jsonFilters[key] = value;
+        }
+      }
+
+      console.log('[LeadService] Native column filters:', nativeFilters);
+      console.log('[LeadService] JSON custom field filters:', jsonFilters);
+
+      // Apply native Prisma filters for column fields
+      for (const [columnName, value] of Object.entries(nativeFilters)) {
+        if (columnName === 'budget') {
+          // Handle budget as numeric comparison
+          if (typeof value === 'object') {
+            where[columnName] = value; // Already a Prisma filter object
+          } else {
+            where[columnName] = { gte: parseFloat(String(value)) };
+          }
+        } else if (typeof value === 'string') {
+          // Case-insensitive partial match for text fields
+          (where as any)[columnName] = { contains: value, mode: 'insensitive' };
+        } else {
+          (where as any)[columnName] = value;
+        }
+      }
+
+      // Handle remaining JSON custom fields with raw SQL
+      if (Object.keys(jsonFilters).length > 0) {
+        const customFieldConditions: string[] = [];
+        const customFieldValues: any[] = [];
+
+        for (const [key, value] of Object.entries(jsonFilters)) {
+          // Parameter numbering starts at $2 since $1 is used for organizationId
+          const paramIndex = customFieldValues.length + 2;
+
+          // Handle range filters for numbers (key_min, key_max)
+          if (key.endsWith('_min')) {
+            const fieldSlug = key.replace('_min', '');
+            customFieldConditions.push(`("customFields"->>'${fieldSlug}')::numeric >= $${paramIndex}`);
+            customFieldValues.push(value);
+          } else if (key.endsWith('_max')) {
+            const fieldSlug = key.replace('_max', '');
+            customFieldConditions.push(`("customFields"->>'${fieldSlug}')::numeric <= $${paramIndex}`);
+            customFieldValues.push(value);
+          } else if (key.endsWith('_from')) {
+            const fieldSlug = key.replace('_from', '');
+            customFieldConditions.push(`"customFields"->>'${fieldSlug}' >= $${paramIndex}`);
+            customFieldValues.push(value);
+          } else if (key.endsWith('_to')) {
+            const fieldSlug = key.replace('_to', '');
+            customFieldConditions.push(`"customFields"->>'${fieldSlug}' <= $${paramIndex}`);
+            customFieldValues.push(value);
+          } else if (typeof value === 'boolean') {
+            customFieldConditions.push(`("customFields"->>'${key}')::boolean = $${paramIndex}`);
+            customFieldValues.push(value);
+          } else if (typeof value === 'string') {
+            // Case-insensitive partial match for text fields
+            customFieldConditions.push(`LOWER("customFields"->>'${key}') LIKE LOWER($${paramIndex})`);
+            customFieldValues.push(`%${value}%`);
+          } else {
+            customFieldConditions.push(`"customFields"->>'${key}' = $${paramIndex}`);
+            customFieldValues.push(String(value));
+          }
+        }
+
+        console.log('[LeadService] Custom field SQL conditions:', customFieldConditions);
+        console.log('[LeadService] Custom field values:', customFieldValues);
+
+        // If we have custom field conditions, we need to get matching lead IDs first
+        if (customFieldConditions.length > 0) {
+          const sqlCondition = customFieldConditions.join(' AND ');
+          const matchingLeadIds = await prisma.$queryRawUnsafe<{ id: string }[]>(
+            `SELECT id FROM "leads" WHERE "organizationId" = $1 AND "customFields" IS NOT NULL AND ${sqlCondition}`,
+            filter.organizationId,
+            ...customFieldValues
+          );
+
+          console.log('[LeadService] Matching lead IDs:', matchingLeadIds.map(l => l.id));
+
+          if (matchingLeadIds.length === 0) {
+            // No matches, return empty result
+            return { leads: [], total: 0 };
+          }
+
+          // Add ID filter to where clause
+          where.id = { in: matchingLeadIds.map(l => l.id) };
+        }
+      }
     }
 
     const [leads, total] = await Promise.all([
@@ -311,11 +581,21 @@ export class LeadService {
           stage: {
             select: { id: true, name: true, color: true },
           },
+          pipelineStage: {
+            select: { id: true, name: true, color: true, stageType: true },
+          },
           assignments: {
             where: { isActive: true },
             include: {
               assignedTo: {
                 select: { id: true, firstName: true, lastName: true, email: true },
+              },
+            },
+          },
+          tagAssignments: {
+            include: {
+              tag: {
+                select: { id: true, name: true, color: true, slug: true },
               },
             },
           },
@@ -359,9 +639,74 @@ export class LeadService {
       updateData.convertedAt = new Date();
     }
 
+    // Define fields that exist in the Lead Prisma model
+    const leadModelFields = [
+      'firstName', 'lastName', 'email', 'phone', 'alternatePhone', 'alternateEmail',
+      'source', 'sourceDetails', 'channelId', 'stageId', 'subStageId', 'priority',
+      'pipelineStageId', 'pipelineEnteredAt', 'pipelineDaysInStage',
+      'gender', 'dateOfBirth', 'address', 'city', 'state', 'country', 'pincode',
+      'expectedValue', 'actualValue', 'customFields', 'interests',
+      'phoneVerified', 'isReEnquiry', 'aiScore', 'aiGrade', 'aiConfidence',
+      'isConverted', 'convertedAt', 'notes', 'orgBranchId',
+      // Education fields (if model supports them)
+      'admissionStatus', 'admissionType', 'expectedFee', 'actualFee',
+      'commissionPercentage', 'commissionAmount', 'donationAmount',
+      'enrollmentNumber', 'academicYear', 'preferredUniversities',
+      // Family & Contact Details (direct columns)
+      'fatherName', 'fatherPhone', 'motherName', 'motherPhone',
+      'whatsapp', 'occupation', 'budget', 'preferredContactMethod', 'preferredContactTime',
+    ];
+
+    // Valid LeadSource values
+    const validLeadSources = [
+      'MANUAL', 'BULK_UPLOAD', 'FORM', 'LANDING_PAGE', 'CHATBOT',
+      'AD_FACEBOOK', 'AD_INSTAGRAM', 'AD_LINKEDIN', 'AD_GOOGLE', 'AD_YOUTUBE', 'AD_TWITTER', 'AD_TIKTOK',
+      'AI_VOICE_AGENT', 'AI_VOICE_INBOUND', 'AI_VOICE_OUTBOUND',
+      'REFERRAL', 'WEBSITE', 'SHIKSHA', 'COLLEGEDUNIA', 'API'
+    ];
+
+    // Separate model fields from custom fields
+    const modelData: Record<string, unknown> = {};
+    const extraFields: Record<string, unknown> = {};
+
+    // Decimal fields that need empty string -> null conversion
+    const decimalFields = ['budget', 'expectedValue', 'actualValue', 'expectedFee', 'actualFee',
+      'commissionPercentage', 'commissionAmount', 'donationAmount', 'aiScore', 'aiConfidence'];
+
+    for (const [key, value] of Object.entries(updateData)) {
+      if (leadModelFields.includes(key)) {
+        // Skip empty or invalid source values
+        if (key === 'source' && (!value || !validLeadSources.includes(value as string))) {
+          continue;
+        }
+        // Handle dateOfBirth conversion
+        if (key === 'dateOfBirth' && value && typeof value === 'string') {
+          modelData[key] = new Date(value);
+        } else if (decimalFields.includes(key)) {
+          // Convert empty strings to null for decimal fields
+          if (value === '' || value === null || value === undefined) {
+            modelData[key] = null;
+          } else {
+            modelData[key] = value;
+          }
+        } else {
+          modelData[key] = value;
+        }
+      } else if (key !== 'organizationId') {
+        // Store non-model fields in customFields
+        extraFields[key] = value;
+      }
+    }
+
+    // Merge extra fields into customFields
+    if (Object.keys(extraFields).length > 0) {
+      const existingCustomFields = (lead.customFields as Record<string, unknown>) || {};
+      modelData.customFields = { ...existingCustomFields, ...extraFields };
+    }
+
     const updatedLead = await prisma.lead.update({
       where: { id },
-      data: updateData,
+      data: modelData,
       include: {
         assignments: {
           where: { isActive: true },

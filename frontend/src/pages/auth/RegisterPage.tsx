@@ -14,6 +14,10 @@ import {
   ExclamationCircleIcon,
   LinkIcon,
   CheckCircleIcon,
+  BriefcaseIcon,
+  UsersIcon,
+  ChartBarIcon,
+  GlobeAltIcon,
 } from '@heroicons/react/24/outline';
 
 interface RegisterFormData {
@@ -26,7 +30,67 @@ interface RegisterFormData {
   confirmPassword: string;
   phone?: string;
   planId?: string;
+  industry: string;
+  teamSize: string;
+  expectedLeadsPerMonth?: string;
+  country: string;
+  agreeToTerms: boolean;
 }
+
+// Industry options
+const industryOptions = [
+  { value: 'EDUCATION', label: 'Education & Training', description: 'Schools, Colleges, Coaching Centers' },
+  { value: 'REAL_ESTATE', label: 'Real Estate', description: 'Property, Builders, Brokers' },
+  { value: 'HEALTHCARE', label: 'Healthcare', description: 'Hospitals, Clinics, Labs' },
+  { value: 'INSURANCE', label: 'Insurance', description: 'Insurance Agents, Brokers' },
+  { value: 'FINANCE', label: 'Finance & Banking', description: 'Loans, Investments, Banking' },
+  { value: 'AUTOMOTIVE', label: 'Automotive', description: 'Car Dealers, Service Centers' },
+  { value: 'IT_SERVICES', label: 'IT & Software', description: 'IT Services, Software Companies' },
+  { value: 'RECRUITMENT', label: 'Recruitment & HR', description: 'Staffing, HR Consultants' },
+  { value: 'ECOMMERCE', label: 'E-Commerce', description: 'Online Stores, D2C Brands' },
+  { value: 'GENERAL', label: 'Other / General', description: 'Other Business Types' },
+];
+
+// Team size options
+const teamSizeOptions = [
+  { value: '1', label: 'Just me' },
+  { value: '2-5', label: '2-5 users' },
+  { value: '6-10', label: '6-10 users' },
+  { value: '11-25', label: '11-25 users' },
+  { value: '26-50', label: '26-50 users' },
+  { value: '51-100', label: '51-100 users' },
+  { value: '100+', label: '100+ users' },
+];
+
+// Expected leads per month
+const leadsPerMonthOptions = [
+  { value: '0-100', label: 'Less than 100' },
+  { value: '100-500', label: '100-500' },
+  { value: '500-1000', label: '500-1,000' },
+  { value: '1000-5000', label: '1,000-5,000' },
+  { value: '5000-10000', label: '5,000-10,000' },
+  { value: '10000+', label: '10,000+' },
+];
+
+// Country options (common countries first, then alphabetical)
+const countryOptions = [
+  { value: 'India', label: 'India' },
+  { value: 'United States', label: 'United States' },
+  { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Singapore', label: 'Singapore' },
+  { value: 'UAE', label: 'United Arab Emirates' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'France', label: 'France' },
+  { value: 'Netherlands', label: 'Netherlands' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'South Korea', label: 'South Korea' },
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'South Africa', label: 'South Africa' },
+  { value: 'Other', label: 'Other' },
+];
 
 const planDetails: Record<string, { name: string; features: string[] }> = {
   free: {
@@ -82,6 +146,11 @@ export default function RegisterPage() {
   } = useForm<RegisterFormData>({
     defaultValues: {
       planId: selectedPlan,
+      industry: 'GENERAL',
+      teamSize: '2-5',
+      expectedLeadsPerMonth: '100-500',
+      country: 'India',
+      agreeToTerms: false,
     },
   });
 
@@ -89,9 +158,16 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterFormData) => {
     dispatch(clearError());
-    const { confirmPassword, ...registerData } = data;
-    // Include the plan from URL
-    await dispatch(registerAction({ ...registerData, planId: selectedPlan }));
+    const { confirmPassword, agreeToTerms, ...registerData } = data;
+    // Include all registration data (exclude confirmPassword and agreeToTerms)
+    await dispatch(registerAction({
+      ...registerData,
+      planId: selectedPlan,
+      industry: data.industry,
+      teamSize: data.teamSize,
+      expectedLeadsPerMonth: data.expectedLeadsPerMonth,
+      country: data.country,
+    }));
   };
 
   const generateSlug = (name: string) => {
@@ -247,6 +323,80 @@ export default function RegisterPage() {
           )}
         </div>
 
+        {/* Industry Selection */}
+        <div>
+          <label htmlFor="industry" className="label">
+            Industry Type
+          </label>
+          <div className="relative">
+            <BriefcaseIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
+            <select
+              id="industry"
+              {...register('industry', {
+                required: 'Please select your industry',
+              })}
+              className={`input pl-11 appearance-none ${errors.industry ? 'input-error' : ''}`}
+            >
+              {industryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} - {option.description}
+                </option>
+              ))}
+            </select>
+          </div>
+          {errors.industry && (
+            <p className="error-text">{errors.industry.message}</p>
+          )}
+        </div>
+
+        {/* Team Size & Expected Leads */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="teamSize" className="label">
+              Team Size
+            </label>
+            <div className="relative">
+              <UsersIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
+              <select
+                id="teamSize"
+                {...register('teamSize', {
+                  required: 'Please select team size',
+                })}
+                className={`input pl-11 appearance-none ${errors.teamSize ? 'input-error' : ''}`}
+              >
+                {teamSizeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {errors.teamSize && (
+              <p className="error-text">{errors.teamSize.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="expectedLeadsPerMonth" className="label">
+              Expected Leads/Month
+            </label>
+            <div className="relative">
+              <ChartBarIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
+              <select
+                id="expectedLeadsPerMonth"
+                {...register('expectedLeadsPerMonth')}
+                className="input pl-11 appearance-none"
+              >
+                {leadsPerMonthOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* Email */}
         <div>
           <label htmlFor="email" className="label">
@@ -274,20 +424,47 @@ export default function RegisterPage() {
           )}
         </div>
 
-        {/* Phone */}
-        <div>
-          <label htmlFor="phone" className="label">
-            {t('auth:register.phoneLabel')} <span className="text-slate-400 font-normal">({t('common:optional')})</span>
-          </label>
-          <div className="relative">
-            <PhoneIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              id="phone"
-              type="tel"
-              placeholder={t('auth:register.phonePlaceholder')}
-              {...register('phone')}
-              className="input pl-11"
-            />
+        {/* Phone & Country */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="phone" className="label">
+              {t('auth:register.phoneLabel')} <span className="text-slate-400 font-normal">({t('common:optional')})</span>
+            </label>
+            <div className="relative">
+              <PhoneIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                id="phone"
+                type="tel"
+                placeholder={t('auth:register.phonePlaceholder')}
+                {...register('phone')}
+                className="input pl-11"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="country" className="label">
+              Country
+            </label>
+            <div className="relative">
+              <GlobeAltIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
+              <select
+                id="country"
+                {...register('country', {
+                  required: 'Please select your country',
+                })}
+                className={`input pl-11 appearance-none ${errors.country ? 'input-error' : ''}`}
+              >
+                {countryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {errors.country && (
+              <p className="error-text">{errors.country.message}</p>
+            )}
           </div>
         </div>
 
@@ -342,6 +519,31 @@ export default function RegisterPage() {
             <p className="error-text">{errors.confirmPassword.message}</p>
           )}
         </div>
+
+        {/* Terms & Conditions */}
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            id="agreeToTerms"
+            {...register('agreeToTerms', {
+              required: 'You must agree to the Terms of Service and Privacy Policy',
+            })}
+            className="mt-1 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+          />
+          <label htmlFor="agreeToTerms" className="text-sm text-slate-600">
+            I agree to the{' '}
+            <Link to="/terms" className="text-primary-600 hover:text-primary-700 underline" target="_blank">
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link to="/privacy" className="text-primary-600 hover:text-primary-700 underline" target="_blank">
+              Privacy Policy
+            </Link>
+          </label>
+        </div>
+        {errors.agreeToTerms && (
+          <p className="error-text -mt-2">{errors.agreeToTerms.message}</p>
+        )}
 
         {/* Submit */}
         <button

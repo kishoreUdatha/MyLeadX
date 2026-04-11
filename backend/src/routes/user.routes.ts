@@ -101,9 +101,9 @@ router.post(
   userController.create.bind(userController)
 );
 
+// All authenticated users can list users (needed for dropdowns/filters)
 router.get(
   '/',
-  authorize('admin'),
   validate(listUsersValidation),
   userController.findAll.bind(userController)
 );

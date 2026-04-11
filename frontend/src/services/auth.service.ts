@@ -22,6 +22,10 @@ export interface RegisterData {
   lastName: string;
   phone?: string;
   planId?: string;
+  industry: string;
+  teamSize: string;
+  expectedLeadsPerMonth?: string;
+  country: string;
 }
 
 export interface AuthResponse {
@@ -32,7 +36,9 @@ export interface AuthResponse {
     lastName: string;
     organizationId: string;
     organizationName: string;
+    organizationSlug: string;
     role: string;
+    permissions: string[];
     onboardingCompleted?: boolean;
     organizationIndustry?: string | null;
   };
@@ -40,6 +46,8 @@ export interface AuthResponse {
   // These fields are kept for backward compatibility but may be undefined
   accessToken?: string;
   refreshToken?: string;
+  // Tenant URL for subdomain redirect
+  tenantUrl?: string;
 }
 
 export const authService = {

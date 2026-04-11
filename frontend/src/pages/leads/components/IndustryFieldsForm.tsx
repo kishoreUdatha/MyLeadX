@@ -13,6 +13,8 @@ import {
   ShoppingCartIcon,
   CheckIcon,
   ExclamationCircleIcon,
+  PencilIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import industryFieldsService, { IndustryField, IndustryFieldConfig } from '../../../services/industry-fields.service';
@@ -46,10 +48,12 @@ export function IndustryFieldsForm({
 }: IndustryFieldsFormProps) {
   const [fieldConfig, setFieldConfig] = useState<IndustryFieldConfig | null>(null);
   const [values, setValues] = useState<Record<string, any>>(initialValues);
+  const [originalValues, setOriginalValues] = useState<Record<string, any>>(initialValues);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Fetch field schema and current values
   useEffect(() => {
@@ -62,7 +66,9 @@ export function IndustryFieldsForm({
         ]);
 
         setFieldConfig(schemaRes.data);
-        setValues(fieldsRes.data.customFields || {});
+        const customFields = fieldsRes.data.customFields || {};
+        setValues(customFields);
+        setOriginalValues(customFields);
       } catch (error) {
         console.error('Failed to fetch industry fields:', error);
         toast.error('Failed to load industry fields');
@@ -94,6 +100,8 @@ export function IndustryFieldsForm({
         setErrors(result.data.validationWarnings);
       } else {
         toast.success('Custom fields saved successfully');
+        setIsEditing(false);
+        setOriginalValues(values);
       }
 
       setHasChanges(false);
@@ -102,6 +110,43 @@ export function IndustryFieldsForm({
       toast.error(error.message || 'Failed to save custom fields');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Handle cancel edit
+  const handleCancel = () => {
+    setValues(originalValues);
+    setHasChanges(false);
+    setErrors([]);
+    setIsEditing(false);
+  };
+
+  // Format value for read-only display
+  const formatDisplayValue = (field: IndustryField, value: any): string => {
+    if (value === null || value === undefined || value === '') return '--';
+
+    switch (field.type) {
+      case 'currency':
+        return `₹${Number(value).toLocaleString()}`;
+      case 'boolean':
+        return value ? 'Yes' : 'No';
+      case 'date':
+        return value ? new Date(value).toLocaleDateString() : '--';
+      case 'select':
+        if (field.options) {
+          const option = field.options.find(opt => opt.value === value);
+          return option?.label || String(value);
+        }
+        return String(value);
+      case 'multiselect':
+        if (Array.isArray(value) && field.options) {
+          return value
+            .map(v => field.options?.find(opt => opt.value === v)?.label || v)
+            .join(', ') || '--';
+        }
+        return Array.isArray(value) ? value.join(', ') : String(value);
+      default:
+        return String(value);
     }
   };
 
@@ -348,6 +393,8 @@ export function IndustryFieldsForm({
 
   const IndustryIcon = industryIcons[fieldConfig.icon] || BuildingOffice2Icon;
 
+  const isInEditMode = isEditing && !readOnly;
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200">
       {/* Header */}
@@ -361,24 +408,48 @@ export function IndustryFieldsForm({
             {fieldConfig.label} Details
           </h3>
         </div>
-        {!readOnly && hasChanges && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium transition-colors disabled:opacity-50"
-          >
-            {saving ? (
+
+        {/* Action Buttons */}
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            {isInEditMode ? (
               <>
-                <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
-                Saving...
+                <button
+                  onClick={handleCancel}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors disabled:opacity-50"
+                >
+                  <XMarkIcon className="h-3.5 w-3.5" />
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !hasChanges}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium transition-colors disabled:opacity-50"
+                >
+                  {saving ? (
+                    <>
+                      <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckIcon className="h-3.5 w-3.5" />
+                      Save
+                    </>
+                  )}
+                </button>
               </>
             ) : (
-              <>
-                <CheckIcon className="h-3.5 w-3.5" />
-                Save Changes
-              </>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-primary-600 bg-primary-50 hover:bg-primary-100 text-xs font-medium transition-colors"
+              >
+                <PencilIcon className="h-3.5 w-3.5" />
+                Edit
+              </button>
             )}
-          </button>
+          </div>
         )}
       </div>
 
@@ -399,11 +470,24 @@ export function IndustryFieldsForm({
         </div>
       )}
 
-      {/* Fields Grid */}
+      {/* Fields Display/Edit */}
       <div className="p-6">
-        <div className={`grid gap-4 ${compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
-          {fieldConfig.fields.map(renderField)}
-        </div>
+        {isInEditMode ? (
+          /* Edit Mode - Show form fields */
+          <div className={`grid gap-4 ${compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+            {fieldConfig.fields.map(renderField)}
+          </div>
+        ) : (
+          /* Read-only Mode - Show formatted values */
+          <div className={`grid gap-4 ${compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'}`}>
+            {fieldConfig.fields.map((field) => (
+              <div key={field.key} className={field.gridSpan === 2 ? 'md:col-span-2' : ''}>
+                <label className="block text-sm text-slate-500 mb-1">{field.label}</label>
+                <p className="text-sm text-slate-900">{formatDisplayValue(field, values[field.key])}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

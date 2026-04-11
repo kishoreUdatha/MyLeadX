@@ -146,7 +146,7 @@ export class IndustryCustomFieldsService {
     await prisma.leadActivity.create({
       data: {
         leadId,
-        type: 'CUSTOM_FIELDS_UPDATED',
+        type: 'LEAD_DATA_UPDATED',
         title: 'Custom fields updated',
         description: `Updated ${Object.keys(customFields).length} custom field(s)`,
       },

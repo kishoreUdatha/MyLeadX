@@ -8,7 +8,9 @@ interface User {
   lastName: string;
   organizationId: string;
   organizationName: string;
+  organizationSlug: string;
   role: string;
+  permissions: string[];
   phone?: string;
   branchId?: string | null;
   branchName?: string | null;
@@ -22,6 +24,7 @@ interface AuthState {
   isLoading: boolean;
   isInitialized: boolean; // Track if we've checked auth status
   error: string | null;
+  tenantUrl: string | null; // URL with subdomain for redirect
 }
 
 // With httpOnly cookies, we can't check localStorage for auth status
@@ -32,6 +35,7 @@ const initialState: AuthState = {
   isLoading: false,
   isInitialized: false, // Set to true after first auth check
   error: null,
+  tenantUrl: null, // Set after login for subdomain redirect
 };
 
 export const login = createAsyncThunk(
@@ -103,6 +107,7 @@ const authSlice = createSlice({
       state.user = action.payload.user;
       state.isAuthenticated = true;
       state.isInitialized = true;
+      state.tenantUrl = action.payload.tenantUrl || null;
     });
     builder.addCase(login.rejected, (state, action) => {
       state.isLoading = false;
@@ -146,6 +151,7 @@ const authSlice = createSlice({
     builder.addCase(logout.fulfilled, (state) => {
       state.user = null;
       state.isAuthenticated = false;
+      state.tenantUrl = null;
     });
   },
 });

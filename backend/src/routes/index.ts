@@ -97,12 +97,25 @@ import branchRoutes from './branch.routes';
 import roleRoutes from './role.routes';
 import leadStageRoutes from './lead-stage.routes';
 import industryCustomFieldsRoutes from './industry-custom-fields.routes';
+import customFieldsRoutes from './custom-fields.routes';
+import paymentCategoriesRoutes from './payment-categories.routes';
 import leadDeduplicationRoutes from './lead-deduplication.routes';
 import leadRoutingRoutes from './lead-routing.routes';
 import leadTagsRoutes from './lead-tags.routes';
 import leadWorkflowRoutes from './lead-workflow.routes';
 import leadViewsRoutes from './lead-views.routes';
 import leadSlaRoutes from './lead-sla.routes';
+import leadSourceRoutes from './lead-source.routes';
+import leadReportsRoutes from './lead-reports.routes';
+import followUpReportsRoutes from './followup-reports.routes';
+import callReportsRoutes from './call-reports.routes';
+import paymentReportsRoutes from './payment-reports.routes';
+import admissionReportsRoutes from './admission-reports.routes';
+import userPerformanceReportsRoutes from './user-performance-reports.routes';
+import aiUsageReportsRoutes from './ai-usage-reports.routes';
+import campaignReportsRoutes from './campaign-reports.routes';
+import auditReportsRoutes from './audit-reports.routes';
+import followUpConfigRoutes from './follow-up-config.routes';
 import universityRoutes from './university.routes';
 import studentVisitRoutes from './student-visit.routes';
 import admissionRoutes from './admission.routes';
@@ -117,6 +130,7 @@ import fieldPermissionsRoutes from './field-permissions.routes';
 import salesForecastingRoutes from './sales-forecasting.routes';
 import collaborationRoutes from './collaboration.routes';
 import commissionRoutes from './commission.routes';
+import commissionConfigRoutes from './commission-config.routes';
 import unifiedInboxRoutes from './unified-inbox.routes';
 import predictiveAnalyticsRoutes from './predictive-analytics.routes';
 import customerHealthRoutes from './customer-health.routes';
@@ -143,6 +157,22 @@ import salesPlaybookRoutes from './sales-playbook.routes';
 import gamificationRoutes from './gamification.routes';
 import socialCrmRoutes from './social-crm.routes';
 import exportBiRoutes from './export-bi.routes';
+import teamMonitoringRoutes from './team-monitoring.routes';
+import industryTemplateRoutes from './industry-template.routes';
+import tenantConfigRoutes from './tenant-config.routes';
+import permissionRoutes from './permission.routes';
+import pipelineRoutes from './pipeline.routes';
+import dynamicFieldsRoutes from './dynamic-fields.routes';
+import leadPipelineRoutes from './lead-pipeline.routes';
+
+// Comprehensive Settings System
+import userPreferencesRoutes from './user-preferences.routes';
+import columnVisibilityRoutes from './column-visibility.routes';
+import retrySettingsRoutes from './retry-settings.routes';
+import leadPrioritySettingsRoutes from './lead-priority-settings.routes';
+import autoReportsRoutes from './auto-reports.routes';
+import notificationPreferencesRoutes from './notification-preferences.routes';
+import workSessionRoutes from './work-session.routes';
 
 const router = Router();
 
@@ -276,8 +306,50 @@ router.use('/roles', roleRoutes);
 // Lead Stage Management (Industry-specific)
 router.use('/lead-stages', leadStageRoutes);
 
+// Lead Source Management (Custom sources)
+router.use('/lead-sources', leadSourceRoutes);
+
+// Lead Reports (Tenant-scoped)
+router.use('/lead-reports', leadReportsRoutes);
+
+// Follow-up Reports (Tenant-scoped)
+router.use('/followup-reports', followUpReportsRoutes);
+
+// Call Reports (Tenant-scoped)
+router.use('/call-reports', callReportsRoutes);
+
+// Payment Reports (Tenant-scoped)
+router.use('/payment-reports', paymentReportsRoutes);
+
+// Admission Reports (Tenant-scoped)
+router.use('/admission-reports', admissionReportsRoutes);
+
+// User Performance Reports (Tenant-scoped)
+router.use('/user-performance-reports', userPerformanceReportsRoutes);
+
+// Work Session Management (Login/Logout, Breaks)
+router.use('/work-sessions', workSessionRoutes);
+
+// AI Usage Reports (Tenant-scoped)
+router.use('/ai-usage-reports', aiUsageReportsRoutes);
+
+// Campaign/Source Reports (Tenant-scoped)
+router.use('/campaign-reports', campaignReportsRoutes);
+
+// Audit Reports (Tenant-scoped)
+router.use('/audit-reports', auditReportsRoutes);
+
+// Follow-up Configuration
+router.use('/follow-up-config', followUpConfigRoutes);
+
 // Industry Custom Fields
 router.use('/industry-fields', industryCustomFieldsRoutes);
+
+// Custom Fields (Organization-specific)
+router.use('/custom-fields', customFieldsRoutes);
+
+// Payment Categories (Organization-specific)
+router.use('/payment-categories', paymentCategoriesRoutes);
 
 // Lead Management Features
 router.use('/lead-deduplication', leadDeduplicationRoutes);
@@ -300,6 +372,7 @@ router.use('/profit', profitRoutes);
 // Team Communication & Performance
 router.use('/team-messaging', teamMessagingRoutes);
 router.use('/team-management', teamManagementRoutes);
+router.use('/team-monitoring', teamMonitoringRoutes);
 router.use('/performance', performanceTargetsRoutes);
 
 // Quality Assurance
@@ -316,6 +389,7 @@ router.use('/collaboration', collaborationRoutes);
 
 // Commission Tracking
 router.use('/commissions', commissionRoutes);
+router.use('/commission-config', commissionConfigRoutes);
 
 // Unified Inbox (Multi-channel)
 router.use('/unified-inbox', unifiedInboxRoutes);
@@ -348,6 +422,26 @@ router.use('/playbooks', salesPlaybookRoutes);
 router.use('/gamification', gamificationRoutes);
 router.use('/social', socialCrmRoutes);
 router.use('/export-bi', exportBiRoutes);
+
+// Universal CRM - Industry Templates & Configuration
+router.use('/industry-templates', industryTemplateRoutes);
+router.use('/tenant-config', tenantConfigRoutes);
+
+// Enhanced Architecture - Permissions, Pipelines, Dynamic Fields
+router.use('/permissions', permissionRoutes);
+router.use('/pipelines', pipelineRoutes);
+router.use('/dynamic-fields', dynamicFieldsRoutes);
+
+// Unified Lead Pipeline System (connects leads to pipeline stages)
+router.use('/lead-pipeline', leadPipelineRoutes);
+
+// Comprehensive Settings System
+router.use('/settings', userPreferencesRoutes);
+router.use('/settings', columnVisibilityRoutes);
+router.use('/settings', retrySettingsRoutes);
+router.use('/settings', leadPrioritySettingsRoutes);
+router.use('/settings', autoReportsRoutes);
+router.use('/settings', notificationPreferencesRoutes);
 
 // Public API (versioned) - for external integrations
 router.use('/v1', publicApiRoutes);

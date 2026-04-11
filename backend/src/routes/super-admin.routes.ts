@@ -5,6 +5,9 @@ import { superAdminService } from '../services/super-admin.service';
 import { config } from '../config';
 import { validate } from '../middlewares/validate';
 import { prisma } from '../config/database';
+import { getAccessToken } from '../utils/cookies';
+import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
+import advancedRoutes from './super-admin-advanced.routes';
 
 // Validation rules
 const setupValidation = [
@@ -55,24 +58,67 @@ const bulkEmailValidation = [
 const router = Router();
 
 /**
- * Middleware to verify super admin token
+ * Middleware to verify super admin access
+ * Supports multiple authentication methods:
+ * 1. Dedicated super admin token with isSuperAdmin: true
+ * 2. Regular user token with 'super-admin' or 'platform-admin' role
+ * 3. Both cookie-based and Bearer token authentication
  */
 const verifySuperAdmin = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Try to get token from cookie first, then Authorization header
+    let token = getAccessToken(req);
+
+    // Fallback to Authorization header for legacy support
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
+    }
+
+    if (!token) {
       return res.status(401).json({ success: false, message: 'No token provided' });
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, config.jwt.secret) as any;
 
-    if (!decoded.isSuperAdmin) {
-      return res.status(403).json({ success: false, message: 'Not authorized as super admin' });
+    // Method 1: Dedicated super admin token
+    if (decoded.isSuperAdmin) {
+      (req as any).superAdmin = decoded;
+      return next();
     }
 
-    (req as any).superAdmin = decoded;
-    next();
+    // Method 2: Regular user with super-admin role
+    if (decoded.userId && decoded.roleSlug) {
+      const superAdminRoles = ['super-admin', 'super_admin', 'platform-admin', 'superadmin', 'platform_admin'];
+      if (superAdminRoles.includes(decoded.roleSlug.toLowerCase())) {
+        // Fetch user details for super admin context
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.userId },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            role: { select: { slug: true } },
+          },
+        });
+
+        if (user) {
+          (req as any).superAdmin = {
+            isSuperAdmin: true,
+            superAdminId: user.id,
+            userId: user.id,
+            email: user.email,
+            roleSlug: decoded.roleSlug,
+          };
+          return next();
+        }
+      }
+    }
+
+    return res.status(403).json({ success: false, message: 'Not authorized as super admin' });
   } catch (error) {
     return res.status(401).json({ success: false, message: 'Invalid token' });
   }
@@ -133,6 +179,14 @@ router.post('/login', validate(loginValidation), async (req: Request, res: Respo
     const { email, password } = req.body;
     const result = await superAdminService.login(email, password);
 
+    // Set httpOnly cookies for token storage (more secure)
+    if (result.accessToken && result.refreshToken) {
+      setAuthCookies(res, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+    }
+
     // Log audit
     await superAdminService.createAuditLog({
       actorType: 'superadmin',
@@ -144,9 +198,106 @@ router.post('/login', validate(loginValidation), async (req: Request, res: Respo
       userAgent: req.headers['user-agent'],
     });
 
-    res.json({ success: true, ...result });
+    // Return response without exposing tokens in body (they're in cookies)
+    res.json({
+      success: true,
+      admin: result.admin,
+      message: 'Login successful',
+    });
   } catch (error: any) {
     res.status(401).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /super-admin/logout
+ */
+router.post('/logout', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const superAdmin = (req as any).superAdmin;
+
+    // Clear httpOnly cookies
+    clearAuthCookies(res);
+
+    // Log audit
+    await superAdminService.createAuditLog({
+      actorType: 'superadmin',
+      actorId: superAdmin?.superAdminId,
+      action: 'logout',
+      description: 'Super admin logged out',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({ success: true, message: 'Logged out successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/me - Get current super admin info
+ */
+router.get('/me', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const superAdmin = (req as any).superAdmin;
+
+    // Check if this is a regular user with super-admin role
+    if (superAdmin.userId && superAdmin.roleSlug) {
+      const user = await prisma.user.findUnique({
+        where: { id: superAdmin.userId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          createdAt: true,
+          lastLoginAt: true,
+          role: { select: { name: true, slug: true } },
+        },
+      });
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Admin not found' });
+      }
+
+      return res.json({
+        success: true,
+        admin: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.phone,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          role: user.role?.name || 'Super Admin',
+        },
+      });
+    }
+
+    // Dedicated super admin from SuperAdmin table
+    const admin = await prisma.superAdmin.findUnique({
+      where: { id: superAdmin.superAdminId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+    });
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    res.json({ success: true, admin });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -209,6 +360,21 @@ router.get('/organizations/:id', verifySuperAdmin, validate([
   try {
     const org = await superAdminService.getOrganizationDetails(req.params.id);
     res.json({ success: true, organization: org });
+  } catch (error: any) {
+    res.status(404).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/tenants/:id - Get detailed tenant information
+ * Comprehensive tenant tracking with usage, billing, and activity
+ */
+router.get('/tenants/:id', verifySuperAdmin, validate([
+  param('id').isUUID().withMessage('Invalid tenant ID'),
+]), async (req: Request, res: Response) => {
+  try {
+    const tenant = await superAdminService.getTenantDetails(req.params.id);
+    res.json({ success: true, tenant });
   } catch (error: any) {
     res.status(404).json({ success: false, message: error.message });
   }
@@ -525,5 +691,9 @@ router.get('/export/audit-logs', verifySuperAdmin, async (req: Request, res: Res
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// ==================== ADVANCED FEATURES ====================
+// Mount advanced routes (all require super admin auth)
+router.use('/', verifySuperAdmin, advancedRoutes);
 
 export default router;

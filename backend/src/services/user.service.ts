@@ -31,6 +31,10 @@ interface UserFilter {
   roleSlug?: string;
   isActive?: boolean;
   search?: string;
+  // For role-based filtering
+  currentUserId?: string;
+  currentUserRole?: string;
+  currentUserBranchId?: string | null;
 }
 
 export class UserService {
@@ -121,6 +125,38 @@ export class UserService {
       organizationId: filter.organizationId,
     };
 
+    // Role-based data isolation
+    const normalizedRole = filter.currentUserRole?.toLowerCase().replace(/[_-]/g, '');
+
+    if (normalizedRole === 'manager' && filter.currentUserId) {
+      // Manager: see only users in their branch OR their direct reports
+      // First get team leads under this manager
+      const teamLeads = await prisma.user.findMany({
+        where: {
+          organizationId: filter.organizationId,
+          managerId: filter.currentUserId,
+          role: { slug: { in: ['team_lead', 'team_leader'] } },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const teamLeadIds = teamLeads.map(tl => tl.id);
+
+      // Manager can see: themselves, their direct reports, and reports of their team leads
+      where.OR = [
+        { id: filter.currentUserId }, // Themselves
+        { managerId: filter.currentUserId }, // Direct reports
+        ...(teamLeadIds.length > 0 ? [{ managerId: { in: teamLeadIds } }] : []), // Reports of their team leads
+      ];
+    } else if ((normalizedRole === 'teamlead' || normalizedRole === 'teamleader') && filter.currentUserId) {
+      // Team Lead: see only themselves and their direct reports
+      where.OR = [
+        { id: filter.currentUserId }, // Themselves
+        { managerId: filter.currentUserId }, // Direct reports
+      ];
+    }
+    // Admin/Super Admin: no additional filtering (see all users in organization)
+
     if (filter.roleSlug) {
       where.role = { slug: filter.roleSlug };
     }
@@ -130,11 +166,21 @@ export class UserService {
     }
 
     if (filter.search) {
-      where.OR = [
-        { firstName: { contains: filter.search, mode: 'insensitive' } },
-        { lastName: { contains: filter.search, mode: 'insensitive' } },
-        { email: { contains: filter.search, mode: 'insensitive' } },
-      ];
+      // If we already have an OR clause for role-based filtering, wrap it in AND
+      const searchCondition = {
+        OR: [
+          { firstName: { contains: filter.search, mode: 'insensitive' as const } },
+          { lastName: { contains: filter.search, mode: 'insensitive' as const } },
+          { email: { contains: filter.search, mode: 'insensitive' as const } },
+        ],
+      };
+
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, searchCondition];
+        delete where.OR;
+      } else {
+        where.OR = searchCondition.OR;
+      }
     }
 
     const [users, total] = await Promise.all([
@@ -335,6 +381,10 @@ export class UserService {
         lastName: true,
         email: true,
         managerId: true,
+        branchId: true,
+        branch: {
+          select: { id: true, name: true },
+        },
         manager: {
           select: { firstName: true, lastName: true },
         },
@@ -353,6 +403,8 @@ export class UserService {
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
+      branchId: user.branchId,
+      branchName: user.branch?.name || null,
       managerName: user.manager ? `${user.manager.firstName} ${user.manager.lastName}` : null,
       activeRecordCount: user._count.rawImportsAssignedTo,
     }));
@@ -370,8 +422,8 @@ export class UserService {
     const users = await prisma.user.findMany({
       where: {
         organizationId,
-        // Include admin, manager, and team_lead as potential managers
-        role: { slug: { in: ['admin', 'manager', 'team_lead'] } },
+        // Include admin, manager, and team_lead/team_leader as potential managers
+        role: { slug: { in: ['admin', 'manager', 'team_lead', 'team_leader'] } },
         isActive: true,
       },
       select: {

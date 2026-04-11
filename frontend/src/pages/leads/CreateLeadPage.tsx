@@ -16,7 +16,9 @@ import {
   MapPinIcon,
   TagIcon,
   CheckCircleIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
+import { CustomFieldsRenderer } from '../../components/CustomFieldsRenderer';
 import { RootState } from '../../store';
 import api from '../../services/api';
 
@@ -116,6 +118,7 @@ export default function CreateLeadPage() {
     notes: '',
     customFields: {} as Record<string, any>,
   });
+  const [emailError, setEmailError] = useState('');
 
   // Fetch stages and industry on mount
   useEffect(() => {
@@ -148,9 +151,24 @@ export default function CreateLeadPage() {
     }
   };
 
+  // Email validation helper
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+
+    // Real-time email validation
+    if (name === 'email') {
+      if (value.trim() && !isValidEmail(value.trim())) {
+        setEmailError('Please enter a valid email address');
+      } else {
+        setEmailError('');
+      }
+    }
   };
 
   const handleCustomFieldChange = (key: string, value: any) => {
@@ -170,6 +188,11 @@ export default function CreateLeadPage() {
     }
     if (!formData.phone.trim()) {
       toast.error('Phone number is required');
+      return;
+    }
+    // Email validation - only validate if email is provided
+    if (formData.email.trim() && !isValidEmail(formData.email.trim())) {
+      toast.error('Please enter a valid email address');
       return;
     }
 
@@ -309,8 +332,15 @@ export default function CreateLeadPage() {
                   value={formData.email}
                   onChange={handleInputChange}
                   placeholder="email@example.com"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 ${
+                    emailError
+                      ? 'border-red-500 focus:ring-red-500 focus:border-red-500'
+                      : 'border-slate-200 focus:ring-primary-500 focus:border-primary-500'
+                  }`}
                 />
+                {emailError && (
+                  <p className="mt-1 text-sm text-red-500">{emailError}</p>
+                )}
               </div>
 
               <div>
@@ -456,6 +486,18 @@ export default function CreateLeadPage() {
               </div>
             </div>
           )}
+
+          {/* Custom Fields (from Settings > Custom Contact Property) */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <DocumentTextIcon className="w-5 h-5 text-primary-600" />
+              Custom Fields
+            </h2>
+            <CustomFieldsRenderer
+              values={formData.customFields}
+              onChange={handleCustomFieldChange}
+            />
+          </div>
 
           {/* Submit Buttons */}
           <div className="flex items-center justify-end gap-4">

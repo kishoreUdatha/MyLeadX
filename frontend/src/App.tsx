@@ -65,13 +65,50 @@ import {
   HybridInboxPage,
   InboundCallsPage,
 } from './pages/hybrid-agent';
-import { AutoAssignSettingsPage, AssignmentSchedulePage, SmsSettingsPage, InstitutionSettingsPage, WhatsAppSettingsPage, VoiceMinutesPage, NotificationChannelsPage, CalendarSettingsPage, EmailSequencesPage, CRMIntegrationPage, PostCallMessagingPage, IntegrationCredentialsPage, FieldPermissionsPage } from './pages/settings';
+import {
+  AutoAssignSettingsPage, AssignmentSchedulePage, SmsSettingsPage, InstitutionSettingsPage,
+  WhatsAppSettingsPage, VoiceMinutesPage, NotificationChannelsPage, CalendarSettingsPage,
+  EmailSequencesPage, CRMIntegrationPage, PostCallMessagingPage, IntegrationCredentialsPage,
+  FieldPermissionsPage, LeadSourcesSettingsPage, FollowUpConfigPage, CustomFieldsConfigPage,
+  EmailTemplateBuilderPage, WhatsAppTemplateBuilderPage, AIScriptBuilderPage, WorkflowConfigPage,
+  PaymentCategoriesPage, IndustryTemplatesPage, TenantLabelConfigPage, PipelineSettingsPage, TagManagementPage,
+  // New Settings Pages
+  SettingsPage, ProfileSettingsPage, PreferencesPage, AccessibilityPage,
+  AutomaticReportsPage, ManageColumnsPage, RetrySettingsPage, LeadPriorityPage,
+  CustomContactPropertyPage, NotificationPreferencesPage, RolesPermissionsPage
+} from './pages/settings';
 import BranchesPage from './pages/settings/BranchesPage';
 import BranchFormPage from './pages/settings/BranchFormPage';
 import IntegrationSettingsPage from './pages/settings/IntegrationSettingsPage';
 import IndustrySettingsPage from './pages/settings/IndustrySettingsPage';
 import LeadManagementSettingsPage from './pages/settings/LeadManagementSettingsPage';
-import { ReportsPage } from './pages/reports';
+import {
+  ReportsPage,
+  ReportsListingPage,
+  PaymentReportsPage,
+  AdmissionReportsPage,
+  UserPerformanceReportsPage,
+  AIUsageReportsPage,
+  CampaignReportsPage,
+  AuditReportsPage,
+  // User Reports (10)
+  UserReportPage,
+  UserActivityReportPage,
+  LeadDispositionReportPage,
+  UserStageReportPage,
+  UserCallReportPage,
+  FollowUpReportPage,
+  LoginReportPage,
+  MessageActivityReportPage,
+  UserDealReportPage,
+  UserTaskReportPage,
+  // Campaign Reports (5)
+  CampaignReportPage,
+  CampaignLeadReportPage,
+  CampaignStageReportPage,
+  CampaignDealReportPage,
+  CampaignSourceReportPage,
+} from './pages/reports';
 import { RolesListPage } from './pages/roles';
 import { SocialMediaAdsPage, InstagramLeadSetupPage, AdIntegrationsPage, FacebookSetupPage, LinkedInSetupPage, GoogleAdsSetupPage, YouTubeSetupPage, TwitterSetupPage, TikTokSetupPage, WebhookUrlsPage } from './pages/ads';
 import { ApifyDashboardPage, ApifyJobsPage, ApifySmartScrapePage, ApifyRecordsPage } from './pages/apify';
@@ -136,12 +173,14 @@ import { IndianLeadSourcesPage, ZapierIntegrationPage } from './pages/integratio
 import { PaymentsDashboard } from './pages/payments';
 import { TeamMessagingPage } from './pages/team-messaging';
 import { TeamManagementDashboard } from './pages/team-management';
+import { TeamMonitoringPage } from './pages/team-monitoring';
 import { QADashboardPage } from './pages/qa';
 import { PerformanceTargetsPage } from './pages/performance';
 import { PendingApprovalsPage, ApprovalWorkflowsPage } from './pages/approvals';
 import { VisualRuleBuilderPage } from './pages/lead-routing';
 import { ActivityFeedPage } from './pages/collaboration';
 import { CommissionDashboardPage } from './pages/commissions';
+import CommissionSettingsPage from './pages/settings/CommissionSettingsPage';
 import { UnifiedInboxPage } from './pages/unified-inbox';
 import { PredictiveAnalyticsDashboard } from './pages/predictive-analytics';
 import { CustomerHealthDashboard } from './pages/customer-health';
@@ -151,6 +190,7 @@ import { DealIntelligenceDashboard } from './pages/deal-intelligence';
 import ReportBuilderPage from './pages/reports/ReportBuilderPage';
 import WorkflowBuilderPage from './pages/workflows/WorkflowBuilderPage';
 import PipelineKanbanPage from './pages/pipeline/PipelineKanbanPage';
+import LeadPipelinePage from './pages/pipeline/LeadPipelinePage';
 import BatchOperationsPage from './pages/batch-operations/BatchOperationsPage';
 import AlertsPage from './pages/alerts/AlertsPage';
 
@@ -185,6 +225,9 @@ import {
 import { UniversitiesPage } from './pages/universities';
 import { StudentVisitsPage } from './pages/student-visits';
 import { AdmissionsPage } from './pages/admissions';
+import { CoursesPage } from './pages/courses';
+import { FeesPage } from './pages/fees';
+import { ScholarshipsPage } from './pages/scholarships';
 import { ExpensesPage } from './pages/expenses';
 import { ProfitDashboardPage } from './pages/profit';
 
@@ -200,6 +243,14 @@ import {
   OrganizationDetailPage as SuperAdminOrganizationDetailPage,
   RevenuePage as SuperAdminRevenuePage,
   BulkEmailPage as SuperAdminBulkEmailPage,
+  RealtimePage as SuperAdminRealtimePage,
+  IntelligencePage as SuperAdminIntelligencePage,
+  FinancialPage as SuperAdminFinancialPage,
+  FeatureFlagsPage as SuperAdminFeatureFlagsPage,
+  WhiteLabelPage as SuperAdminWhiteLabelPage,
+  SupportToolsPage as SuperAdminSupportToolsPage,
+  CompliancePage as SuperAdminCompliancePage,
+  SystemPage as SuperAdminSystemPage,
 } from './pages/super-admin';
 import { superAdminService } from './services/super-admin.service';
 
@@ -452,6 +503,18 @@ function App() {
         <Route path="settings/institution" element={<InstitutionSettingsPage />} />
         <Route path="settings/industry" element={<IndustrySettingsPage />} />
         <Route path="settings/lead-management" element={<LeadManagementSettingsPage />} />
+        <Route path="settings/pipelines" element={<PipelineSettingsPage />} />
+        <Route path="settings/tags" element={<TagManagementPage />} />
+        <Route path="settings/lead-sources" element={<LeadSourcesSettingsPage />} />
+        <Route path="settings/follow-up-config" element={<FollowUpConfigPage />} />
+        <Route path="settings/custom-fields" element={<CustomFieldsConfigPage />} />
+        <Route path="settings/email-templates" element={<EmailTemplateBuilderPage />} />
+        <Route path="settings/whatsapp-templates" element={<WhatsAppTemplateBuilderPage />} />
+        <Route path="settings/ai-scripts" element={<AIScriptBuilderPage />} />
+        <Route path="settings/workflows" element={<WorkflowConfigPage />} />
+        <Route path="settings/payment-categories" element={<PaymentCategoriesPage />} />
+        <Route path="settings/industry-templates" element={<IndustryTemplatesPage />} />
+        <Route path="settings/crm-customization" element={<TenantLabelConfigPage />} />
         <Route path="settings/lead-routing" element={<VisualRuleBuilderPage />} />
         <Route path="settings/field-permissions" element={<FieldPermissionsPage />} />
         <Route path="settings/whatsapp" element={<WhatsAppSettingsPage />} />
@@ -466,7 +529,44 @@ function App() {
         <Route path="settings/branches" element={<BranchesPage />} />
         <Route path="settings/branches/new" element={<BranchFormPage />} />
         <Route path="settings/branches/:id/edit" element={<BranchFormPage />} />
-        <Route path="reports" element={<ReportsPage />} />
+        {/* New Settings Pages */}
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/profile" element={<ProfileSettingsPage />} />
+        <Route path="settings/preferences" element={<PreferencesPage />} />
+        <Route path="settings/accessibility" element={<AccessibilityPage />} />
+        <Route path="settings/automatic-reports" element={<AutomaticReportsPage />} />
+        <Route path="settings/manage-columns" element={<ManageColumnsPage />} />
+        <Route path="settings/retry-settings" element={<RetrySettingsPage />} />
+        <Route path="settings/lead-priority" element={<LeadPriorityPage />} />
+        <Route path="settings/custom-contact-property" element={<CustomContactPropertyPage />} />
+        <Route path="settings/notification-preferences" element={<NotificationPreferencesPage />} />
+        <Route path="settings/roles-permissions" element={<RolesPermissionsPage />} />
+        <Route path="settings/pipeline" element={<PipelineSettingsPage />} />
+        <Route path="reports" element={<ReportsListingPage />} />
+        <Route path="reports/old" element={<ReportsPage />} />
+        <Route path="reports/payments" element={<PaymentReportsPage />} />
+        <Route path="reports/admissions" element={<AdmissionReportsPage />} />
+        <Route path="reports/user-performance" element={<UserPerformanceReportsPage />} />
+        <Route path="reports/ai-usage" element={<AIUsageReportsPage />} />
+        <Route path="reports/campaigns" element={<CampaignReportsPage />} />
+        <Route path="reports/audit" element={<AuditReportsPage />} />
+        {/* User Reports (10) */}
+        <Route path="reports/user" element={<UserReportPage />} />
+        <Route path="reports/user-activity" element={<UserActivityReportPage />} />
+        <Route path="reports/lead-disposition" element={<LeadDispositionReportPage />} />
+        <Route path="reports/user-stage" element={<UserStageReportPage />} />
+        <Route path="reports/user-call" element={<UserCallReportPage />} />
+        <Route path="reports/followup" element={<FollowUpReportPage />} />
+        <Route path="reports/login" element={<LoginReportPage />} />
+        <Route path="reports/message-activity" element={<MessageActivityReportPage />} />
+        <Route path="reports/user-deal" element={<UserDealReportPage />} />
+        <Route path="reports/user-task" element={<UserTaskReportPage />} />
+        {/* Campaign Reports (5) */}
+        <Route path="reports/campaign" element={<CampaignReportPage />} />
+        <Route path="reports/campaign-lead" element={<CampaignLeadReportPage />} />
+        <Route path="reports/campaign-stage" element={<CampaignStageReportPage />} />
+        <Route path="reports/campaign-deal" element={<CampaignDealReportPage />} />
+        <Route path="reports/campaign-source" element={<CampaignSourceReportPage />} />
         <Route path="social-media-ads" element={<SocialMediaAdsPage />} />
         <Route path="ad-integrations" element={<AdIntegrationsPage />} />
         <Route path="webhook-urls" element={<WebhookUrlsPage />} />
@@ -588,6 +688,7 @@ function App() {
         {/* Team Communication & Management */}
         <Route path="team-messaging" element={<TeamMessagingPage />} />
         <Route path="team-management" element={<TeamManagementDashboard />} />
+        <Route path="team-monitoring" element={<TeamMonitoringPage />} />
 
         {/* Quality Assurance */}
         <Route path="qa" element={<QADashboardPage />} />
@@ -597,6 +698,7 @@ function App() {
 
         {/* Commission Tracking */}
         <Route path="commissions" element={<CommissionDashboardPage />} />
+        <Route path="settings/commission" element={<CommissionSettingsPage />} />
 
         {/* Unified Inbox */}
         <Route path="unified-inbox" element={<UnifiedInboxPage />} />
@@ -611,7 +713,8 @@ function App() {
         {/* High-Priority CRM Features */}
         <Route path="report-builder" element={<ReportBuilderPage />} />
         <Route path="workflow-builder" element={<WorkflowBuilderPage />} />
-        <Route path="pipeline" element={<PipelineKanbanPage />} />
+        <Route path="pipeline" element={<LeadPipelinePage />} />
+        <Route path="pipeline/advanced" element={<PipelineKanbanPage />} />
         <Route path="batch-operations" element={<BatchOperationsPage />} />
         <Route path="alerts" element={<AlertsPage />} />
 
@@ -657,6 +760,9 @@ function App() {
         <Route path="universities" element={<UniversitiesPage />} />
         <Route path="student-visits" element={<StudentVisitsPage />} />
         <Route path="admissions" element={<AdmissionsPage />} />
+        <Route path="courses" element={<CoursesPage />} />
+        <Route path="fees" element={<FeesPage />} />
+        <Route path="scholarships" element={<ScholarshipsPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="profit" element={<ProfitDashboardPage />} />
       </Route>
@@ -676,6 +782,15 @@ function App() {
         <Route path="/super-admin/organizations/:id" element={<SuperAdminOrganizationDetailPage />} />
         <Route path="/super-admin/revenue" element={<SuperAdminRevenuePage />} />
         <Route path="/super-admin/bulk-email" element={<SuperAdminBulkEmailPage />} />
+        {/* Advanced Features */}
+        <Route path="/super-admin/realtime" element={<SuperAdminRealtimePage />} />
+        <Route path="/super-admin/intelligence" element={<SuperAdminIntelligencePage />} />
+        <Route path="/super-admin/financial" element={<SuperAdminFinancialPage />} />
+        <Route path="/super-admin/feature-flags" element={<SuperAdminFeatureFlagsPage />} />
+        <Route path="/super-admin/white-label" element={<SuperAdminWhiteLabelPage />} />
+        <Route path="/super-admin/support" element={<SuperAdminSupportToolsPage />} />
+        <Route path="/super-admin/compliance" element={<SuperAdminCompliancePage />} />
+        <Route path="/super-admin/system" element={<SuperAdminSystemPage />} />
       </Route>
 
       {/* Catch all */}

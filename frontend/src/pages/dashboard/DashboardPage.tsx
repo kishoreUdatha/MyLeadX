@@ -6,6 +6,7 @@ import { fetchLeadStats } from '../../store/slices/leadSlice';
 import { fetchStats } from '../../store/slices/rawImportSlice';
 import subscriptionService, { Subscription } from '../../services/subscription.service';
 import api from '../../services/api';
+import { teamMonitoringService, LiveTeamStatus } from '../../services/team-monitoring.service';
 import {
   PieChart,
   Pie,
@@ -37,26 +38,47 @@ import {
   PhoneIcon,
 } from '@heroicons/react/24/outline';
 
-const STATUS_COLORS: Record<string, string> = {
-  // Uppercase versions
-  NEW: '#3B82F6',        // Blue
-  CONTACTED: '#A855F7',  // Violet
-  QUALIFIED: '#F59E0B',  // Orange/Yellow
-  NEGOTIATION: '#EC4899', // Pink
-  PROPOSAL: '#6366F1',   // Indigo
-  WON: '#22C55E',        // Green
-  LOST: '#14B8A6',       // Teal
-  FOLLOW_UP: '#F97316',  // Orange-red
-  // Title case versions (from lead stages) - distinct colors
-  'New': '#3B82F6',       // Blue
-  'Contacted': '#A855F7', // Violet (distinct from Proposal)
-  'Qualified': '#F59E0B', // Orange/Yellow
-  'Negotiation': '#EC4899', // Pink
-  'Proposal': '#6366F1',  // Indigo
-  'Won': '#22C55E',       // Green
-  'Lost': '#14B8A6',      // Teal
-  'Follow Up': '#F97316',
+const STAGE_COLORS: Record<string, string> = {
+  // Common Pipeline Stages
+  'New': '#3B82F6',           // Blue
+  'NEW': '#3B82F6',
+  'Contacted': '#8B5CF6',     // Purple
+  'CONTACTED': '#8B5CF6',
+  'Qualified': '#F59E0B',     // Amber
+  'QUALIFIED': '#F59E0B',
+  'Negotiation': '#EC4899',   // Pink
+  'NEGOTIATION': '#EC4899',
+  'Proposal': '#6366F1',      // Indigo
+  'PROPOSAL': '#6366F1',
+  'Won': '#22C55E',           // Green
+  'WON': '#22C55E',
+  'Lost': '#EF4444',          // Red
+  'LOST': '#EF4444',
+  'Follow Up': '#F97316',     // Orange
   'Follow-Up': '#F97316',
+  'FOLLOW_UP': '#F97316',
+  // Education Pipeline Stages
+  'Admitted': '#10B981',      // Emerald
+  'ADMITTED': '#10B981',
+  'Enrolled': '#059669',      // Green
+  'ENROLLED': '#059669',
+  'Application': '#0EA5E9',   // Sky
+  'APPLICATION': '#0EA5E9',
+  'Document Verification': '#14B8A6', // Teal
+  'DOCUMENT_VERIFICATION': '#14B8A6',
+  'Counseling': '#A855F7',    // Violet
+  'COUNSELING': '#A855F7',
+  'Fee Payment': '#F472B6',   // Pink
+  'FEE_PAYMENT': '#F472B6',
+  // Other common stages
+  'Unassigned': '#6B7280',    // Gray
+  'UNASSIGNED': '#6B7280',
+  'Pending': '#FBBF24',       // Yellow
+  'PENDING': '#FBBF24',
+  'In Progress': '#3B82F6',   // Blue
+  'IN_PROGRESS': '#3B82F6',
+  'Closed': '#64748B',        // Slate
+  'CLOSED': '#64748B',
 };
 
 const PIE_COLORS = ['#6366F1', '#EC4899', '#14B8A6', '#F59E0B', '#8B5CF6', '#EF4444', '#10B981', '#3B82F6'];
@@ -107,6 +129,15 @@ interface DashboardStats {
     leadName: string | null;
     leadId: string | null;
     createdAt: string;
+  }>;
+  pendingFollowUpsList?: Array<{
+    id: string;
+    leadId: string;
+    leadName: string;
+    phone: string | null;
+    scheduledAt: string | null;
+    notes: string | null;
+    type: 'scheduled' | 'needs_attention';
   }>;
 }
 
@@ -240,13 +271,17 @@ function TelecallerDashboard({ user, getGreeting, currentTime, lastRefresh, setL
   const dailyCallTarget = dashboardStats?.today?.target?.calls || dashboardStats?.assignedData?.total || 0;
   const callsProgress = dailyCallTarget > 0 ? Math.min(((dashboardStats?.today?.calls || 0) / dailyCallTarget) * 100, 100) : 0;
 
-  const waterfallData = [
-    { name: 'New', value: dashboardStats?.leads?.byStage?.['New'] || dashboardStats?.leads?.byStage?.['NEW'] || 0, fill: '#3B82F6' },
-    { name: 'Contacted', value: dashboardStats?.leads?.byStage?.['Contacted'] || dashboardStats?.leads?.byStage?.['CONTACTED'] || 0, fill: '#8B5CF6' },
-    { name: 'Qualified', value: dashboardStats?.leads?.byStage?.['Qualified'] || dashboardStats?.leads?.byStage?.['QUALIFIED'] || 0, fill: '#10B981' },
-    { name: 'Negotiation', value: dashboardStats?.leads?.byStage?.['Negotiation'] || dashboardStats?.leads?.byStage?.['NEGOTIATION'] || 0, fill: '#F59E0B' },
-    { name: 'Won', value: dashboardStats?.leads?.won || 0, fill: '#059669' },
-  ];
+  // Dynamically generate pipeline data from all stages returned by API
+  const waterfallData = dashboardStats?.leads?.byStage
+    ? Object.entries(dashboardStats.leads.byStage)
+        .map(([stageName, count], index) => ({
+          name: stageName,
+          value: count as number,
+          fill: STAGE_COLORS[stageName] || STAGE_COLORS[stageName.toUpperCase()] || PIE_COLORS[index % PIE_COLORS.length],
+        }))
+        .filter(stage => stage.value > 0) // Only show stages with leads
+        .sort((a, b) => b.value - a.value) // Sort by count descending
+    : [];
 
   return (
     <div className="p-3 min-h-screen">
@@ -270,35 +305,35 @@ function TelecallerDashboard({ user, getGreeting, currentTime, lastRefresh, setL
         </button>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards - All Clickable */}
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 mb-3">
-        <Link to="/leads?assignedToMe=true" className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 hover:border-blue-500/50 transition-all">
+        <Link to="/leads?assignedToMe=true" className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 hover:border-blue-500/50 hover:bg-slate-700/50 transition-all cursor-pointer">
           <p className="text-slate-400 text-[10px] uppercase tracking-wide">Leads</p>
           <p className="text-xl font-bold text-white">{dashboardStats?.leads?.total || 0}</p>
         </Link>
-        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+        <Link to="/call-logs" className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 hover:border-violet-500/50 hover:bg-slate-700/50 transition-all cursor-pointer">
           <p className="text-slate-400 text-[10px] uppercase tracking-wide">Calls Today</p>
           <div className="flex items-end justify-between">
             <p className="text-xl font-bold text-white">{dashboardStats?.today?.calls || 0}<span className="text-slate-500 text-sm font-normal">/{dailyCallTarget}</span></p>
             <span className={`text-[10px] font-medium ${callsProgress >= 100 ? 'text-emerald-400' : 'text-violet-400'}`}>{Math.round(callsProgress)}%</span>
           </div>
-        </div>
-        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+        </Link>
+        <Link to="/leads?pendingFollowUp=true" className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 hover:border-amber-500/50 hover:bg-slate-700/50 transition-all cursor-pointer">
           <p className="text-slate-400 text-[10px] uppercase tracking-wide">Follow-ups</p>
           <p className="text-xl font-bold text-white">{dashboardStats?.today?.followUpsCompleted || 0}<span className="text-amber-400 text-sm ml-1">+{dashboardStats?.today?.pendingFollowUps || 0}</span></p>
-        </div>
-        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+        </Link>
+        <Link to="/leads?converted=true" className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-700/50 transition-all cursor-pointer">
           <p className="text-slate-400 text-[10px] uppercase tracking-wide">Conversion</p>
           <p className="text-xl font-bold text-emerald-400">{dashboardStats?.leads?.conversionRate || 0}%</p>
-        </div>
-        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+        </Link>
+        <Link to="/leads?stage=Admitted" className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 hover:border-cyan-500/50 hover:bg-slate-700/50 transition-all cursor-pointer">
           <p className="text-slate-400 text-[10px] uppercase tracking-wide">Win Rate</p>
           <p className="text-xl font-bold text-cyan-400">{dashboardStats?.leads?.winRate || 0}%</p>
-        </div>
-        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+        </Link>
+        <Link to="/leads?stage=Admitted" className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50 hover:border-green-500/50 hover:bg-slate-700/50 transition-all cursor-pointer">
           <p className="text-slate-400 text-[10px] uppercase tracking-wide">Won</p>
           <p className="text-xl font-bold text-green-400">{dashboardStats?.leads?.won || 0}</p>
-        </div>
+        </Link>
       </div>
 
       {/* Charts Grid */}
@@ -330,29 +365,37 @@ function TelecallerDashboard({ user, getGreeting, currentTime, lastRefresh, setL
             <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
               <h3 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Assigned Data</h3>
               <div className="space-y-2">
-                <div className="flex justify-between items-center">
+                <Link to="/assigned-data" className="flex justify-between items-center hover:bg-slate-700/30 p-1 -mx-1 rounded transition-colors cursor-pointer">
                   <span className="text-slate-400 text-xs">Total Assigned</span>
                   <span className="text-white font-bold">{dashboardStats?.assignedData?.totalRawRecords || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
+                </Link>
+                <Link to="/assigned-data?status=pending" className="flex justify-between items-center hover:bg-slate-700/30 p-1 -mx-1 rounded transition-colors cursor-pointer">
                   <span className="text-slate-400 text-xs">Pending Calls</span>
                   <span className="text-amber-400 font-bold">{dashboardStats?.assignedData?.rawRecords || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
+                </Link>
+                <Link to="/calling-queue" className="flex justify-between items-center hover:bg-slate-700/30 p-1 -mx-1 rounded transition-colors cursor-pointer">
                   <span className="text-slate-400 text-xs">In Queue</span>
                   <span className="text-blue-400 font-bold">{dashboardStats?.assignedData?.queueItems || 0}</span>
-                </div>
+                </Link>
               </div>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
               <h3 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Lead Pipeline</h3>
               <div className="space-y-1">
-                {waterfallData.map((stage, idx) => (
-                  <div key={idx} className="flex justify-between items-center">
-                    <span className="text-xs" style={{ color: stage.fill }}>{stage.name}</span>
-                    <span className="text-white text-xs font-bold">{stage.value}</span>
-                  </div>
-                ))}
+                {waterfallData.length > 0 ? (
+                  waterfallData.map((stage, idx) => (
+                    <Link
+                      key={idx}
+                      to={`/leads?stage=${encodeURIComponent(stage.name)}`}
+                      className="flex justify-between items-center hover:bg-slate-700/30 p-1 -mx-1 rounded transition-colors cursor-pointer"
+                    >
+                      <span className="text-xs" style={{ color: stage.fill }}>{stage.name}</span>
+                      <span className="text-white text-xs font-bold">{stage.value}</span>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-slate-400 text-xs text-center py-2">No leads assigned yet</p>
+                )}
               </div>
             </div>
           </div>
@@ -365,16 +408,62 @@ function TelecallerDashboard({ user, getGreeting, currentTime, lastRefresh, setL
             <h3 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Call Outcomes</h3>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: 'Connected', value: dashboardStats?.outcomes?.CONNECTED || 0, color: 'text-emerald-400' },
-                { label: 'No Answer', value: dashboardStats?.outcomes?.NO_ANSWER || 0, color: 'text-amber-400' },
-                { label: 'Busy', value: dashboardStats?.outcomes?.BUSY || 0, color: 'text-orange-400' },
-                { label: 'Failed', value: dashboardStats?.outcomes?.FAILED || 0, color: 'text-red-400' },
+                { label: 'Connected', value: dashboardStats?.outcomes?.CONNECTED || 0, color: 'text-emerald-400', outcome: 'CONNECTED' },
+                { label: 'No Answer', value: dashboardStats?.outcomes?.NO_ANSWER || 0, color: 'text-amber-400', outcome: 'NO_ANSWER' },
+                { label: 'Busy', value: dashboardStats?.outcomes?.BUSY || 0, color: 'text-orange-400', outcome: 'BUSY' },
+                { label: 'Failed', value: dashboardStats?.outcomes?.FAILED || 0, color: 'text-red-400', outcome: 'FAILED' },
               ].map((item, idx) => (
-                <div key={idx} className="text-center p-2 bg-slate-700/30 rounded">
+                <Link
+                  key={idx}
+                  to={`/call-logs?outcome=${item.outcome}`}
+                  className="text-center p-2 bg-slate-700/30 hover:bg-slate-700/50 rounded transition-colors cursor-pointer"
+                >
                   <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
                   <p className="text-[10px] text-slate-400">{item.label}</p>
-                </div>
+                </Link>
               ))}
+            </div>
+          </div>
+
+          {/* Pending Follow-ups List */}
+          <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+            <h3 className="text-xs font-semibold text-white uppercase tracking-wide mb-2">Pending Follow-ups</h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {dashboardStats?.pendingFollowUpsList && dashboardStats.pendingFollowUpsList.length > 0 ? (
+                dashboardStats.pendingFollowUpsList.map((followUp) => (
+                  <Link
+                    key={followUp.id}
+                    to={`/leads/${followUp.leadId}`}
+                    className="block p-2 bg-slate-700/30 hover:bg-slate-700/50 rounded transition-colors"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-white text-xs font-medium">{followUp.leadName}</p>
+                        {followUp.phone && (
+                          <p className="text-slate-400 text-[10px]">{followUp.phone}</p>
+                        )}
+                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        followUp.type === 'scheduled' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'
+                      }`}>
+                        {followUp.type === 'scheduled' ? 'Scheduled' : 'Needs Attention'}
+                      </span>
+                    </div>
+                    {followUp.scheduledAt && (
+                      <p className="text-emerald-400 text-[10px] mt-1">
+                        {new Date(followUp.scheduledAt).toLocaleString('en-IN', {
+                          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </p>
+                    )}
+                    {followUp.notes && (
+                      <p className="text-slate-500 text-[10px] mt-0.5 truncate">{followUp.notes}</p>
+                    )}
+                  </Link>
+                ))
+              ) : (
+                <p className="text-slate-400 text-xs text-center py-2">No pending follow-ups</p>
+              )}
             </div>
           </div>
 
@@ -385,8 +474,8 @@ function TelecallerDashboard({ user, getGreeting, currentTime, lastRefresh, setL
               <Link to="/assigned-data" className="flex items-center gap-2 p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded text-blue-400 text-xs">
                 <PhoneIcon className="w-4 h-4" /> Start Calling
               </Link>
-              <Link to="/leads?followUpToday=true" className="flex items-center gap-2 p-2 bg-amber-500/20 hover:bg-amber-500/30 rounded text-amber-400 text-xs">
-                <ArrowPathIcon className="w-4 h-4" /> Pending Follow-ups
+              <Link to="/leads?pendingFollowUp=true" className="flex items-center gap-2 p-2 bg-amber-500/20 hover:bg-amber-500/30 rounded text-amber-400 text-xs">
+                <ArrowPathIcon className="w-4 h-4" /> View All Follow-ups
               </Link>
             </div>
           </div>
@@ -747,10 +836,24 @@ function ManagerDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stat
   const [loading, setLoading] = useState(false);
   const [teamOverview, setTeamOverview] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [liveStatus, setLiveStatus] = useState<LiveTeamStatus | null>(null);
 
   useEffect(() => {
     fetchManagerData();
+    fetchLiveStatus();
+
+    const liveStatusInterval = setInterval(fetchLiveStatus, 30000);
+    return () => clearInterval(liveStatusInterval);
   }, []);
+
+  const fetchLiveStatus = async () => {
+    try {
+      const status = await teamMonitoringService.getLiveStatus();
+      setLiveStatus(status);
+    } catch (error) {
+      console.error('Failed to fetch live status:', error);
+    }
+  };
 
   const fetchManagerData = async () => {
     try {
@@ -797,6 +900,7 @@ function ManagerDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stat
     dispatch(fetchLeadStats());
     dispatch(fetchStats());
     fetchManagerData();
+    fetchLiveStatus();
     setLastRefresh(new Date());
     setTimeout(() => setLoading(false), 500);
   };
@@ -805,7 +909,7 @@ function ManagerDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stat
     ? Object.entries(stats.byStatus).map(([status, count], index) => ({
         name: status.replace('_', ' '),
         value: count as number,
-        color: STATUS_COLORS[status] || PIE_COLORS[index % PIE_COLORS.length],
+        color: STAGE_COLORS[status] || PIE_COLORS[index % PIE_COLORS.length],
       }))
     : [];
 
@@ -840,6 +944,65 @@ function ManagerDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stat
           </div>
         </div>
       </div>
+
+      {/* Live Team Status */}
+      {liveStatus && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <h2 className="text-sm font-semibold text-gray-900">Live Team Status</h2>
+            </div>
+            <Link to="/team-monitoring" className="text-xs text-indigo-600">View Details →</Link>
+          </div>
+          <div className="grid grid-cols-4 gap-4">
+            <div className="text-center p-3 bg-gray-50 rounded-lg">
+              <p className="text-2xl font-bold text-gray-900">{liveStatus.summary.total}</p>
+              <p className="text-xs text-gray-500">Total Team</p>
+            </div>
+            <div className="text-center p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <p className="text-2xl font-bold text-emerald-600">{liveStatus.summary.active}</p>
+              </div>
+              <p className="text-xs text-emerald-700">Active Now</p>
+            </div>
+            <div className="text-center p-3 bg-amber-50 rounded-lg border border-amber-100">
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                <p className="text-2xl font-bold text-amber-600">{liveStatus.summary.onBreak}</p>
+              </div>
+              <p className="text-xs text-amber-700">On Break</p>
+            </div>
+            <div className="text-center p-3 bg-gray-100 rounded-lg">
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                <p className="text-2xl font-bold text-gray-500">{liveStatus.summary.offline}</p>
+              </div>
+              <p className="text-xs text-gray-500">Offline</p>
+            </div>
+          </div>
+          {liveStatus.members.filter(m => m.status === 'active').length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs text-gray-500 mb-2">Currently Active:</p>
+              <div className="flex flex-wrap gap-2">
+                {liveStatus.members.filter(m => m.status === 'active').slice(0, 10).map((member) => (
+                  <div key={member.id} className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-full border border-emerald-100">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-xs text-emerald-700 font-medium">{member.name.split(' ')[0]}</span>
+                  </div>
+                ))}
+                {liveStatus.members.filter(m => m.status === 'active').length > 10 && (
+                  <span className="text-xs text-gray-400 px-2 py-1">+{liveStatus.members.filter(m => m.status === 'active').length - 10} more</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -1088,41 +1251,28 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
   const dispatch = useDispatch<AppDispatch>();
   const [loading, setLoading] = useState(false);
   const [orgStats, setOrgStats] = useState<OrgDashboardStats | null>(null);
-  const [systemHealth, setSystemHealth] = useState({ api: 'healthy', db: 'healthy', services: 'healthy' });
-  const [usersByRole, setUsersByRole] = useState<Record<string, number>>({});
-  const [stageData, setStageData] = useState<Array<{ name: string; count: number }>>([]);
+  const [liveStatus, setLiveStatus] = useState<LiveTeamStatus | null>(null);
 
   useEffect(() => {
     fetchOrgStats();
-    checkSystemHealth();
+    fetchLiveStatus();
+    const liveStatusInterval = setInterval(fetchLiveStatus, 30000);
+    return () => clearInterval(liveStatusInterval);
   }, []);
+
+  const fetchLiveStatus = async () => {
+    try {
+      const status = await teamMonitoringService.getLiveStatus();
+      setLiveStatus(status);
+    } catch (error) {
+      console.error('Failed to fetch live status:', error);
+    }
+  };
 
   const fetchOrgStats = async () => {
     try {
-      const [usersRes, stagesRes] = await Promise.all([
-        api.get('/users?limit=1000').catch(() => ({ data: { data: [] } })),
-        api.get('/lead-stages').catch(() => ({ data: { data: [] } })),
-      ]);
+      const usersRes = await api.get('/users?limit=1000').catch(() => ({ data: { data: [] } }));
       const users = usersRes.data?.data || [];
-      const stages = stagesRes.data?.data || [];
-
-      // Count users by role
-      const roleCounts: Record<string, number> = {};
-      users.forEach((u: any) => {
-        const role = u.role?.slug?.toLowerCase() || 'unknown';
-        roleCounts[role] = (roleCounts[role] || 0) + 1;
-      });
-      setUsersByRole(roleCounts);
-
-      // Map stage data with counts from stats
-      if (stages.length > 0 && stats?.byStage) {
-        const stageChartData = stages.map((s: any) => ({
-          name: s.name?.length > 10 ? s.name.substring(0, 10) + '...' : s.name,
-          count: stats.byStage[s.id] || 0,
-        })).filter((s: any) => s.count > 0);
-        setStageData(stageChartData);
-      }
-
       setOrgStats({
         totalUsers: users.length,
         totalTelecallers: users.filter((u: any) => ['telecaller', 'counselor', 'sales'].includes(u.role?.slug?.toLowerCase())).length,
@@ -1142,307 +1292,340 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
     }
   };
 
-  const checkSystemHealth = async () => {
-    try {
-      await api.get('/users?limit=1');
-      setSystemHealth({ api: 'healthy', db: 'healthy', services: 'healthy' });
-    } catch {
-      setSystemHealth({ api: 'degraded', db: 'unknown', services: 'unknown' });
-    }
-  };
-
   const handleRefresh = () => {
     setLoading(true);
     dispatch(fetchLeadStats());
     dispatch(fetchStats());
     fetchOrgStats();
-    checkSystemHealth();
+    fetchLiveStatus();
     setLastRefresh(new Date());
     setTimeout(() => setLoading(false), 500);
   };
 
-  const statusPieData = stats?.byStatus
-    ? Object.entries(stats.byStatus).map(([status, count], index) => ({
-        name: status.replace('_', ' '),
-        value: count as number,
-        color: STATUS_COLORS[status] || PIE_COLORS[index % PIE_COLORS.length],
-      }))
+  // Pipeline stages data for chart
+  const pipelineStages = stats?.byStatus
+    ? Object.entries(stats.byStatus)
+        .map(([stage, count], index) => ({
+          name: stage.replace(/_/g, ' '),
+          value: count as number,
+          color: STAGE_COLORS[stage] || PIE_COLORS[index % PIE_COLORS.length],
+        }))
+        .sort((a, b) => b.value - a.value) // Sort by count descending
     : [];
 
+  // Source data for bar chart - capitalize properly
   const sourceBarData = stats?.bySource
     ? Object.entries(stats.bySource).map(([source, count], index) => ({
-        name: source.replace(/_/g, ' ').substring(0, 8),
-        fullName: source,
-        leads: count as number,
-        color: SOURCE_COLORS[source] || PIE_COLORS[index % PIE_COLORS.length],
-      })).sort((a, b) => b.leads - a.leads).slice(0, 8)
+        name: source.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '),
+        value: count as number,
+        fill: SOURCE_COLORS[source] || PIE_COLORS[index % PIE_COLORS.length],
+      })).sort((a, b) => b.value - a.value).slice(0, 6)
     : [];
 
   // Pipeline funnel data
-  const pipelineData = [
-    { name: 'Total', value: rawImportStats?.totalRecords || 0, fill: '#6366F1' },
-    { name: 'Assigned', value: rawImportStats?.assignedRecords || 0, fill: '#3B82F6' },
-    { name: 'Interested', value: rawImportStats?.interestedRecords || 0, fill: '#10B981' },
-    { name: 'Converted', value: rawImportStats?.convertedRecords || 0, fill: '#8B5CF6' },
+  const funnelData = [
+    { name: 'Total', value: rawImportStats?.totalRecords || 0, fill: '#6366F1', percent: 100 },
+    { name: 'Assigned', value: rawImportStats?.assignedRecords || 0, fill: '#3B82F6', percent: rawImportStats?.totalRecords ? Math.round((rawImportStats.assignedRecords / rawImportStats.totalRecords) * 100) : 0 },
+    { name: 'Interested', value: rawImportStats?.interestedRecords || 0, fill: '#10B981', percent: rawImportStats?.totalRecords ? Math.round((rawImportStats.interestedRecords / rawImportStats.totalRecords) * 100) : 0 },
+    { name: 'Converted', value: rawImportStats?.convertedRecords || 0, fill: '#8B5CF6', percent: rawImportStats?.totalRecords ? Math.round((rawImportStats.convertedRecords / rawImportStats.totalRecords) * 100) : 0 },
   ];
 
-  const getHealthColor = (status: string) => {
-    switch (status) {
-      case 'healthy': return { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' };
-      case 'degraded': return { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' };
-      default: return { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' };
-    }
-  };
-
-  const allHealthy = systemHealth.api === 'healthy' && systemHealth.db === 'healthy' && systemHealth.services === 'healthy';
   const conversionRate = (rawImportStats?.totalRecords || 0) > 0
     ? ((rawImportStats?.convertedRecords || 0) / (rawImportStats?.totalRecords || 1) * 100).toFixed(1)
     : '0';
 
   return (
-    <div className="space-y-3">
-      {/* Compact Header */}
-      <div className="flex items-center justify-between">
+    <div className="p-5 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-base font-semibold text-gray-900">{getGreeting()}, {user?.firstName}</h1>
-          <p className="text-xs text-gray-500">Organization overview</p>
+          <h1 className="text-xl font-semibold text-gray-800">{getGreeting()}, {user?.firstName}</h1>
+          <p className="text-sm text-gray-500">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${allHealthy ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${allHealthy ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-            {allHealthy ? 'Operational' : 'Issues'}
+        <button onClick={handleRefresh} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 shadow-sm">
+          <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+
+      {/* Row 1: Compact Key Metrics */}
+      <div className="grid grid-cols-6 gap-3 mb-4">
+        <Link to="/leads" className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 hover:shadow-md transition-all">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <UserGroupIcon className="w-4 h-4 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-gray-800">{stats?.total || 0}</p>
+              <p className="text-[10px] text-gray-500">Leads</p>
+            </div>
           </div>
-          <button onClick={handleRefresh} className="p-1.5 hover:bg-gray-100 rounded-lg transition-all">
-            <ArrowPathIcon className={`w-4 h-4 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+        </Link>
+        <Link to="/users" className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 hover:shadow-md transition-all">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <UsersIcon className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-gray-800">{orgStats?.totalUsers || 0}</p>
+              <p className="text-[10px] text-gray-500">Team</p>
+            </div>
+          </div>
+        </Link>
+        <Link to="/raw-imports" className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 hover:shadow-md transition-all">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+              <DocumentArrowUpIcon className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-amber-600">{rawImportStats?.pendingRecords || 0}</p>
+              <p className="text-[10px] text-gray-500">Pending</p>
+            </div>
+          </div>
+        </Link>
+        <Link to="/leads?converted=true" className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 hover:shadow-md transition-all">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+              <ChartBarIcon className="w-4 h-4 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-emerald-600">{rawImportStats?.convertedRecords || 0}</p>
+              <p className="text-[10px] text-gray-500">Converted</p>
+            </div>
+          </div>
+        </Link>
+        <Link to="/reports" className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 hover:shadow-md transition-all">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center">
+              <ArrowUpRightIcon className="w-4 h-4 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-violet-600">{conversionRate}%</p>
+              <p className="text-[10px] text-gray-500">Conv. Rate</p>
+            </div>
+          </div>
+        </Link>
+        <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-emerald-600">{liveStatus?.summary.active || 0}</p>
+              <p className="text-[10px] text-gray-500">Active Now</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Compact KPI Row */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-        <Link to="/users" className="bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-300 transition-all">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Users</p>
-          <p className="text-xl font-bold text-gray-900 mt-1">{orgStats?.totalUsers || 0}</p>
-        </Link>
-        <div className="bg-white rounded-lg p-3 border border-gray-200">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Telecallers</p>
-          <p className="text-xl font-bold text-blue-600 mt-1">{orgStats?.totalTelecallers || 0}</p>
-        </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-200">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Team Leads</p>
-          <p className="text-xl font-bold text-purple-600 mt-1">{orgStats?.totalTeamLeads || 0}</p>
-        </div>
-        <Link to="/leads" className="bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-300 transition-all">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Total Leads</p>
-          <p className="text-xl font-bold text-gray-900 mt-1">{stats?.total || 0}</p>
-        </Link>
-        <Link to="/raw-imports" className="bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-300 transition-all">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Pending</p>
-          <p className="text-xl font-bold text-amber-600 mt-1">{rawImportStats?.pendingRecords || 0}</p>
-        </Link>
-        <div className="bg-white rounded-lg p-3 border border-gray-200">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Converted</p>
-          <p className="text-xl font-bold text-emerald-600 mt-1">{rawImportStats?.convertedRecords || 0}</p>
-        </div>
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Lead Sources Bar Chart */}
-        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-3">
+      {/* Row 2: Lead Status (left) + Team & Today's Highlights (right) */}
+      <div className="grid grid-cols-12 gap-4 mb-4">
+        {/* Pipeline Stages - Donut Chart */}
+        <div className="col-span-5 bg-white rounded-xl p-3 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-900">Lead Sources Distribution</h2>
-            <Link to="/leads/bulk-upload" className="text-[10px] text-indigo-600">Import →</Link>
+            <h3 className="text-xs font-semibold text-gray-700">Pipeline Stages</h3>
+            <Link to="/leads" className="text-[10px] text-indigo-600 hover:text-indigo-700">View All →</Link>
+          </div>
+          {pipelineStages.length > 0 ? (
+            <div className="flex items-center gap-4">
+              <div className="w-36 h-36 flex-shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pipelineStages.slice(0, 6)}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={60}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {pipelineStages.slice(0, 6).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ fontSize: 11, borderRadius: 6, border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
+                      formatter={(value: number, name: string) => [value, name]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {pipelineStages.slice(0, 6).map((stage, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }}></span>
+                      <span className="text-[11px] text-gray-600">{stage.name}</span>
+                    </div>
+                    <span className="text-xs font-bold text-gray-700">{stage.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="h-36 flex items-center justify-center text-gray-400 text-sm">No data</div>
+          )}
+        </div>
+
+        {/* Team Status */}
+        <div className="col-span-3 bg-white rounded-xl p-3 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-gray-700">Team Status</h3>
+            <span className="flex items-center gap-1 text-[10px] text-emerald-600">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+              Live
+            </span>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span className="text-xs text-gray-700">Active</span>
+              </div>
+              <span className="text-lg font-bold text-emerald-600">{liveStatus?.summary.active || 0}</span>
+            </div>
+            <div className="flex items-center justify-between p-2 bg-amber-50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full"></span>
+                <span className="text-xs text-gray-700">On Break</span>
+              </div>
+              <span className="text-lg font-bold text-amber-600">{liveStatus?.summary.onBreak || 0}</span>
+            </div>
+            <div className="flex items-center justify-between p-2 bg-gray-100 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 bg-gray-400 rounded-full"></span>
+                <span className="text-xs text-gray-700">Offline</span>
+              </div>
+              <span className="text-lg font-bold text-gray-500">{liveStatus?.summary.offline || 0}</span>
+            </div>
+          </div>
+          <Link to="/team-monitoring" className="block text-center text-[10px] text-indigo-600 mt-3 hover:text-indigo-700">
+            View Details →
+          </Link>
+        </div>
+
+        {/* Today's Highlights */}
+        <div className="col-span-4 bg-white rounded-xl p-3 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-gray-700">Today's Highlights</h3>
+            <span className="text-[10px] text-gray-400">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Link to="/leads?status=NEW" className="p-2.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+              <p className="text-lg font-bold text-blue-600">{stats?.todayCount || 0}</p>
+              <p className="text-[10px] text-blue-700">New Leads</p>
+            </Link>
+            <Link to="/leads?pendingFollowUp=true" className="p-2.5 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors">
+              <p className="text-lg font-bold text-amber-600">{stats?.followUpsDue || 0}</p>
+              <p className="text-[10px] text-amber-700">Follow-ups Due</p>
+            </Link>
+            <div className="p-2.5 bg-emerald-50 rounded-lg">
+              <p className="text-lg font-bold text-emerald-600">{conversionRate}%</p>
+              <p className="text-[10px] text-emerald-700">Conversion Rate</p>
+            </div>
+            <div className="p-2.5 bg-violet-50 rounded-lg">
+              <p className="text-lg font-bold text-violet-600">{rawImportStats?.assignedRecords || 0}</p>
+              <p className="text-[10px] text-violet-700">Assigned</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Charts */}
+      <div className="grid grid-cols-2 gap-4 mb-5">
+        {/* Lead Sources Chart */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">Lead Sources</h3>
+            <Link to="/leads/bulk-upload" className="text-xs text-indigo-600 hover:text-indigo-700">+ Import</Link>
           </div>
           {sourceBarData.length > 0 ? (
-            <div className="h-36">
+            <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sourceBarData} barSize={24}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} width={25} />
-                  <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(value: any) => [value, 'Leads']} />
-                  <Bar dataKey="leads" radius={[4, 4, 0, 0]}>
+                <BarChart data={sourceBarData} layout="vertical" barSize={18} barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#F1F5F9" />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#374151', fontWeight: 500 }} width={80} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+                    formatter={(value: number) => [value, 'Leads']}
+                  />
+                  <Bar dataKey="value" radius={[0, 6, 6, 0]} background={{ fill: '#F1F5F9', radius: 6 }}>
                     {sourceBarData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-36 flex flex-col items-center justify-center text-gray-400">
-              <DocumentArrowUpIcon className="w-8 h-8 text-gray-200 mb-1" />
-              <p className="text-xs">No lead source data</p>
+            <div className="h-48 flex flex-col items-center justify-center text-gray-400">
+              <DocumentArrowUpIcon className="w-10 h-10 mb-2 text-gray-300" />
+              <p className="text-sm">No lead sources yet</p>
+              <Link to="/leads/bulk-upload" className="text-xs text-indigo-600 mt-2">Import leads</Link>
             </div>
           )}
         </div>
 
-        {/* Lead Status Donut */}
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-900">Lead Status</h2>
-            <Link to="/leads" className="text-[10px] text-indigo-600">View →</Link>
+        {/* Conversion Funnel */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">Conversion Funnel</h3>
+            <span className="text-sm font-bold text-emerald-600">{conversionRate}%</span>
           </div>
-          <div className="flex items-center gap-3">
-            {statusPieData.length > 0 ? (
-              <>
-                <div className="h-28 w-28 flex-shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={statusPieData} cx="50%" cy="50%" innerRadius={25} outerRadius={42} paddingAngle={2} dataKey="value">
-                        {statusPieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ fontSize: 10 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+          <div className="space-y-4">
+            {funnelData.map((item, idx) => (
+              <div key={idx}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.fill }}></span>
+                    <span className="text-xs font-medium text-gray-700">{item.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-800">{item.value.toLocaleString()}</span>
+                    <span className="text-[10px] text-gray-400">({item.percent}%)</span>
+                  </div>
                 </div>
-                <div className="flex-1 space-y-0.5">
-                  {statusPieData.map((entry, index) => (
-                    <div key={index} className="flex items-center justify-between text-[10px]">
-                      <div className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                        <span className="text-gray-600">{entry.name}</span>
-                      </div>
-                      <span className="font-semibold text-gray-900">{entry.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="h-28 w-full flex items-center justify-center text-gray-400 text-xs">No leads</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Secondary Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        {/* Pipeline Funnel */}
-        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-900">Pipeline Funnel</h2>
-            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded">{conversionRate}% conversion</span>
-          </div>
-          <div className="h-24">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={pipelineData} layout="vertical" barSize={16}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#6B7280' }} />
-                <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#6B7280' }} width={50} />
-                <Tooltip contentStyle={{ fontSize: 10 }} />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {pipelineData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          {(rawImportStats?.totalRecords || 0) > 0 && (
-            <div className="mt-2 flex h-1.5 rounded-full overflow-hidden bg-gray-100">
-              <div className="bg-yellow-400" style={{ width: `${((rawImportStats?.pendingRecords || 0) / (rawImportStats?.totalRecords || 1)) * 100}%` }} />
-              <div className="bg-blue-500" style={{ width: `${((rawImportStats?.assignedRecords || 0) / (rawImportStats?.totalRecords || 1)) * 100}%` }} />
-              <div className="bg-green-500" style={{ width: `${((rawImportStats?.interestedRecords || 0) / (rawImportStats?.totalRecords || 1)) * 100}%` }} />
-              <div className="bg-purple-500" style={{ width: `${((rawImportStats?.convertedRecords || 0) / (rawImportStats?.totalRecords || 1)) * 100}%` }} />
-            </div>
-          )}
-        </div>
-
-        {/* System Health */}
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <div className="flex items-center gap-1.5 mb-2">
-            <ShieldCheckIcon className="w-4 h-4 text-gray-500" />
-            <h2 className="text-xs font-semibold text-gray-900">System Health</h2>
-          </div>
-          <div className="space-y-1.5">
-            {[
-              { name: 'API Server', status: systemHealth.api },
-              { name: 'Database', status: systemHealth.db },
-              { name: 'Services', status: systemHealth.services },
-            ].map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-1.5 bg-gray-50 rounded">
-                <span className="text-[10px] text-gray-600">{item.name}</span>
-                <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${getHealthColor(item.status).bg}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${getHealthColor(item.status).dot}`}></span>
-                  <span className={`text-[10px] font-medium ${getHealthColor(item.status).text} capitalize`}>{item.status}</span>
+                <div className="h-5 bg-gray-100 rounded-lg overflow-hidden">
+                  <div
+                    className="h-full rounded-lg transition-all duration-700 ease-out"
+                    style={{ width: `${Math.max(item.percent, 2)}%`, backgroundColor: item.fill }}
+                  />
                 </div>
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100">
-            Last checked: {lastRefresh.toLocaleTimeString()}
-          </p>
-        </div>
-
-        {/* Users by Role */}
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-900">Users by Role</h2>
-            <Link to="/users" className="text-[10px] text-indigo-600">Manage →</Link>
-          </div>
-          {Object.entries(usersByRole).length > 0 ? (
-            <div className="space-y-1.5">
-              {Object.entries(usersByRole).slice(0, 4).map(([role, count], idx) => (
-                <div key={idx} className="flex items-center justify-between p-1.5 bg-gray-50 rounded">
-                  <span className="text-[10px] text-gray-600 capitalize">{role.replace('_', ' ')}</span>
-                  <span className="text-xs font-bold text-indigo-600">{count}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[10px] text-gray-400 text-center py-2">No users yet</p>
-          )}
-          <Link to="/users" className="mt-2 block text-center text-[10px] text-indigo-600 py-1.5 bg-indigo-50 rounded hover:bg-indigo-100">
-            + Add New User
-          </Link>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3">
-        <h2 className="text-xs font-semibold text-gray-900 mb-2">Quick Actions</h2>
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+      {/* Row 4: Quick Actions */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
+        <div className="grid grid-cols-6 gap-3">
           {[
-            { to: '/users', icon: UsersIcon, label: 'Users', color: 'bg-blue-100 text-blue-600' },
-            { to: '/settings/institution', icon: BuildingOfficeIcon, label: 'Org', color: 'bg-slate-100 text-slate-600' },
-            { to: '/settings/auto-assign', icon: BoltIcon, label: 'Auto-Assign', color: 'bg-amber-100 text-amber-600' },
-            { to: '/leads/bulk-upload', icon: DocumentArrowUpIcon, label: 'Import', color: 'bg-cyan-100 text-cyan-600' },
-            { to: '/voice-ai', icon: SparklesIcon, label: 'Voice AI', color: 'bg-purple-100 text-purple-600' },
-            { to: '/campaigns', icon: RocketLaunchIcon, label: 'Campaigns', color: 'bg-pink-100 text-pink-600' },
-            { to: '/analytics', icon: ChartBarIcon, label: 'Analytics', color: 'bg-green-100 text-green-600' },
-            { to: '/settings/integrations', icon: Cog6ToothIcon, label: 'Settings', color: 'bg-indigo-100 text-indigo-600' },
+            { to: '/leads/bulk-upload', icon: DocumentArrowUpIcon, label: 'Import', color: 'bg-gradient-to-r from-indigo-500 to-indigo-600' },
+            { to: '/assignments', icon: UserGroupIcon, label: 'Assign', color: 'bg-gradient-to-r from-violet-500 to-violet-600' },
+            { to: '/reports', icon: ChartBarIcon, label: 'Reports', color: 'bg-gradient-to-r from-emerald-500 to-emerald-600' },
+            { to: '/users', icon: UsersIcon, label: 'Team', color: 'bg-gradient-to-r from-blue-500 to-blue-600' },
+            { to: '/campaigns', icon: RocketLaunchIcon, label: 'Campaigns', color: 'bg-gradient-to-r from-pink-500 to-pink-600' },
+            { to: '/settings', icon: Cog6ToothIcon, label: 'Settings', color: 'bg-gradient-to-r from-gray-500 to-gray-600' },
           ].map((item, idx) => (
-            <Link key={idx} to={item.to} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-gray-50 transition-colors">
-              <div className={`w-8 h-8 rounded-lg ${item.color} flex items-center justify-center`}>
-                <item.icon className="w-4 h-4" />
-              </div>
-              <p className="text-[10px] text-gray-600">{item.label}</p>
+            <Link
+              key={idx}
+              to={item.to}
+              className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-white ${item.color} hover:shadow-lg transition-all hover:-translate-y-0.5`}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="text-xs font-medium">{item.label}</span>
             </Link>
           ))}
         </div>
       </div>
 
-      {/* Bottom Actions */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {[
-          { to: '/call-monitoring', icon: EyeIcon, label: 'Call Monitoring', desc: 'Live supervision', color: 'bg-cyan-100 text-cyan-600' },
-          { to: '/assignments', icon: UserGroupIcon, label: 'Assignments', desc: 'Distribute leads', color: 'bg-purple-100 text-purple-600' },
-          { to: '/reports', icon: ChartBarIcon, label: 'Reports', desc: 'Export data', color: 'bg-emerald-100 text-emerald-600' },
-          { to: '/compliance', icon: ShieldCheckIcon, label: 'Compliance', desc: 'DNC & regulations', color: 'bg-red-100 text-red-600' },
-        ].map((item, idx) => (
-          <Link key={idx} to={item.to} className="bg-white rounded-lg p-2.5 border border-gray-200 hover:border-gray-300 transition-all flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-lg ${item.color} flex items-center justify-center flex-shrink-0`}>
-              <item.icon className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-900">{item.label}</p>
-              <p className="text-[10px] text-gray-500">{item.desc}</p>
-            </div>
-          </Link>
-        ))}
+      {/* Footer */}
+      <div className="text-xs text-gray-400 text-center mt-4">
+        Last updated: {lastRefresh.toLocaleTimeString()}
       </div>
     </div>
   );

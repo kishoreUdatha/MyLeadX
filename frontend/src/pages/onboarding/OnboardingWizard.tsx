@@ -21,6 +21,7 @@ import { fetchCurrentUser } from '../../store/slices/authSlice';
 import { IndustrySelector, IndustryPreview } from '../../components/IndustrySelector';
 import { OrganizationIndustry, getIndustryConfig } from '../leads/industry-stages.constants';
 import api from '../../services/api';
+import { industryTemplateService, IndustryTemplate } from '../../services/industry-template.service';
 
 // Lead stage templates for preview (matches backend config)
 const STAGE_TEMPLATES: Record<OrganizationIndustry, { stages: Array<{ name: string; color: string }>; lostStage: { name: string; color: string } }> = {
@@ -174,6 +175,20 @@ export default function OnboardingWizard() {
         industry: selectedIndustry,
         resetStages: true,
       });
+
+      // Try to apply matching industry template for labels, custom fields, etc.
+      try {
+        const templates = await industryTemplateService.getAllTemplates();
+        const matchingTemplate = templates.find(
+          (t) => t.industry === selectedIndustry || t.slug === selectedIndustry.toLowerCase().replace('_', '-')
+        );
+        if (matchingTemplate) {
+          await industryTemplateService.applyTemplate(matchingTemplate.id);
+        }
+      } catch (templateError) {
+        // Template application is optional, don't fail onboarding
+        console.log('Industry template not applied:', templateError);
+      }
 
       // Mark onboarding as complete with industry
       await api.post('/organization/complete-onboarding', {

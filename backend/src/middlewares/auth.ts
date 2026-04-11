@@ -41,7 +41,16 @@ export async function authenticate(
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      include: {
+      select: {
+        id: true,
+        organizationId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+        managerId: true,
+        branchId: true,
+        lastActivityAt: true,
         role: true,
         branch: {
           select: {
@@ -85,6 +94,19 @@ export async function authenticate(
       onboardingCompleted,
       organizationIndustry: user.organization.industry,
     };
+
+    // Update lastActivityAt for team status tracking (throttled to once per minute)
+    const now = new Date();
+    const lastActivity = user.lastActivityAt;
+    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+
+    if (!lastActivity || lastActivity < oneMinuteAgo) {
+      // Update asynchronously to not block the request
+      prisma.user.update({
+        where: { id: user.id },
+        data: { lastActivityAt: now },
+      }).catch(() => {}); // Silently ignore errors
+    }
 
     next();
   } catch (error) {

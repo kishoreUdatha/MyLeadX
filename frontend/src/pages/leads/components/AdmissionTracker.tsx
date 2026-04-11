@@ -1,7 +1,7 @@
 /**
  * Admission Tracker Components
  * - AdmissionStatusTracker: Visual progress tracker for admission journey
- * - CloseAdmissionModal: Modal for closing/creating admission records
+ * - CloseAdmissionModal: Modal for closing/creating admission records (supports all industries)
  */
 
 import { useState, useEffect } from 'react';
@@ -11,11 +11,15 @@ import {
   AcademicCapIcon,
   ChevronRightIcon,
   ExclamationTriangleIcon,
+  BuildingOffice2Icon,
+  CurrencyRupeeIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid';
 import { admissionStatusOptions, admissionTypeOptions, getAdmissionStatusInfo } from '../lead-detail.constants';
-import { universityService, University } from '../../../services/university.service';
 import { admissionService, CreateAdmissionInput } from '../../../services/admission.service';
+import { universityService, University } from '../../../services/university.service';
+import { leadService } from '../../../services/lead.service';
+import { OrganizationIndustry, getIndustryConfig } from '../industry-stages.constants';
 import toast from 'react-hot-toast';
 
 interface AdmissionStatusTrackerProps {
@@ -177,6 +181,7 @@ interface CloseAdmissionModalProps {
   leadId: string;
   leadName: string;
   onSuccess: () => void;
+  industry?: OrganizationIndustry;
 }
 
 export function CloseAdmissionModal({
@@ -185,11 +190,15 @@ export function CloseAdmissionModal({
   leadId,
   leadName,
   onSuccess,
+  industry = 'GENERAL',
 }: CloseAdmissionModalProps) {
-  const [universities, setUniversities] = useState<University[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [universities, setUniversities] = useState<University[]>([]);
+  const [loadingUniversities, setLoadingUniversities] = useState(false);
+
+  const industryConfig = getIndustryConfig(industry);
+  const isEducation = industry === 'EDUCATION';
 
   const currentYear = new Date().getFullYear();
   const academicYearOptions = [
@@ -197,6 +206,7 @@ export function CloseAdmissionModal({
     `${currentYear - 1}-${currentYear.toString().slice(-2)}`,
   ];
 
+  // Education-specific form data
   const [formData, setFormData] = useState<CreateAdmissionInput>({
     leadId: leadId,
     universityId: '',
@@ -209,23 +219,32 @@ export function CloseAdmissionModal({
     donationAmount: 0,
   });
 
+  // Generic deal form data (for non-education industries)
+  const [dealData, setDealData] = useState({
+    dealValue: 0,
+    notes: '',
+  });
+
   useEffect(() => {
     if (isOpen) {
-      loadUniversities();
-      setFormData(prev => ({ ...prev, leadId }));
+      setFormData(prev => ({ ...prev, leadId, universityId: '' }));
+      setDealData({ dealValue: 0, notes: '' });
+      setError(null);
+      if (isEducation) {
+        loadUniversities();
+      }
     }
-  }, [isOpen, leadId]);
+  }, [isOpen, leadId, isEducation]);
 
   const loadUniversities = async () => {
     try {
-      setIsLoading(true);
+      setLoadingUniversities(true);
       const result = await universityService.getAll({ isActive: true, limit: 100 });
       setUniversities(result.universities);
     } catch (err) {
       console.error('Failed to load universities:', err);
-      setError('Failed to load universities');
     } finally {
-      setIsLoading(false);
+      setLoadingUniversities(false);
     }
   };
 
@@ -233,24 +252,43 @@ export function CloseAdmissionModal({
     e.preventDefault();
     setError(null);
 
-    if (!formData.universityId) {
-      setError('Please select a university');
-      return;
-    }
-
-    if (formData.totalFee <= 0) {
-      setError('Total fee must be greater than 0');
-      return;
+    // Validate before setting submitting state
+    if (isEducation) {
+      if (!formData.universityId) {
+        setError('Please select a university');
+        return;
+      }
+      if (formData.totalFee <= 0) {
+        setError('Total fee must be greater than 0');
+        return;
+      }
     }
 
     try {
       setIsSubmitting(true);
-      await admissionService.create(formData);
-      toast.success('Admission closed successfully!');
+
+      if (isEducation) {
+        // Education: Create admission record
+        await admissionService.create(formData);
+        toast.success('Admission closed successfully!');
+      } else {
+        // Other industries: Mark lead as converted with deal value
+        if (dealData.dealValue <= 0) {
+          setError('Please enter a deal value');
+          setIsSubmitting(false);
+          return;
+        }
+        await leadService.update(leadId, {
+          isConverted: true,
+          actualValue: dealData.dealValue,
+        });
+        toast.success(`${industryConfig.wonLabel} - Deal closed successfully!`);
+      }
+
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to create admission');
+      setError(err.response?.data?.message || err.message || 'Failed to close deal');
     } finally {
       setIsSubmitting(false);
     }
@@ -260,13 +298,41 @@ export function CloseAdmissionModal({
 
   if (!isOpen) return null;
 
+  // Get dynamic labels based on industry
+  const getModalTitle = () => {
+    if (isEducation) return 'Close Admission';
+    return `Close ${industryConfig.journeyTitle.split(' ')[0]}`;
+  };
+
+  const getModalSubtitle = () => {
+    if (isEducation) return `Creating admission for ${leadName}`;
+    return `Mark as ${industryConfig.wonLabel} for ${leadName}`;
+  };
+
+  const getButtonLabel = () => {
+    if (isEducation) return 'Close Admission';
+    return `Mark as ${industryConfig.wonLabel}`;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">Close Admission</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Creating admission for {leadName}</p>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: `${industryConfig.color}15` }}
+            >
+              {isEducation ? (
+                <AcademicCapIcon className="h-5 w-5" style={{ color: industryConfig.color }} />
+              ) : (
+                <CurrencyRupeeIcon className="h-5 w-5" style={{ color: industryConfig.color }} />
+              )}
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">{getModalTitle()}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{getModalSubtitle()}</p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -279,168 +345,233 @@ export function CloseAdmissionModal({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
             <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-              <ExclamationTriangleIcon className="w-4 h-4 text-red-600" />
+              <ExclamationTriangleIcon className="w-4 h-4 text-red-600 flex-shrink-0" />
               <span className="text-sm text-red-800">{error}</span>
             </div>
           )}
 
-          {/* University Selection */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              University <span className="text-red-500">*</span>
-            </label>
-            {isLoading ? (
-              <div className="px-3 py-2 text-sm text-slate-500 bg-slate-50 rounded-lg">
-                Loading universities...
+          {/* ========== EDUCATION SPECIFIC FORM ========== */}
+          {isEducation && (
+            <>
+              {/* University Selection */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  University <span className="text-red-500">*</span>
+                </label>
+                {loadingUniversities ? (
+                  <div className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-500">
+                    Loading universities...
+                  </div>
+                ) : universities.length === 0 ? (
+                  <div className="w-full px-3 py-2 text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+                    No universities found. Please create a university first from the Universities page.
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={formData.universityId || ''}
+                    onChange={(e) => {
+                      const selectedUniv = universities.find(u => u.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        universityId: e.target.value,
+                        commissionPercent: selectedUniv?.defaultCommissionPercent ?? formData.commissionPercent
+                      });
+                    }}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                  >
+                    <option value="">Select a university</option>
+                    {universities.map((univ) => (
+                      <option key={univ.id} value={univ.id}>
+                        {univ.name} {univ.city ? `(${univ.city})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-            ) : (
-              <select
-                required
-                value={formData.universityId}
-                onChange={(e) => setFormData({ ...formData, universityId: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-              >
-                <option value="">Select University</option>
-                {universities.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} {u.city ? `(${u.city})` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
 
-          {/* Course & Branch */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Course</label>
-              <input
-                type="text"
-                value={formData.courseName}
-                onChange={(e) => setFormData({ ...formData, courseName: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-                placeholder="e.g., B.Tech, MBA"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
-              <input
-                type="text"
-                value={formData.branch}
-                onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-                placeholder="e.g., CSE, ECE"
-              />
-            </div>
-          </div>
+              {/* Course & Branch */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Course</label>
+                  <input
+                    type="text"
+                    value={formData.courseName}
+                    onChange={(e) => setFormData({ ...formData, courseName: e.target.value })}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                    placeholder="e.g., B.Tech, MBA"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
+                  <input
+                    type="text"
+                    value={formData.branch}
+                    onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                    placeholder="e.g., CSE, ECE"
+                  />
+                </div>
+              </div>
 
-          {/* Academic Year & Admission Type */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Academic Year <span className="text-red-500">*</span>
-              </label>
-              <select
-                required
-                value={formData.academicYear}
-                onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-              >
-                {academicYearOptions.map((year) => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Admission Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                required
-                value={formData.admissionType}
-                onChange={(e) => setFormData({ ...formData, admissionType: e.target.value as any })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-              >
-                {admissionTypeOptions.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+              {/* Academic Year & Admission Type */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Academic Year <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.academicYear}
+                    onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                  >
+                    {academicYearOptions.map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Admission Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.admissionType}
+                    onChange={(e) => setFormData({ ...formData, admissionType: e.target.value as any })}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                  >
+                    {admissionTypeOptions.map((type) => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-          {/* Fee Details */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Total Fee (INR) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                min="0"
-                value={formData.totalFee || ''}
-                onChange={(e) => setFormData({ ...formData, totalFee: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-                placeholder="e.g., 500000"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Commission % <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                min="0"
-                max="100"
-                step="0.5"
-                value={formData.commissionPercent || ''}
-                onChange={(e) => setFormData({ ...formData, commissionPercent: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-                placeholder="e.g., 10"
-              />
-            </div>
-          </div>
+              {/* Fee Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Total Fee (INR) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={formData.totalFee || ''}
+                    onChange={(e) => setFormData({ ...formData, totalFee: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                    placeholder="e.g., 500000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Commission % <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={formData.commissionPercent || ''}
+                    onChange={(e) => setFormData({ ...formData, commissionPercent: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                    placeholder="e.g., 10"
+                  />
+                </div>
+              </div>
 
-          {/* Donation (if applicable) */}
-          {formData.admissionType === 'DONATION' && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Donation Amount (INR)
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={formData.donationAmount || ''}
-                onChange={(e) => setFormData({ ...formData, donationAmount: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
-                placeholder="e.g., 100000"
-              />
-            </div>
+              {/* Donation (if applicable) */}
+              {formData.admissionType === 'DONATION' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Donation Amount (INR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.donationAmount || ''}
+                    onChange={(e) => setFormData({ ...formData, donationAmount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                    placeholder="e.g., 100000"
+                  />
+                </div>
+              )}
+
+              {/* Summary for Education */}
+              <div className="bg-slate-50 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-slate-700 mb-2">Summary</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="text-slate-500">Total Fee:</div>
+                  <div className="font-medium text-slate-900 text-right">
+                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(formData.totalFee)}
+                  </div>
+                  {(formData.donationAmount ?? 0) > 0 && (
+                    <>
+                      <div className="text-slate-500">Donation:</div>
+                      <div className="font-medium text-purple-600 text-right">
+                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(formData.donationAmount ?? 0)}
+                      </div>
+                    </>
+                  )}
+                  <div className="text-slate-500">Commission ({formData.commissionPercent}%):</div>
+                  <div className="font-medium text-emerald-600 text-right">
+                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(commissionAmount)}
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
-          {/* Summary */}
-          <div className="bg-slate-50 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-slate-700 mb-2">Summary</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="text-slate-500">Total Fee:</div>
-              <div className="font-medium text-slate-900 text-right">
-                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(formData.totalFee)}
+          {/* ========== GENERIC FORM FOR OTHER INDUSTRIES ========== */}
+          {!isEducation && (
+            <>
+              {/* Deal Value */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Deal Value (INR) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={dealData.dealValue || ''}
+                  onChange={(e) => setDealData({ ...dealData, dealValue: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none"
+                  placeholder="Enter deal value"
+                />
+                <p className="text-xs text-slate-500 mt-1">Enter the value of this deal</p>
               </div>
-              {(formData.donationAmount ?? 0) > 0 && (
-                <>
-                  <div className="text-slate-500">Donation:</div>
-                  <div className="font-medium text-purple-600 text-right">
-                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(formData.donationAmount ?? 0)}
-                  </div>
-                </>
-              )}
-              <div className="text-slate-500">Commission ({formData.commissionPercent}%):</div>
-              <div className="font-medium text-emerald-600 text-right">
-                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(commissionAmount)}
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  value={dealData.notes}
+                  onChange={(e) => setDealData({ ...dealData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-primary-500 outline-none resize-none"
+                  placeholder="Add any notes about this deal closure..."
+                />
               </div>
-            </div>
-          </div>
+
+              {/* Summary for Generic */}
+              <div className="bg-slate-50 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-slate-700 mb-2">Confirmation</h4>
+                <p className="text-sm text-slate-600">
+                  This will mark <strong>{leadName}</strong> as <strong style={{ color: industryConfig.color }}>{industryConfig.wonLabel}</strong>.
+                </p>
+                {dealData.dealValue > 0 && (
+                  <p className="text-sm text-slate-600 mt-1">
+                    Deal Value: <strong>{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(dealData.dealValue)}</strong>
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-2">
@@ -454,17 +585,18 @@ export function CloseAdmissionModal({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 text-sm bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 text-sm text-white font-medium rounded-lg disabled:opacity-50 flex items-center gap-2"
+              style={{ backgroundColor: industryConfig.color }}
             >
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating...
+                  Processing...
                 </>
               ) : (
                 <>
-                  <AcademicCapIcon className="h-4 w-4" />
-                  Close Admission
+                  <CheckCircleSolidIcon className="h-4 w-4" />
+                  {getButtonLabel()}
                 </>
               )}
             </button>

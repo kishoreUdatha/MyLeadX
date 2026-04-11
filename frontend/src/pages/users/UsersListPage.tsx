@@ -137,20 +137,22 @@ export default function UsersListPage() {
   // Show manager dropdown for all roles except admin and owner
   const showManagerDropdown = selectedRole && !['admin', 'owner'].includes(selectedRole.slug);
 
-  // Define role hierarchy - who can manage whom
+  // Define strict role hierarchy - each role reports to immediate level above only
+  // Note: team_lead and team_leader are both valid slugs for the same role
   const getValidManagerRoles = (roleSlug: string): string[] => {
     switch (roleSlug) {
       case 'telecaller':
       case 'counselor':
-        return ['team_lead']; // Telecallers & Counselors report to Team Leads
+        return ['team_lead', 'team_leader']; // Telecallers & Counselors report to Team Leads only
       case 'team_lead':
-        return ['manager']; // Team Leads report to Managers
+      case 'team_leader':
+        return ['manager']; // Team Leads report to Managers only
       case 'manager':
-        return ['admin']; // Managers report to Admins
+        return ['admin']; // Managers report to Admins only
       case 'field_sales':
-        return ['team_lead', 'manager']; // Field Sales can report to Team Lead or Manager
+        return ['team_lead', 'team_leader']; // Field Sales report to Team Leads only
       default:
-        return ['admin', 'manager', 'team_lead']; // Default: any manager role
+        return ['admin', 'manager', 'team_lead', 'team_leader']; // Default: any manager role
     }
   };
 

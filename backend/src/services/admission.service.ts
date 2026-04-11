@@ -6,7 +6,8 @@ import { admissionNotificationService } from './admission-notification.service';
 interface CreateAdmissionInput {
   organizationId: string;
   leadId: string;
-  universityId: string;
+  universityId?: string;
+  universityName?: string;
   courseName?: string;
   branch?: string;
   academicYear: string;
@@ -56,6 +57,283 @@ export class AdmissionService {
   }
 
   /**
+   * Create commission records for telecaller, team lead, and manager
+   * based on fixed amounts configured per admission type.
+   *
+   * Commission is assigned based on the LEAD's assigned user hierarchy,
+   * not who closes the admission. This ensures telecallers who sourced
+   * the lead get their commission even if a manager closes the admission.
+   */
+  private async createCommissions(
+    organizationId: string,
+    admissionId: string,
+    leadId: string,
+    closedById: string,
+    admissionType: AdmissionType,
+    baseValue: number
+  ): Promise<void> {
+    // Get commission config for this admission type
+    const config = await prisma.commissionConfig.findUnique({
+      where: {
+        organizationId_admissionType: {
+          organizationId,
+          admissionType,
+        },
+      },
+    });
+
+    if (!config) {
+      console.log('[AdmissionService] No commission config found for admission type:', admissionType);
+      return;
+    }
+
+    // Get the lead to find the assigned telecaller/counselor
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: {
+        assignments: {
+          where: { isActive: true },
+          orderBy: { assignedAt: 'desc' },
+          take: 1,
+          select: {
+            assignedToId: true,
+            assignedTo: {
+              select: {
+                id: true,
+                managerId: true,
+                role: { select: { slug: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const commissionsToCreate: Array<{
+      organizationId: string;
+      userId: string;
+      leadId: string;
+      admissionId: string;
+      amount: number;
+      rate: number;
+      baseValue: number;
+      status: 'PENDING';
+      notes: string;
+    }> = [];
+
+    // Track who already got commission to avoid duplicates
+    const commissionedUserIds = new Set<string>();
+
+    // Get the assigned telecaller/counselor from lead assignments
+    const assignedUser = lead?.assignments?.[0]?.assignedTo;
+    const assignedUserRole = assignedUser?.role?.slug?.toLowerCase() || '';
+
+    // 1. Telecaller Commission - goes to lead's assigned telecaller/counselor
+    if (assignedUser && ['telecaller', 'counselor'].includes(assignedUserRole)) {
+      const telecallerAmount = Number(config.telecallerAmount) || 0;
+      if (telecallerAmount > 0) {
+        commissionsToCreate.push({
+          organizationId,
+          userId: assignedUser.id,
+          leadId,
+          admissionId,
+          amount: telecallerAmount,
+          rate: 0,
+          baseValue,
+          status: 'PENDING',
+          notes: 'Telecaller commission (lead assigned)',
+        });
+        commissionedUserIds.add(assignedUser.id);
+        console.log(`[AdmissionService] Telecaller commission for ${assignedUser.id}`);
+
+        // 2. Team Lead Commission - goes to telecaller's manager
+        if (assignedUser.managerId && !commissionedUserIds.has(assignedUser.managerId)) {
+          const teamLeadAmount = Number(config.teamLeadAmount) || 0;
+          if (teamLeadAmount > 0) {
+            commissionsToCreate.push({
+              organizationId,
+              userId: assignedUser.managerId,
+              leadId,
+              admissionId,
+              amount: teamLeadAmount,
+              rate: 0,
+              baseValue,
+              status: 'PENDING',
+              notes: 'Team Lead commission',
+            });
+            commissionedUserIds.add(assignedUser.managerId);
+
+            // 3. Manager Commission - goes to team lead's manager
+            const teamLead = await prisma.user.findUnique({
+              where: { id: assignedUser.managerId },
+              select: { managerId: true },
+            });
+
+            if (teamLead?.managerId && !commissionedUserIds.has(teamLead.managerId)) {
+              const managerAmount = Number(config.managerAmount) || 0;
+              if (managerAmount > 0) {
+                commissionsToCreate.push({
+                  organizationId,
+                  userId: teamLead.managerId,
+                  leadId,
+                  admissionId,
+                  amount: managerAmount,
+                  rate: 0,
+                  baseValue,
+                  status: 'PENDING',
+                  notes: 'Manager commission',
+                });
+                commissionedUserIds.add(teamLead.managerId);
+              }
+            }
+          }
+        }
+      }
+    }
+    // If no telecaller assigned, fall back to whoever closed the admission
+    else {
+      console.log('[AdmissionService] No telecaller assigned to lead, using closer for commission');
+
+      const closedByUser = await prisma.user.findUnique({
+        where: { id: closedById },
+        select: {
+          id: true,
+          managerId: true,
+          role: { select: { slug: true } },
+        },
+      });
+
+      if (!closedByUser) {
+        console.log('[AdmissionService] Closed by user not found:', closedById);
+        return;
+      }
+
+      const closerRole = closedByUser.role?.slug?.toLowerCase() || '';
+
+      // If closer is telecaller/counselor
+      if (['telecaller', 'counselor'].includes(closerRole)) {
+        const telecallerAmount = Number(config.telecallerAmount) || 0;
+        if (telecallerAmount > 0) {
+          commissionsToCreate.push({
+            organizationId,
+            userId: closedById,
+            leadId,
+            admissionId,
+            amount: telecallerAmount,
+            rate: 0,
+            baseValue,
+            status: 'PENDING',
+            notes: 'Telecaller commission (closer)',
+          });
+          commissionedUserIds.add(closedById);
+        }
+
+        if (closedByUser.managerId && !commissionedUserIds.has(closedByUser.managerId)) {
+          const teamLeadAmount = Number(config.teamLeadAmount) || 0;
+          if (teamLeadAmount > 0) {
+            commissionsToCreate.push({
+              organizationId,
+              userId: closedByUser.managerId,
+              leadId,
+              admissionId,
+              amount: teamLeadAmount,
+              rate: 0,
+              baseValue,
+              status: 'PENDING',
+              notes: 'Team Lead commission',
+            });
+            commissionedUserIds.add(closedByUser.managerId);
+
+            const teamLead = await prisma.user.findUnique({
+              where: { id: closedByUser.managerId },
+              select: { managerId: true },
+            });
+
+            if (teamLead?.managerId && !commissionedUserIds.has(teamLead.managerId)) {
+              const managerAmount = Number(config.managerAmount) || 0;
+              if (managerAmount > 0) {
+                commissionsToCreate.push({
+                  organizationId,
+                  userId: teamLead.managerId,
+                  leadId,
+                  admissionId,
+                  amount: managerAmount,
+                  rate: 0,
+                  baseValue,
+                  status: 'PENDING',
+                  notes: 'Manager commission',
+                });
+              }
+            }
+          }
+        }
+      }
+      // If closer is team lead
+      else if (['team_lead', 'teamlead'].includes(closerRole)) {
+        const teamLeadAmount = Number(config.teamLeadAmount) || 0;
+        if (teamLeadAmount > 0) {
+          commissionsToCreate.push({
+            organizationId,
+            userId: closedById,
+            leadId,
+            admissionId,
+            amount: teamLeadAmount,
+            rate: 0,
+            baseValue,
+            status: 'PENDING',
+            notes: 'Team Lead commission (closer)',
+          });
+          commissionedUserIds.add(closedById);
+        }
+
+        if (closedByUser.managerId && !commissionedUserIds.has(closedByUser.managerId)) {
+          const managerAmount = Number(config.managerAmount) || 0;
+          if (managerAmount > 0) {
+            commissionsToCreate.push({
+              organizationId,
+              userId: closedByUser.managerId,
+              leadId,
+              admissionId,
+              amount: managerAmount,
+              rate: 0,
+              baseValue,
+              status: 'PENDING',
+              notes: 'Manager commission',
+            });
+          }
+        }
+      }
+      // If closer is manager/admin
+      else if (['manager', 'admin'].includes(closerRole)) {
+        const managerAmount = Number(config.managerAmount) || 0;
+        if (managerAmount > 0) {
+          commissionsToCreate.push({
+            organizationId,
+            userId: closedById,
+            leadId,
+            admissionId,
+            amount: managerAmount,
+            rate: 0,
+            baseValue,
+            status: 'PENDING',
+            notes: 'Manager commission (closer)',
+          });
+        }
+      }
+    }
+
+    // Create all commission records
+    if (commissionsToCreate.length > 0) {
+      await prisma.commission.createMany({
+        data: commissionsToCreate,
+      });
+      console.log(`[AdmissionService] Created ${commissionsToCreate.length} commission records for admission ${admissionId}`);
+    } else {
+      console.log(`[AdmissionService] No commissions created for admission ${admissionId}`);
+    }
+  }
+
+  /**
    * Close/Create an admission
    */
   async create(input: CreateAdmissionInput) {
@@ -68,13 +346,38 @@ export class AdmissionService {
       throw new NotFoundError('Lead not found');
     }
 
-    // Verify university exists
-    const university = await prisma.university.findFirst({
-      where: { id: input.universityId, organizationId: input.organizationId, isActive: true },
-    });
+    // Handle university - either by ID or by name (auto-create if needed)
+    let university;
 
-    if (!university) {
-      throw new NotFoundError('University not found or inactive');
+    if (input.universityId) {
+      // Find by ID
+      university = await prisma.university.findFirst({
+        where: { id: input.universityId, organizationId: input.organizationId, isActive: true },
+      });
+      if (!university) {
+        throw new NotFoundError('University not found or inactive');
+      }
+    } else if (input.universityName) {
+      // Find by name or create new
+      university = await prisma.university.findFirst({
+        where: {
+          name: { equals: input.universityName, mode: 'insensitive' },
+          organizationId: input.organizationId,
+        },
+      });
+
+      if (!university) {
+        // Auto-create university with the given name
+        university = await prisma.university.create({
+          data: {
+            organizationId: input.organizationId,
+            name: input.universityName,
+            isActive: true,
+          },
+        });
+      }
+    } else {
+      throw new BadRequestError('Either universityId or universityName is required');
     }
 
     // Check if admission already exists for this lead
@@ -102,7 +405,7 @@ export class AdmissionService {
         organizationId: input.organizationId,
         admissionNumber,
         leadId: input.leadId,
-        universityId: input.universityId,
+        universityId: university.id,
         courseName: input.courseName,
         branch: input.branch,
         academicYear: input.academicYear,
@@ -127,32 +430,48 @@ export class AdmissionService {
       },
     });
 
-    // Update lead status and admission info
+    // Find "Admitted" stage for this organization
+    const admittedStage = await prisma.leadStage.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        name: { in: ['Admitted', 'ADMITTED', 'admitted'] },
+      },
+    });
+
+    // Update lead conversion status and stage
     await prisma.lead.update({
       where: { id: input.leadId },
       data: {
-        admissionStatus: 'ADMITTED',
-        admissionType: input.admissionType,
-        actualFee: input.totalFee,
-        commissionPercentage: input.commissionPercent,
-        commissionAmount,
-        donationAmount: input.donationAmount || 0,
-        admissionClosedAt: new Date(),
-        admissionClosedById: input.closedById,
-        academicYear: input.academicYear,
         isConverted: true,
         convertedAt: new Date(),
+        actualValue: input.totalFee,
+        ...(admittedStage && { stageId: admittedStage.id }),
       },
     });
 
     // Update university stats
     await prisma.university.update({
-      where: { id: input.universityId },
+      where: { id: university.id },
       data: {
         totalAdmissions: { increment: 1 },
         totalRevenue: { increment: input.totalFee },
       },
     });
+
+    // Create Commission records for telecaller, team lead, and manager
+    try {
+      await this.createCommissions(
+        input.organizationId,
+        admission.id,
+        input.leadId,
+        input.closedById,
+        input.admissionType,
+        input.totalFee
+      );
+    } catch (error) {
+      console.error('[AdmissionService] Failed to create commission records:', error);
+      // Don't throw - commission creation failure shouldn't fail the admission
+    }
 
     // Send notifications for new admission
     try {
@@ -261,7 +580,7 @@ export class AdmissionService {
             phone: true,
             email: true,
             fatherName: true,
-            fatherMobile: true,
+            fatherPhone: true,
             address: true,
             city: true,
             state: true,
@@ -369,7 +688,7 @@ export class AdmissionService {
     });
 
     // Update admission payment totals
-    const newPaidAmount = Number(admission.paidAmount) + input.amount;
+    const newPaidAmount = Number(admission.paidAmount) + Number(input.amount);
     const totalDue = Number(admission.totalFee) + Number(admission.donationAmount);
     const newPendingAmount = totalDue - newPaidAmount;
     const newPaymentStatus =
@@ -384,13 +703,8 @@ export class AdmissionService {
       },
     });
 
-    // Update lead status if fully paid
-    if (newPaymentStatus === 'PAID') {
-      await prisma.lead.update({
-        where: { id: admission.leadId },
-        data: { admissionStatus: 'ENROLLED' },
-      });
-    }
+    // Note: Lead is already marked as isConverted when admission is created
+    // No additional status update needed when payment is complete
 
     // Send payment notifications
     try {
@@ -528,11 +842,10 @@ export class AdmissionService {
       },
     });
 
-    // Update lead status
+    // Update lead - mark as not converted since admission is cancelled
     await prisma.lead.update({
       where: { id: admission.leadId },
       data: {
-        admissionStatus: 'DROPPED',
         isConverted: false,
       },
     });
