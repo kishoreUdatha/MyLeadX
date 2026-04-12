@@ -3,15 +3,25 @@
  */
 import { useState, useEffect } from 'react';
 import { FunnelIcon, PhoneIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
-import ReportTemplate, { ReportStatsGrid, ReportStatCard, ReportTable } from './components/ReportTemplate';
+import ReportTemplate, { ReportStatsGrid, ReportStatCard, ReportTable, DateRange } from './components/ReportTemplate';
 import { callReportsService, LeadDispositionData } from '../../services/call-reports.service';
+import toast from 'react-hot-toast';
 
 export default function LeadDispositionReportPage() {
   const [data, setData] = useState<LeadDispositionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchValue, setSearchValue] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
+    };
+  });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [dateRange]);
 
   const loadData = async () => {
     console.log('[LeadDisposition] loadData called');
@@ -32,6 +42,34 @@ export default function LeadDispositionReportPage() {
     }
   };
 
+  // Filter data by search
+  const filteredDispositions = data?.dispositions.filter(d =>
+    !searchValue.trim() || d.user.toLowerCase().includes(searchValue.toLowerCase())
+  ) || [];
+
+  const handleExport = () => {
+    if (!filteredDispositions.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['User', 'Total Calls', 'Connected', 'Not Connected', 'Interested', 'Not Interested', 'Callback', 'Converted', 'No Answer', 'Busy', 'Wrong Number'];
+    const csvRows = [headers.join(',')];
+    filteredDispositions.forEach((row: any) => {
+      csvRows.push([
+        `"${row.user}"`, row.totalCalls, row.connected, row.notConnected, row.interested,
+        row.notInterested, row.callback, row.converted, row.noAnswer, row.busy, row.wrongNumber
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `lead-disposition-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
+
   const columns = [
     { key: 'user', label: 'User' },
     { key: 'totalCalls', label: 'Total Calls', align: 'center' as const },
@@ -47,7 +85,20 @@ export default function LeadDispositionReportPage() {
   ];
 
   return (
-    <ReportTemplate title="Lead Disposition Report" description="Analysis of calls connected, not connected along with status wise count" icon={FunnelIcon} iconColor="bg-purple-500" isLoading={isLoading} onRefresh={loadData}>
+    <ReportTemplate
+      title="Lead Disposition Report"
+      description="Analysis of calls connected, not connected along with status wise count"
+      icon={FunnelIcon}
+      iconColor="bg-purple-500"
+      isLoading={isLoading}
+      onRefresh={loadData}
+      onExport={handleExport}
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search by user..."
+    >
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
           {error}
@@ -61,11 +112,11 @@ export default function LeadDispositionReportPage() {
             <ReportStatCard label="Not Connected" value={data.summary.notConnected} icon={XCircleIcon} iconColor="bg-red-500" />
             <ReportStatCard label="Connection Rate" value={data.summary.connectionRate} icon={FunnelIcon} iconColor="bg-purple-500" />
           </ReportStatsGrid>
-          {data.dispositions.length > 0 ? (
-            <ReportTable columns={columns} data={data.dispositions} />
+          {filteredDispositions.length > 0 ? (
+            <ReportTable columns={columns} data={filteredDispositions} emptyMessage={searchValue ? "No users match your search" : "No call data available"} />
           ) : (
             <div className="text-center py-12 text-gray-500">
-              No call data available for the selected period
+              {searchValue ? "No users match your search" : "No call data available for the selected period"}
             </div>
           )}
         </div>

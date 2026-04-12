@@ -3,7 +3,8 @@
  */
 import { useState, useEffect } from 'react';
 import { ClipboardDocumentCheckIcon, CheckCircleIcon, ClockIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
-import ReportTemplate, { ReportStatsGrid, ReportStatCard } from './components/ReportTemplate';
+import ReportTemplate, { ReportStatsGrid, ReportStatCard, DateRange } from './components/ReportTemplate';
+import toast from 'react-hot-toast';
 
 interface TaskRow {
   no: number;
@@ -28,8 +29,17 @@ export default function UserTaskReportPage() {
   const [selectedUser, setSelectedUser] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedPriority, setSelectedPriority] = useState('all');
+  const [searchValue, setSearchValue] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
+    };
+  });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [dateRange]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -132,11 +142,40 @@ export default function UserTaskReportPage() {
     },
   ];
 
-  const filteredTasks = data?.tasks.filter(t =>
-    (selectedUser === 'all' || t.assignedTo === selectedUser) &&
-    (selectedStatus === 'all' || t.status === selectedStatus) &&
-    (selectedPriority === 'all' || t.priority === selectedPriority)
-  ) || [];
+  const filteredTasks = data?.tasks.filter(t => {
+    const matchesUser = selectedUser === 'all' || t.assignedTo === selectedUser;
+    const matchesStatus = selectedStatus === 'all' || t.status === selectedStatus;
+    const matchesPriority = selectedPriority === 'all' || t.priority === selectedPriority;
+    const matchesSearch = !searchValue.trim() ||
+      t.taskName.toLowerCase().includes(searchValue.toLowerCase()) ||
+      t.assignedTo.toLowerCase().includes(searchValue.toLowerCase()) ||
+      t.leadName.toLowerCase().includes(searchValue.toLowerCase());
+    return matchesUser && matchesStatus && matchesPriority && matchesSearch;
+  }) || [];
+
+  const handleExport = () => {
+    if (!filteredTasks.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['No', 'Task Name', 'Task Type', 'Assigned To', 'Reporting Manager', 'Lead Name', 'Lead Mobile', 'Created Date', 'Due Date', 'Due Time', 'Completed Date', 'Priority', 'Status', 'Remarks'];
+    const csvRows = [headers.join(',')];
+    filteredTasks.forEach((row) => {
+      csvRows.push([
+        row.no, `"${row.taskName}"`, row.taskType, `"${row.assignedTo}"`, `"${row.reportingManager}"`,
+        `"${row.leadName}"`, row.leadMobile, row.createdDate, row.dueDate, row.dueTime,
+        row.completedDate, row.priority, row.status, `"${row.remarks}"`
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `user-task-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
 
   return (
     <ReportTemplate
@@ -147,6 +186,12 @@ export default function UserTaskReportPage() {
       isLoading={isLoading}
       filters={filters}
       onRefresh={loadData}
+      onExport={handleExport}
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search task, user, or lead..."
     >
       {data && (
         <div className="space-y-6">

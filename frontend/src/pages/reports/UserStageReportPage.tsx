@@ -3,8 +3,9 @@
  */
 import { useState, useEffect } from 'react';
 import { ChartBarIcon, UserGroupIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
-import ReportTemplate, { ReportStatsGrid, ReportStatCard } from './components/ReportTemplate';
+import ReportTemplate, { ReportStatsGrid, ReportStatCard, DateRange } from './components/ReportTemplate';
 import { leadReportsService, UserStageReportData } from '../../services/lead-reports.service';
+import toast from 'react-hot-toast';
 
 // Stage color mapping for visual consistency
 const stageColors: Record<string, { bg: string; text: string; headerBg: string }> = {
@@ -35,8 +36,17 @@ export default function UserStageReportPage() {
   const [data, setData] = useState<UserStageReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchValue, setSearchValue] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
+    };
+  });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [dateRange]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -55,6 +65,35 @@ export default function UserStageReportPage() {
   const users = data?.users || [];
   const stages = data?.stages || [];
 
+  // Filter users by search
+  const filteredUsers = users.filter(user =>
+    !searchValue.trim() || user.username.toLowerCase().includes(searchValue.toLowerCase())
+  );
+
+  const handleExport = () => {
+    if (!filteredUsers.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const stageHeaders = stages.map(s => s.name);
+    const headers = ['No', 'Username', 'Total', ...stageHeaders, 'In Progress', 'Converted', 'Lost'];
+    const csvRows = [headers.join(',')];
+    filteredUsers.forEach((row) => {
+      const stageCounts = stages.map(s => row.stageBreakdown[s.slug] || 0);
+      csvRows.push([
+        row.no, `"${row.username}"`, row.totalAssignedLeads, ...stageCounts, row.inProgress, row.converted, row.lost
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `user-stage-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
+
   return (
     <ReportTemplate
       title="User Stage Report"
@@ -63,6 +102,12 @@ export default function UserStageReportPage() {
       iconColor="bg-pink-500"
       isLoading={isLoading}
       onRefresh={loadData}
+      onExport={handleExport}
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search by username..."
     >
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
@@ -79,9 +124,9 @@ export default function UserStageReportPage() {
             <ReportStatCard label="Total Lost" value={data.summary.totalLost} icon={XCircleIcon} iconColor="bg-red-500" />
           </ReportStatsGrid>
 
-          {users.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-500">
-              No user data available. Leads may not be assigned to any users yet.
+              {searchValue ? "No users match your search" : "No user data available. Leads may not be assigned to any users yet."}
             </div>
           ) : (
             <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -109,7 +154,7 @@ export default function UserStageReportPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {users.map((row) => (
+                    {filteredUsers.map((row) => (
                       <tr key={row.userId} className="hover:bg-slate-50">
                         <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-slate-900 sticky left-0 bg-white z-10">{row.no}</td>
                         <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-slate-900 sticky left-10 bg-white z-10">{row.username}</td>
@@ -144,16 +189,16 @@ export default function UserStageReportPage() {
                   <tfoot>
                     <tr className="bg-slate-100 font-semibold">
                       <td className="px-3 py-3 text-sm sticky left-0 bg-slate-100 z-10"></td>
-                      <td className="px-3 py-3 text-sm font-bold sticky left-10 bg-slate-100 z-10">TOTAL</td>
-                      <td className="px-3 py-3 text-sm text-center font-bold text-blue-700">{users.reduce((sum, r) => sum + r.totalAssignedLeads, 0)}</td>
+                      <td className="px-3 py-3 text-sm font-bold sticky left-10 bg-slate-100 z-10">TOTAL ({filteredUsers.length})</td>
+                      <td className="px-3 py-3 text-sm text-center font-bold text-blue-700">{filteredUsers.reduce((sum, r) => sum + r.totalAssignedLeads, 0)}</td>
                       {stages.map((stage) => (
                         <td key={stage.id} className="px-3 py-3 text-sm text-center">
-                          {users.reduce((sum, r) => sum + (r.stageBreakdown[stage.slug] || 0), 0)}
+                          {filteredUsers.reduce((sum, r) => sum + (r.stageBreakdown[stage.slug] || 0), 0)}
                         </td>
                       ))}
-                      <td className="px-3 py-3 text-sm text-center text-amber-700">{users.reduce((sum, r) => sum + r.inProgress, 0)}</td>
-                      <td className="px-3 py-3 text-sm text-center font-bold text-green-700">{users.reduce((sum, r) => sum + r.converted, 0)}</td>
-                      <td className="px-3 py-3 text-sm text-center text-red-700">{users.reduce((sum, r) => sum + r.lost, 0)}</td>
+                      <td className="px-3 py-3 text-sm text-center text-amber-700">{filteredUsers.reduce((sum, r) => sum + r.inProgress, 0)}</td>
+                      <td className="px-3 py-3 text-sm text-center font-bold text-green-700">{filteredUsers.reduce((sum, r) => sum + r.converted, 0)}</td>
+                      <td className="px-3 py-3 text-sm text-center text-red-700">{filteredUsers.reduce((sum, r) => sum + r.lost, 0)}</td>
                     </tr>
                   </tfoot>
                 </table>

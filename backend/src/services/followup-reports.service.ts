@@ -50,11 +50,16 @@ interface ScheduledFollowUp {
   leadId: string;
   leadName: string;
   leadPhone: string;
+  leadSource: string;
+  lastContactedAt: Date | null;
   scheduledAt: Date;
   message: string | null;
+  notes: string | null;
   assigneeName: string;
+  reportingManager: string;
   followUpType: string;
   attemptCount: number;
+  lastAttemptAt: Date | null;
   isOverdue: boolean;
 }
 
@@ -180,8 +185,14 @@ class FollowUpReportsService {
         scheduledAt: { gte: now },
       },
       include: {
-        lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
-        assignee: { select: { firstName: true, lastName: true } },
+        lead: { select: { id: true, firstName: true, lastName: true, phone: true, source: true, lastContactedAt: true, firstResponseAt: true, updatedAt: true } },
+        assignee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            manager: { select: { firstName: true, lastName: true } }
+          }
+        },
       },
       orderBy: { scheduledAt: 'asc' },
       take: limit,
@@ -192,11 +203,16 @@ class FollowUpReportsService {
       leadId: f.leadId,
       leadName: `${f.lead.firstName || ''} ${f.lead.lastName || ''}`.trim() || 'Unknown',
       leadPhone: f.lead.phone || '',
+      leadSource: f.lead.source || 'Unknown',
+      lastContactedAt: f.lead.lastContactedAt || f.lead.firstResponseAt || f.lead.updatedAt,
       scheduledAt: f.scheduledAt,
       message: f.message,
+      notes: f.notes,
       assigneeName: `${f.assignee.firstName} ${f.assignee.lastName}`.trim(),
+      reportingManager: f.assignee.manager ? `${f.assignee.manager.firstName} ${f.assignee.manager.lastName}`.trim() : '-',
       followUpType: f.followUpType,
       attemptCount: f.attemptCount,
+      lastAttemptAt: f.lastAttemptAt,
       isOverdue: false,
     }));
   }
@@ -217,8 +233,14 @@ class FollowUpReportsService {
         ],
       },
       include: {
-        lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
-        assignee: { select: { firstName: true, lastName: true } },
+        lead: { select: { id: true, firstName: true, lastName: true, phone: true, source: true, lastContactedAt: true, firstResponseAt: true, updatedAt: true } },
+        assignee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            manager: { select: { firstName: true, lastName: true } }
+          }
+        },
       },
       orderBy: { scheduledAt: 'asc' },
       take: limit,
@@ -229,11 +251,16 @@ class FollowUpReportsService {
       leadId: f.leadId,
       leadName: `${f.lead.firstName || ''} ${f.lead.lastName || ''}`.trim() || 'Unknown',
       leadPhone: f.lead.phone || '',
+      leadSource: f.lead.source || 'Unknown',
+      lastContactedAt: f.lead.lastContactedAt || f.lead.firstResponseAt || f.lead.updatedAt,
       scheduledAt: f.scheduledAt,
       message: f.message,
+      notes: f.notes,
       assigneeName: `${f.assignee.firstName} ${f.assignee.lastName}`.trim(),
+      reportingManager: f.assignee.manager ? `${f.assignee.manager.firstName} ${f.assignee.manager.lastName}`.trim() : '-',
       followUpType: f.followUpType,
       attemptCount: f.attemptCount,
+      lastAttemptAt: f.lastAttemptAt,
       isOverdue: true,
     }));
   }
@@ -257,8 +284,14 @@ class FollowUpReportsService {
       prisma.followUp.findMany({
         where: { ...where, status: 'COMPLETED' },
         include: {
-          lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
-          assignee: { select: { firstName: true, lastName: true } },
+          lead: { select: { id: true, firstName: true, lastName: true, phone: true, source: true, lastContactedAt: true, firstResponseAt: true, updatedAt: true } },
+          assignee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              manager: { select: { firstName: true, lastName: true } }
+            }
+          },
         },
         orderBy: { completedAt: 'desc' },
         take: limit,
@@ -280,11 +313,16 @@ class FollowUpReportsService {
         leadId: f.leadId,
         leadName: `${f.lead.firstName || ''} ${f.lead.lastName || ''}`.trim() || 'Unknown',
         leadPhone: f.lead.phone || '',
+        leadSource: f.lead.source || 'Unknown',
+        lastContactedAt: f.lead.lastContactedAt || f.lead.firstResponseAt || f.lead.updatedAt,
         scheduledAt: f.scheduledAt,
         message: f.message,
+        notes: f.notes,
         assigneeName: `${f.assignee.firstName} ${f.assignee.lastName}`.trim(),
+        reportingManager: f.assignee.manager ? `${f.assignee.manager.firstName} ${f.assignee.manager.lastName}`.trim() : '-',
         followUpType: f.followUpType,
         attemptCount: f.attemptCount,
+        lastAttemptAt: f.lastAttemptAt,
         isOverdue: false,
       })),
       todayCount,
@@ -309,7 +347,7 @@ class FollowUpReportsService {
         isActive: true,
         OR: [
           { role: { slug: { in: ['telecaller', 'counselor', 'sales_rep', 'team_lead'] } } },
-          { followUpsAssigned: { some: { lead: { organizationId } } } },
+          { followUps: { some: { lead: { organizationId } } } },
         ],
       },
       select: { id: true, firstName: true, lastName: true, email: true },
@@ -379,6 +417,17 @@ class FollowUpReportsService {
     const tomorrowEnd = new Date(todayStart.getTime() + 2 * 24 * 60 * 60 * 1000);
     const weekEnd = new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+    const includeFields = {
+      lead: { select: { id: true, firstName: true, lastName: true, phone: true, source: true, lastContactedAt: true, firstResponseAt: true, updatedAt: true } },
+      assignee: {
+        select: {
+          firstName: true,
+          lastName: true,
+          manager: { select: { firstName: true, lastName: true } }
+        }
+      },
+    };
+
     const [today, tomorrow, thisWeek, overdueCount] = await Promise.all([
       prisma.followUp.findMany({
         where: {
@@ -386,10 +435,7 @@ class FollowUpReportsService {
           status: 'UPCOMING',
           scheduledAt: { gte: todayStart, lt: todayEnd },
         },
-        include: {
-          lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
-          assignee: { select: { firstName: true, lastName: true } },
-        },
+        include: includeFields,
         orderBy: { scheduledAt: 'asc' },
       }),
       prisma.followUp.findMany({
@@ -398,10 +444,7 @@ class FollowUpReportsService {
           status: 'UPCOMING',
           scheduledAt: { gte: todayEnd, lt: tomorrowEnd },
         },
-        include: {
-          lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
-          assignee: { select: { firstName: true, lastName: true } },
-        },
+        include: includeFields,
         orderBy: { scheduledAt: 'asc' },
       }),
       prisma.followUp.findMany({
@@ -410,10 +453,7 @@ class FollowUpReportsService {
           status: 'UPCOMING',
           scheduledAt: { gte: tomorrowEnd, lt: weekEnd },
         },
-        include: {
-          lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
-          assignee: { select: { firstName: true, lastName: true } },
-        },
+        include: includeFields,
         orderBy: { scheduledAt: 'asc' },
         take: 50,
       }),
@@ -433,11 +473,16 @@ class FollowUpReportsService {
       leadId: f.leadId,
       leadName: `${f.lead.firstName || ''} ${f.lead.lastName || ''}`.trim() || 'Unknown',
       leadPhone: f.lead.phone || '',
+      leadSource: f.lead.source || 'Unknown',
+      lastContactedAt: f.lead.lastContactedAt || f.lead.firstResponseAt || f.lead.updatedAt,
       scheduledAt: f.scheduledAt,
       message: f.message,
+      notes: f.notes,
       assigneeName: `${f.assignee.firstName} ${f.assignee.lastName}`.trim(),
+      reportingManager: f.assignee.manager ? `${f.assignee.manager.firstName} ${f.assignee.manager.lastName}`.trim() : '-',
       followUpType: f.followUpType,
       attemptCount: f.attemptCount,
+      lastAttemptAt: f.lastAttemptAt,
       isOverdue,
     });
 

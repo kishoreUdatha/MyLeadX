@@ -2,8 +2,10 @@
  * Follow-Up Report - Detailed follow-up tracking with lead information
  */
 import { useState, useEffect } from 'react';
-import { CalendarDaysIcon, ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, UserGroupIcon } from '@heroicons/react/24/outline';
-import ReportTemplate, { ReportStatsGrid, ReportStatCard } from './components/ReportTemplate';
+import { CalendarDaysIcon } from '@heroicons/react/24/outline';
+import ReportTemplate, { DateRange } from './components/ReportTemplate';
+import api from '../../services/api';
+import toast from 'react-hot-toast';
 
 interface FollowUpRow {
   no: number;
@@ -14,9 +16,9 @@ interface FollowUpRow {
   leadSource: string;
   followUpDate: string;
   followUpTime: string;
-  followUpType: 'Call' | 'WhatsApp' | 'Email' | 'Visit' | 'SMS';
-  status: 'Pending' | 'Completed' | 'Missed' | 'Rescheduled';
-  priority: 'High' | 'Medium' | 'Low';
+  followUpType: string;
+  status: string;
+  priority: string;
   remarks: string;
   lastContactDate: string;
   nextAction: string;
@@ -28,196 +30,129 @@ export default function FollowUpReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedPriority, setSelectedPriority] = useState('all');
+  const [searchValue, setSearchValue] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
+    };
+  });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [dateRange]);
 
   const loadData = async () => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setData({
-      followUps: [
-        {
-          no: 1,
-          username: 'John Smith',
-          reportingManager: 'Michael Brown',
-          leadName: 'Rahul Sharma',
-          leadMobile: '9876543210',
-          leadSource: 'Facebook Ads',
-          followUpDate: '2024-01-15',
-          followUpTime: '10:30 AM',
-          followUpType: 'Call',
-          status: 'Pending',
-          priority: 'High',
-          remarks: 'Interested in MBA program',
-          lastContactDate: '2024-01-12',
-          nextAction: 'Send brochure',
-          daysOverdue: 0,
+    try {
+      // Call the comprehensive follow-up report API
+      const response = await api.get('/followup-reports/comprehensive', {
+        params: {
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
         },
-        {
-          no: 2,
-          username: 'John Smith',
-          reportingManager: 'Michael Brown',
-          leadName: 'Priya Patel',
-          leadMobile: '9876543211',
-          leadSource: 'Google Ads',
-          followUpDate: '2024-01-14',
-          followUpTime: '02:00 PM',
-          followUpType: 'WhatsApp',
-          status: 'Missed',
-          priority: 'High',
-          remarks: 'Did not respond to calls',
-          lastContactDate: '2024-01-10',
-          nextAction: 'Try calling again',
-          daysOverdue: 1,
+      });
+
+      const report = response.data.data.report;
+      const now = new Date();
+
+      // Combine all follow-ups from schedule and overdue
+      const allFollowUps: any[] = [];
+
+      // Add today's follow-ups
+      if (report.schedule?.today) {
+        report.schedule.today.forEach((f: any) => allFollowUps.push({ ...f, status: 'Pending' }));
+      }
+
+      // Add tomorrow's follow-ups
+      if (report.schedule?.tomorrow) {
+        report.schedule.tomorrow.forEach((f: any) => allFollowUps.push({ ...f, status: 'Pending' }));
+      }
+
+      // Add this week's follow-ups
+      if (report.schedule?.thisWeek) {
+        report.schedule.thisWeek.forEach((f: any) => allFollowUps.push({ ...f, status: 'Pending' }));
+      }
+
+      // Add overdue follow-ups
+      if (report.overdue) {
+        report.overdue.forEach((f: any) => allFollowUps.push({ ...f, status: 'Missed' }));
+      }
+
+      // Map to table format with all columns preserved
+      const followUps: FollowUpRow[] = allFollowUps.map((f: any, index: number) => {
+        const scheduledDate = new Date(f.scheduledAt);
+
+        // Calculate days overdue from follow-up date
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const followUpDay = new Date(scheduledDate);
+        followUpDay.setHours(0, 0, 0, 0);
+        const diffTime = today.getTime() - followUpDay.getTime();
+        const daysOverdue = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        // Format last contact date from lead
+        const lastContact = f.lastContactedAt ? new Date(f.lastContactedAt).toISOString().split('T')[0] : '-';
+
+        // Combine message and notes for remarks
+        const remarks = f.notes || f.message || '-';
+
+        // Next action based on attempt count
+        const nextAction = f.attemptCount >= 2 ? 'Final attempt' : f.attemptCount === 1 ? 'Follow up again' : 'Initial call';
+
+        return {
+          no: index + 1,
+          username: f.assigneeName || '-',
+          reportingManager: f.reportingManager || '-',
+          leadName: f.leadName || '-',
+          leadMobile: f.leadPhone || '-',
+          leadSource: f.leadSource || '-',
+          followUpDate: scheduledDate.toISOString().split('T')[0],
+          followUpTime: scheduledDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          followUpType: f.followUpType || 'Call',
+          status: daysOverdue > 0 ? 'Missed' : 'Pending',
+          priority: f.attemptCount > 2 ? 'High' : f.attemptCount > 1 ? 'Medium' : 'Low',
+          remarks: remarks,
+          lastContactDate: lastContact,
+          nextAction: nextAction,
+          daysOverdue: daysOverdue > 0 ? daysOverdue : 0,
+        };
+      });
+
+      // Calculate due today from schedule
+      const dueToday = report.schedule?.today?.length || 0;
+
+      setData({
+        followUps,
+        summary: {
+          totalFollowUps: report.summary.total || 0,
+          completed: report.summary.completed || 0,
+          pending: report.summary.pending || 0,
+          missed: report.summary.missed || 0,
+          rescheduled: report.summary.rescheduled || 0,
+          dueToday: dueToday,
+          overdue: report.summary.overdue || 0,
         },
-        {
-          no: 3,
-          username: 'Sarah Johnson',
-          reportingManager: 'Michael Brown',
-          leadName: 'Amit Kumar',
-          leadMobile: '9876543212',
-          leadSource: 'Website',
-          followUpDate: '2024-01-15',
-          followUpTime: '11:00 AM',
-          followUpType: 'Call',
-          status: 'Completed',
-          priority: 'Medium',
-          remarks: 'Scheduled campus visit',
-          lastContactDate: '2024-01-15',
-          nextAction: 'Confirm visit date',
-          daysOverdue: 0,
+      });
+    } catch (error: any) {
+      console.error('Failed to load follow-up report:', error);
+      toast.error(error.response?.data?.message || 'Failed to load report data');
+      // Set empty data on error
+      setData({
+        followUps: [],
+        summary: {
+          totalFollowUps: 0,
+          completed: 0,
+          pending: 0,
+          missed: 0,
+          rescheduled: 0,
+          dueToday: 0,
+          overdue: 0,
         },
-        {
-          no: 4,
-          username: 'Sarah Johnson',
-          reportingManager: 'Michael Brown',
-          leadName: 'Sneha Reddy',
-          leadMobile: '9876543213',
-          leadSource: 'Referral',
-          followUpDate: '2024-01-13',
-          followUpTime: '03:30 PM',
-          followUpType: 'Email',
-          status: 'Missed',
-          priority: 'Medium',
-          remarks: 'Waiting for fee structure',
-          lastContactDate: '2024-01-08',
-          nextAction: 'Send fee details',
-          daysOverdue: 2,
-        },
-        {
-          no: 5,
-          username: 'Mike Wilson',
-          reportingManager: 'Emily Davis',
-          leadName: 'Vikram Singh',
-          leadMobile: '9876543214',
-          leadSource: 'Instagram',
-          followUpDate: '2024-01-15',
-          followUpTime: '04:00 PM',
-          followUpType: 'Visit',
-          status: 'Pending',
-          priority: 'High',
-          remarks: 'Campus visit scheduled',
-          lastContactDate: '2024-01-14',
-          nextAction: 'Confirm attendance',
-          daysOverdue: 0,
-        },
-        {
-          no: 6,
-          username: 'Mike Wilson',
-          reportingManager: 'Emily Davis',
-          leadName: 'Ananya Gupta',
-          leadMobile: '9876543215',
-          leadSource: 'Facebook Ads',
-          followUpDate: '2024-01-16',
-          followUpTime: '10:00 AM',
-          followUpType: 'Call',
-          status: 'Pending',
-          priority: 'Low',
-          remarks: 'Initial enquiry',
-          lastContactDate: '2024-01-14',
-          nextAction: 'Introduction call',
-          daysOverdue: 0,
-        },
-        {
-          no: 7,
-          username: 'Emily Brown',
-          reportingManager: 'Emily Davis',
-          leadName: 'Rohan Mehta',
-          leadMobile: '9876543216',
-          leadSource: 'Google Ads',
-          followUpDate: '2024-01-15',
-          followUpTime: '11:30 AM',
-          followUpType: 'WhatsApp',
-          status: 'Completed',
-          priority: 'High',
-          remarks: 'Payment link shared',
-          lastContactDate: '2024-01-15',
-          nextAction: 'Confirm payment',
-          daysOverdue: 0,
-        },
-        {
-          no: 8,
-          username: 'Emily Brown',
-          reportingManager: 'Emily Davis',
-          leadName: 'Kavya Nair',
-          leadMobile: '9876543217',
-          leadSource: 'Website',
-          followUpDate: '2024-01-12',
-          followUpTime: '09:30 AM',
-          followUpType: 'Call',
-          status: 'Rescheduled',
-          priority: 'Medium',
-          remarks: 'Asked to call next week',
-          lastContactDate: '2024-01-12',
-          nextAction: 'Call on Monday',
-          daysOverdue: 0,
-        },
-        {
-          no: 9,
-          username: 'David Lee',
-          reportingManager: 'Michael Brown',
-          leadName: 'Arjun Verma',
-          leadMobile: '9876543218',
-          leadSource: 'Referral',
-          followUpDate: '2024-01-11',
-          followUpTime: '02:30 PM',
-          followUpType: 'SMS',
-          status: 'Missed',
-          priority: 'High',
-          remarks: 'No response for 4 days',
-          lastContactDate: '2024-01-07',
-          nextAction: 'Final follow-up attempt',
-          daysOverdue: 4,
-        },
-        {
-          no: 10,
-          username: 'David Lee',
-          reportingManager: 'Michael Brown',
-          leadName: 'Meera Iyer',
-          leadMobile: '9876543219',
-          leadSource: 'Instagram',
-          followUpDate: '2024-01-15',
-          followUpTime: '05:00 PM',
-          followUpType: 'Call',
-          status: 'Pending',
-          priority: 'Medium',
-          remarks: 'Interested in BBA course',
-          lastContactDate: '2024-01-13',
-          nextAction: 'Share course details',
-          daysOverdue: 0,
-        },
-      ],
-      summary: {
-        totalFollowUps: 156,
-        completed: 48,
-        pending: 62,
-        missed: 32,
-        rescheduled: 14,
-        dueToday: 28,
-        overdue: 18,
-      },
-    });
-    setIsLoading(false);
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -276,10 +211,39 @@ export default function FollowUpReportPage() {
     },
   ];
 
-  const filteredFollowUps = data?.followUps.filter(f =>
-    (selectedStatus === 'all' || f.status === selectedStatus) &&
-    (selectedPriority === 'all' || f.priority === selectedPriority)
-  ) || [];
+  const filteredFollowUps = data?.followUps.filter(f => {
+    const matchesStatus = selectedStatus === 'all' || f.status === selectedStatus;
+    const matchesPriority = selectedPriority === 'all' || f.priority === selectedPriority;
+    const matchesSearch = !searchValue.trim() ||
+      f.username.toLowerCase().includes(searchValue.toLowerCase()) ||
+      f.leadName.toLowerCase().includes(searchValue.toLowerCase()) ||
+      f.leadMobile.includes(searchValue);
+    return matchesStatus && matchesPriority && matchesSearch;
+  }) || [];
+
+  const handleExport = () => {
+    if (!filteredFollowUps.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['No', 'Username', 'Reporting Manager', 'Lead Name', 'Lead Mobile', 'Lead Source', 'Follow-Up Date', 'Follow-Up Time', 'Type', 'Status', 'Priority', 'Remarks', 'Last Contact', 'Next Action', 'Days Overdue'];
+    const csvRows = [headers.join(',')];
+    filteredFollowUps.forEach((row) => {
+      csvRows.push([
+        row.no, `"${row.username}"`, `"${row.reportingManager}"`, `"${row.leadName}"`, row.leadMobile, `"${row.leadSource}"`,
+        row.followUpDate, row.followUpTime, row.followUpType, row.status, row.priority,
+        `"${row.remarks}"`, row.lastContactDate, `"${row.nextAction}"`, row.daysOverdue
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `follow-up-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
 
   return (
     <ReportTemplate
@@ -290,18 +254,42 @@ export default function FollowUpReportPage() {
       isLoading={isLoading}
       filters={filters}
       onRefresh={loadData}
+      onExport={handleExport}
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search user, lead, or mobile..."
     >
       {data && (
-        <div className="space-y-6">
-          {/* Summary Stats */}
-          <ReportStatsGrid>
-            <ReportStatCard label="Total Follow-Ups" value={data.summary.totalFollowUps} icon={CalendarDaysIcon} iconColor="bg-blue-500" />
-            <ReportStatCard label="Completed" value={data.summary.completed} icon={CheckCircleIcon} iconColor="bg-green-500" />
-            <ReportStatCard label="Pending" value={data.summary.pending} icon={ClockIcon} iconColor="bg-yellow-500" />
-            <ReportStatCard label="Missed" value={data.summary.missed} icon={ExclamationTriangleIcon} iconColor="bg-red-500" />
-            <ReportStatCard label="Due Today" value={data.summary.dueToday} icon={CalendarDaysIcon} iconColor="bg-orange-500" />
-            <ReportStatCard label="Overdue" value={data.summary.overdue} icon={ExclamationTriangleIcon} iconColor="bg-red-600" />
-          </ReportStatsGrid>
+        <div className="space-y-4">
+          {/* Compact Summary Stats */}
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-xs text-blue-600">Total</span>
+              <span className="text-sm font-bold text-blue-700">{data.summary.totalFollowUps}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+              <span className="text-xs text-green-600">Completed</span>
+              <span className="text-sm font-bold text-green-700">{data.summary.completed}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <span className="text-xs text-yellow-600">Pending</span>
+              <span className="text-sm font-bold text-yellow-700">{data.summary.pending}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg">
+              <span className="text-xs text-red-600">Missed</span>
+              <span className="text-sm font-bold text-red-700">{data.summary.missed}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
+              <span className="text-xs text-orange-600">Due Today</span>
+              <span className="text-sm font-bold text-orange-700">{data.summary.dueToday}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-100 border border-red-300 rounded-lg">
+              <span className="text-xs text-red-700">Overdue</span>
+              <span className="text-sm font-bold text-red-800">{data.summary.overdue}</span>
+            </div>
+          </div>
 
           {/* Wide Table with Horizontal Scroll */}
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -366,46 +354,6 @@ export default function FollowUpReportPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
-          </div>
-
-          {/* Summary by Status */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-yellow-600 font-medium">Pending</p>
-                  <p className="text-2xl font-bold text-yellow-700">{data.summary.pending}</p>
-                </div>
-                <ClockIcon className="w-10 h-10 text-yellow-400" />
-              </div>
-            </div>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-green-600 font-medium">Completed</p>
-                  <p className="text-2xl font-bold text-green-700">{data.summary.completed}</p>
-                </div>
-                <CheckCircleIcon className="w-10 h-10 text-green-400" />
-              </div>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-red-600 font-medium">Missed</p>
-                  <p className="text-2xl font-bold text-red-700">{data.summary.missed}</p>
-                </div>
-                <ExclamationTriangleIcon className="w-10 h-10 text-red-400" />
-              </div>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-blue-600 font-medium">Rescheduled</p>
-                  <p className="text-2xl font-bold text-blue-700">{data.summary.rescheduled}</p>
-                </div>
-                <CalendarDaysIcon className="w-10 h-10 text-blue-400" />
-              </div>
             </div>
           </div>
         </div>

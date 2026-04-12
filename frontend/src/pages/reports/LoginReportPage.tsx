@@ -27,6 +27,7 @@ export default function LoginReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [searchValue, setSearchValue] = useState('');
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -243,10 +244,38 @@ export default function LoginReportPage() {
     },
   ];
 
-  const filteredLogins = data?.logins.filter(l =>
-    (selectedUser === 'all' || l.user === selectedUser) &&
-    (selectedStatus === 'all' || l.status === selectedStatus)
-  ) || [];
+  const filteredLogins = data?.logins.filter(l => {
+    const matchesUser = selectedUser === 'all' || l.user === selectedUser;
+    const matchesStatus = selectedStatus === 'all' || l.status === selectedStatus;
+    const matchesSearch = !searchValue.trim() ||
+      l.user.toLowerCase().includes(searchValue.toLowerCase()) ||
+      l.reportingManager.toLowerCase().includes(searchValue.toLowerCase()) ||
+      l.ipAddress.toLowerCase().includes(searchValue.toLowerCase());
+    return matchesUser && matchesStatus && matchesSearch;
+  }) || [];
+
+  const handleExport = () => {
+    if (!filteredLogins.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['No', 'User', 'Reporting Manager', 'Login Date', 'Login Time', 'Logout Time', 'Duration', 'IP Address', 'Device', 'Browser', 'Status'];
+    const csvRows = [headers.join(',')];
+    filteredLogins.forEach((row) => {
+      csvRows.push([
+        row.no, `"${row.user}"`, `"${row.reportingManager}"`, row.loginDate, row.loginTime,
+        row.logoutTime, `"${row.duration}"`, row.ipAddress, row.device, row.browser, row.status
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `login-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
 
   return (
     <ReportTemplate
@@ -257,8 +286,12 @@ export default function LoginReportPage() {
       isLoading={isLoading}
       filters={filters}
       onRefresh={loadData}
+      onExport={handleExport}
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search by user, manager, IP..."
     >
       {data && (
         <div className="space-y-6">

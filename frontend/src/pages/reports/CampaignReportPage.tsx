@@ -3,29 +3,154 @@
  */
 import { useState, useEffect } from 'react';
 import { MegaphoneIcon, UserGroupIcon, CurrencyDollarIcon, ChartBarIcon } from '@heroicons/react/24/outline';
-import ReportTemplate, { ReportStatsGrid, ReportStatCard, ReportTable } from './components/ReportTemplate';
+import ReportTemplate, { ReportStatsGrid, ReportStatCard, ReportTable, DateRange } from './components/ReportTemplate';
+import { campaignReportsService, SourceConversion } from '../../services/campaign-reports.service';
+import toast from 'react-hot-toast';
+
+interface CampaignData {
+  campaign: string;
+  status: string;
+  leads: number;
+  contacted: number;
+  qualified: number;
+  converted: number;
+  conversionRate: string;
+  revenue: string;
+  cost: string;
+  roi: string;
+}
 
 export default function CampaignReportPage() {
   const [data, setData] = useState<any>(null);
+  const [filteredData, setFilteredData] = useState<CampaignData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchValue, setSearchValue] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
+    };
+  });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [dateRange]);
+
+  // Filter data when search changes
+  useEffect(() => {
+    if (!data?.campaigns) {
+      setFilteredData([]);
+      return;
+    }
+
+    if (!searchValue.trim()) {
+      setFilteredData(data.campaigns);
+      return;
+    }
+
+    const search = searchValue.toLowerCase();
+    const filtered = data.campaigns.filter((row: CampaignData) =>
+      row.campaign.toLowerCase().includes(search) ||
+      row.status.toLowerCase().includes(search)
+    );
+    setFilteredData(filtered);
+  }, [searchValue, data]);
 
   const loadData = async () => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setData({
-      summary: { totalCampaigns: 12, activeLeads: 2450, totalConversions: 285, totalRevenue: '$425,000' },
-      campaigns: [
-        { campaign: 'Facebook Leads Q1', status: 'active', leads: 580, contacted: 520, qualified: 185, converted: 68, conversionRate: '11.7%', revenue: '$125,000', cost: '$8,500', roi: '1,370%' },
-        { campaign: 'Google Ads March', status: 'active', leads: 420, contacted: 395, qualified: 145, converted: 52, conversionRate: '12.4%', revenue: '$98,000', cost: '$12,000', roi: '717%' },
-        { campaign: 'Instagram Spring', status: 'active', leads: 385, contacted: 340, qualified: 120, converted: 42, conversionRate: '10.9%', revenue: '$72,000', cost: '$6,500', roi: '1,008%' },
-        { campaign: 'LinkedIn B2B', status: 'paused', leads: 245, contacted: 220, qualified: 95, converted: 38, conversionRate: '15.5%', revenue: '$85,000', cost: '$15,000', roi: '467%' },
-        { campaign: 'Website Forms', status: 'active', leads: 520, contacted: 485, qualified: 195, converted: 58, conversionRate: '11.2%', revenue: '$32,000', cost: '$2,500', roi: '1,180%' },
-        { campaign: 'Referral Program', status: 'active', leads: 300, contacted: 290, qualified: 145, converted: 27, conversionRate: '9.0%', revenue: '$13,000', cost: '$1,000', roi: '1,200%' },
-      ],
-    });
+    try {
+      // Fetch real data from API - source conversion data by lead source with date filter
+      const sourceConversion = await campaignReportsService.getSourceConversion({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      });
+
+      // Map source conversion data to campaign format
+      const campaigns: CampaignData[] = sourceConversion.map((source: SourceConversion) => ({
+        campaign: source.sourceName,
+        status: 'active',
+        leads: source.leads,
+        contacted: source.contacted,
+        qualified: source.qualified,
+        converted: source.conversions,
+        conversionRate: `${source.conversionRate}%`,
+        revenue: '-',
+        cost: '-',
+        roi: '-',
+      }));
+
+      // Calculate summary
+      const totalLeads = campaigns.reduce((sum, c) => sum + c.leads, 0);
+      const totalConversions = campaigns.reduce((sum, c) => sum + c.converted, 0);
+
+      setData({
+        summary: {
+          totalCampaigns: campaigns.length,
+          activeLeads: totalLeads,
+          totalConversions: totalConversions,
+          totalRevenue: '-',
+        },
+        campaigns: campaigns,
+      });
+    } catch (error: any) {
+      console.error('Failed to load campaign report:', error);
+      toast.error('Failed to load campaign report');
+      setData({
+        summary: { totalCampaigns: 0, activeLeads: 0, totalConversions: 0, totalRevenue: '-' },
+        campaigns: [],
+      });
+    }
     setIsLoading(false);
+  };
+
+  const handleExport = () => {
+    if (!data || !data.campaigns || data.campaigns.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    try {
+      // Create CSV content
+      const headers = ['Campaign', 'Status', 'Leads', 'Contacted', 'Qualified', 'Converted', 'Conv. Rate', 'Revenue', 'ROI'];
+      const csvRows = [headers.join(',')];
+
+      data.campaigns.forEach((row: CampaignData) => {
+        const values = [
+          `"${row.campaign}"`,
+          row.status,
+          row.leads,
+          row.contacted,
+          row.qualified,
+          row.converted,
+          row.conversionRate,
+          `"${row.revenue}"`,
+          row.roi,
+        ];
+        csvRows.push(values.join(','));
+      });
+
+      // Add summary row
+      csvRows.push('');
+      csvRows.push(`"Summary","","${data.summary.activeLeads}","","","${data.summary.totalConversions}","","${data.summary.totalRevenue}",""`);
+
+      const csvContent = csvRows.join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `campaign-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success('Report exported successfully!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Failed to export report');
+    }
   };
 
   const columns = [
@@ -48,16 +173,34 @@ export default function CampaignReportPage() {
   ];
 
   return (
-    <ReportTemplate title="Campaign Report" description="Overview of all campaign performance metrics" icon={MegaphoneIcon} iconColor="bg-rose-500" isLoading={isLoading} onRefresh={loadData}>
+    <ReportTemplate
+      title="Campaign Report"
+      description="Overview of all campaign performance metrics"
+      icon={MegaphoneIcon}
+      iconColor="bg-rose-500"
+      isLoading={isLoading}
+      onRefresh={loadData}
+      onExport={handleExport}
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      showDateFilter={true}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search campaigns..."
+    >
       {data && (
-        <div className="space-y-6">
+        <div className="space-y-3">
           <ReportStatsGrid>
-            <ReportStatCard label="Total Campaigns" value={data.summary.totalCampaigns} icon={MegaphoneIcon} iconColor="bg-blue-500" />
-            <ReportStatCard label="Active Leads" value={data.summary.activeLeads} icon={UserGroupIcon} iconColor="bg-green-500" />
-            <ReportStatCard label="Total Conversions" value={data.summary.totalConversions} icon={ChartBarIcon} iconColor="bg-purple-500" />
-            <ReportStatCard label="Total Revenue" value={data.summary.totalRevenue} icon={CurrencyDollarIcon} iconColor="bg-orange-500" />
+            <ReportStatCard label="Total Sources" value={data.summary.totalCampaigns} icon={MegaphoneIcon} iconColor="bg-blue-500" />
+            <ReportStatCard label="Total Leads" value={data.summary.activeLeads} icon={UserGroupIcon} iconColor="bg-green-500" />
+            <ReportStatCard label="Conversions" value={data.summary.totalConversions} icon={ChartBarIcon} iconColor="bg-purple-500" />
+            <ReportStatCard label="Revenue" value={data.summary.totalRevenue} icon={CurrencyDollarIcon} iconColor="bg-orange-500" />
           </ReportStatsGrid>
-          <ReportTable columns={columns} data={data.campaigns} />
+          <ReportTable
+            columns={columns}
+            data={filteredData}
+            emptyMessage={searchValue ? "No campaigns match your search" : "No data available for this period"}
+          />
         </div>
       )}
     </ReportTemplate>

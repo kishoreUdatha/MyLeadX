@@ -57,6 +57,7 @@ export default function UserActivityReportPage() {
     users: []
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [searchValue, setSearchValue] = useState('');
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -125,6 +126,33 @@ export default function UserActivityReportPage() {
     }
   };
 
+  // Filter users by search
+  const filteredUsers = data.users.filter(user =>
+    !searchValue.trim() || user.name.toLowerCase().includes(searchValue.toLowerCase())
+  );
+
+  const handleExport = () => {
+    if (!filteredUsers.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['User', 'Login Time', 'Logout Time', 'Active Time', 'Break Time', 'Idle Time', 'Calls', 'Avg Call Duration'];
+    const csvRows = [headers.join(',')];
+    filteredUsers.forEach((row) => {
+      csvRows.push([
+        `"${row.name}"`, row.loginTime, row.logoutTime, row.activeTime, row.breakTime, row.idleTime, row.calls, row.avgCallDuration
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `user-activity-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
+
   const columns = [
     { key: 'name', label: 'User' },
     { key: 'loginTime', label: 'Login Time', align: 'center' as const },
@@ -154,10 +182,14 @@ export default function UserActivityReportPage() {
       iconColor="bg-indigo-500"
       isLoading={isLoading}
       onRefresh={loadData}
+      onExport={handleExport}
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search by user name..."
     >
-      <div className="space-y-6">
+      <div className="space-y-3">
         <ReportStatsGrid>
           <ReportStatCard
             label="Active Users"
@@ -185,8 +217,8 @@ export default function UserActivityReportPage() {
           />
         </ReportStatsGrid>
 
-        {data.users.length > 0 ? (
-          <ReportTable columns={columns} data={data.users} />
+        {filteredUsers.length > 0 ? (
+          <ReportTable columns={columns} data={filteredUsers} emptyMessage={searchValue ? "No users match your search" : "No session data available"} />
         ) : (
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
             <ClockIcon className="mx-auto h-12 w-12 text-gray-400" />

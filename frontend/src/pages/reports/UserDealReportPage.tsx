@@ -3,13 +3,23 @@
  */
 import { useState, useEffect } from 'react';
 import { CurrencyDollarIcon, TrophyIcon, ChartBarIcon, ArrowTrendingUpIcon } from '@heroicons/react/24/outline';
-import ReportTemplate, { ReportStatsGrid, ReportStatCard, ReportTable } from './components/ReportTemplate';
+import ReportTemplate, { ReportStatsGrid, ReportStatCard, ReportTable, DateRange } from './components/ReportTemplate';
+import toast from 'react-hot-toast';
 
 export default function UserDealReportPage() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchValue, setSearchValue] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
+    };
+  });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [dateRange]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -27,6 +37,33 @@ export default function UserDealReportPage() {
     setIsLoading(false);
   };
 
+  // Filter users by search
+  const filteredUsers = data?.users.filter((u: any) =>
+    !searchValue.trim() || u.user.toLowerCase().includes(searchValue.toLowerCase())
+  ) || [];
+
+  const handleExport = () => {
+    if (!filteredUsers.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['User', 'Deals Won', 'Deals Lost', 'Deals Pending', 'Total Value', 'Avg Deal Size', 'Win Rate', 'Avg Conversion Time'];
+    const csvRows = [headers.join(',')];
+    filteredUsers.forEach((row: any) => {
+      csvRows.push([
+        `"${row.user}"`, row.dealsWon, row.dealsLost, row.dealsPending, `"${row.totalValue}"`, `"${row.avgDealSize}"`, row.winRate, `"${row.conversionTime}"`
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `user-deal-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
+
   const columns = [
     { key: 'user', label: 'User' },
     { key: 'dealsWon', label: 'Won', align: 'center' as const, render: (val: number) => <span className="text-green-600 font-bold">{val}</span> },
@@ -42,16 +79,29 @@ export default function UserDealReportPage() {
   ];
 
   return (
-    <ReportTemplate title="User Deal Report" description="Track deal performance and revenue by user" icon={CurrencyDollarIcon} iconColor="bg-emerald-500" isLoading={isLoading} onRefresh={loadData}>
+    <ReportTemplate
+      title="User Deal Report"
+      description="Track deal performance and revenue by user"
+      icon={CurrencyDollarIcon}
+      iconColor="bg-emerald-500"
+      isLoading={isLoading}
+      onRefresh={loadData}
+      onExport={handleExport}
+      dateRange={dateRange}
+      onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search by user..."
+    >
       {data && (
-        <div className="space-y-6">
+        <div className="space-y-3">
           <ReportStatsGrid>
             <ReportStatCard label="Total Deals" value={data.summary.totalDeals} icon={ChartBarIcon} iconColor="bg-blue-500" />
             <ReportStatCard label="Total Value" value={data.summary.totalValue} icon={CurrencyDollarIcon} iconColor="bg-green-500" />
             <ReportStatCard label="Avg Deal Size" value={data.summary.avgDealSize} icon={ArrowTrendingUpIcon} iconColor="bg-purple-500" />
             <ReportStatCard label="Win Rate" value={data.summary.winRate} icon={TrophyIcon} iconColor="bg-orange-500" />
           </ReportStatsGrid>
-          <ReportTable columns={columns} data={data.users} />
+          <ReportTable columns={columns} data={filteredUsers} emptyMessage={searchValue ? "No users match your search" : "No deal data available"} />
         </div>
       )}
     </ReportTemplate>

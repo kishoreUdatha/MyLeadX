@@ -29,6 +29,7 @@ export default function UserCallReportPage() {
   const [data, setData] = useState<{ users: UserCallRow[]; summary: Summary } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchValue, setSearchValue] = useState('');
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -65,6 +66,36 @@ export default function UserCallReportPage() {
   const users = data?.users || [];
   const summary = data?.summary || { totalCalls: 0, totalConnected: 0 };
 
+  // Filter users by search
+  const filteredUsers = users.filter(user =>
+    !searchValue.trim() ||
+    user.username.toLowerCase().includes(searchValue.toLowerCase()) ||
+    user.mobileNumber.includes(searchValue)
+  );
+
+  const handleExport = () => {
+    if (!filteredUsers.length) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['No', 'Username', 'Mobile Number', 'Total Calls', 'Connected', 'Unconnected', 'Disposed', 'Total Call Time', 'Avg Call Time'];
+    const csvRows = [headers.join(',')];
+    filteredUsers.forEach((row) => {
+      csvRows.push([
+        row.no, `"${row.username}"`, row.mobileNumber, row.totalCalls, row.totalCallsConnected,
+        row.totalUnconnectedCalls, row.totalDisposedCount, `"${row.totalCallTime}"`, `"${row.avgCallTime}"`
+      ].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `user-call-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported successfully!');
+  };
+
   return (
     <ReportTemplate
       title="User Call Report"
@@ -73,8 +104,12 @@ export default function UserCallReportPage() {
       iconColor="bg-green-500"
       isLoading={isLoading}
       onRefresh={loadData}
+      onExport={handleExport}
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      searchPlaceholder="Search by username or mobile..."
     >
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
@@ -105,8 +140,8 @@ export default function UserCallReportPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.length > 0 ? (
-                  users.map((row) => (
+                {filteredUsers.length > 0 ? (
+                  filteredUsers.map((row) => (
                     <tr key={row.no} className="hover:bg-slate-50">
                       <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-slate-900">{row.no}</td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-slate-900">{row.username}</td>
@@ -127,16 +162,16 @@ export default function UserCallReportPage() {
                   </tr>
                 )}
               </tbody>
-              {users.length > 0 && (
+              {filteredUsers.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100 font-semibold">
                     <td className="px-3 py-3 text-sm"></td>
-                    <td className="px-3 py-3 text-sm font-bold">TOTAL</td>
+                    <td className="px-3 py-3 text-sm font-bold">TOTAL ({filteredUsers.length})</td>
                     <td className="px-3 py-3 text-sm"></td>
-                    <td className="px-3 py-3 text-sm text-center font-bold text-blue-700">{users.reduce((sum, r) => sum + r.totalCalls, 0)}</td>
-                    <td className="px-3 py-3 text-sm text-center text-green-600">{users.reduce((sum, r) => sum + r.totalCallsConnected, 0)}</td>
-                    <td className="px-3 py-3 text-sm text-center text-red-500">{users.reduce((sum, r) => sum + r.totalUnconnectedCalls, 0)}</td>
-                    <td className="px-3 py-3 text-sm text-center">{users.reduce((sum, r) => sum + r.totalDisposedCount, 0)}</td>
+                    <td className="px-3 py-3 text-sm text-center font-bold text-blue-700">{filteredUsers.reduce((sum, r) => sum + r.totalCalls, 0)}</td>
+                    <td className="px-3 py-3 text-sm text-center text-green-600">{filteredUsers.reduce((sum, r) => sum + r.totalCallsConnected, 0)}</td>
+                    <td className="px-3 py-3 text-sm text-center text-red-500">{filteredUsers.reduce((sum, r) => sum + r.totalUnconnectedCalls, 0)}</td>
+                    <td className="px-3 py-3 text-sm text-center">{filteredUsers.reduce((sum, r) => sum + r.totalDisposedCount, 0)}</td>
                     <td className="px-3 py-3 text-sm text-center">-</td>
                     <td className="px-3 py-3 text-sm text-center">-</td>
                   </tr>
