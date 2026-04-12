@@ -82,6 +82,41 @@ interface SourceTrend {
   total: number;
 }
 
+interface CampaignLeadStats {
+  campaignId: string;
+  campaignName: string;
+  newLeads: number;
+  qualified: number;
+  unqualified: number;
+  contacted: number;
+  notContacted: number;
+  avgScore: number;
+  topSource: string;
+}
+
+interface CampaignStageStats {
+  campaign: string;
+  stages: Record<string, number>;
+  total: number;
+}
+
+interface CampaignDealStats {
+  campaign: string;
+  wonDeals: number;
+  lostDeals: number;
+  totalRevenue: number;
+  avgDealValue: number;
+  winRate: string;
+  pipelineValue: number;
+}
+
+interface CampaignLeadSummary {
+  totalLeads: number;
+  newThisWeek: number;
+  qualifiedLeads: number;
+  avgLeadScore: number;
+}
+
 class CampaignReportsService {
   private getDefaultDateRange(): DateRange {
     const now = new Date();
@@ -232,7 +267,7 @@ class CampaignReportsService {
         },
         select: {
           isConverted: true,
-          pipelineStage: { select: { category: true } },
+          pipelineStage: { select: { stageType: true } },
         },
       });
 
@@ -243,14 +278,15 @@ class CampaignReportsService {
       let conversions = 0;
 
       for (const lead of leads) {
-        const category = lead.pipelineStage?.category?.toUpperCase() || '';
-        if (['CONTACTED', 'WORKING', 'QUALIFIED', 'NEGOTIATION', 'WON', 'CONVERTED'].includes(category)) {
+        const stageType = lead.pipelineStage?.stageType?.toLowerCase() || '';
+        // stageType values: "entry", "active", "won", "lost", "archived"
+        if (['active', 'won'].includes(stageType)) {
           contacted++;
         }
-        if (['QUALIFIED', 'NEGOTIATION', 'WON', 'CONVERTED'].includes(category)) {
+        if (['active', 'won'].includes(stageType)) {
           qualified++;
         }
-        if (lead.isConverted || ['WON', 'CONVERTED'].includes(category)) {
+        if (lead.isConverted || stageType === 'won') {
           conversions++;
         }
       }
@@ -288,7 +324,7 @@ class CampaignReportsService {
         budget: true,
         leads: {
           select: {
-            stage: { select: { category: true } },
+            pipelineStage: { select: { stageType: true } },
             admissions: { select: { totalFee: true } },
           },
         },
@@ -298,7 +334,7 @@ class CampaignReportsService {
     return campaigns.map(campaign => {
       const leads = campaign.leads.length;
       const conversions = campaign.leads.filter(
-        l => l.stage?.category === 'WON' || l.stage?.category === 'CONVERTED'
+        l => l.pipelineStage?.stageType === 'won'
       ).length;
       const revenue = campaign.leads.reduce((sum, l) => {
         return sum + l.admissions.reduce((s, a) => s + Number(a.totalFee || 0), 0);
@@ -350,7 +386,7 @@ class CampaignReportsService {
         select: {
           source: true,
           isConverted: true,
-          pipelineStage: { select: { category: true } },
+          pipelineStage: { select: { stageType: true } },
         },
       });
 
@@ -369,8 +405,8 @@ class CampaignReportsService {
           conversions: 0,
         };
         existing.leads++;
-        const category = lead.pipelineStage?.category?.toUpperCase() || '';
-        if (lead.isConverted || category === 'WON' || category === 'CONVERTED') {
+        const stageType = lead.pipelineStage?.stageType?.toLowerCase() || '';
+        if (lead.isConverted || stageType === 'won') {
           existing.conversions++;
         }
         sourceStats.set(sourceId, existing);
@@ -451,6 +487,370 @@ class CampaignReportsService {
         total: Array.from(sources.values()).reduce((sum, s) => sum + s.count, 0),
       }))
       .sort((a, b) => a.period.localeCompare(b.period));
+  }
+
+  /**
+   * 7. CAMPAIGN LEAD STATS (for Campaign Lead Report page)
+   * Groups leads by source since Campaign model doesn't have direct leads relation
+   */
+  async getCampaignLeadStats(filters: ReportFilters): Promise<{
+    summary: CampaignLeadSummary;
+    campaigns: CampaignLeadStats[];
+  }> {
+    const { organizationId, dateRange = this.getDefaultDateRange() } = filters;
+
+    // Format source names
+    const formatSourceName = (source: string): string => {
+      return source
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+    };
+
+    // Calculate this week's date range
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - 7);
+
+    // Get all leads grouped by source
+    const leadsBySource = await prisma.lead.groupBy({
+      by: ['source'],
+      where: {
+        organizationId,
+        createdAt: { gte: dateRange.start, lte: dateRange.end },
+      },
+      _count: { id: true },
+    });
+
+    let totalLeads = 0;
+    let newThisWeek = 0;
+    let qualifiedLeads = 0;
+    let totalScore = 0;
+    let scoreCount = 0;
+
+    const campaignStats: CampaignLeadStats[] = [];
+
+    for (const sourceGroup of leadsBySource) {
+      const source = sourceGroup.source;
+      const leads = await prisma.lead.findMany({
+        where: {
+          organizationId,
+          source,
+          createdAt: { gte: dateRange.start, lte: dateRange.end },
+        },
+        include: {
+          pipelineStage: { select: { stageType: true } },
+          leadScore: { select: { overallScore: true } },
+        },
+      });
+
+      totalLeads += leads.length;
+      const thisWeekLeads = leads.filter(l => new Date(l.createdAt) >= weekStart);
+      newThisWeek += thisWeekLeads.length;
+
+      let qualified = 0;
+      let unqualified = 0;
+      let contacted = 0;
+      let notContacted = 0;
+      let sourceScoreSum = 0;
+      let sourceScoreCount = 0;
+
+      for (const lead of leads) {
+        const stageType = lead.pipelineStage?.stageType?.toLowerCase() || 'entry';
+
+        // Qualified: leads in active or won stages
+        if (['active', 'won'].includes(stageType)) {
+          qualified++;
+          qualifiedLeads++;
+        } else if (stageType === 'lost') {
+          unqualified++;
+        }
+
+        // Contacted: leads not in entry stage
+        if (stageType !== 'entry') {
+          contacted++;
+        } else {
+          notContacted++;
+        }
+
+        // Lead score
+        if (lead.leadScore?.overallScore) {
+          sourceScoreSum += lead.leadScore.score;
+          sourceScoreCount++;
+          totalScore += lead.leadScore.score;
+          scoreCount++;
+        }
+      }
+
+      const avgScore = sourceScoreCount > 0 ? Math.round(sourceScoreSum / sourceScoreCount) : 0;
+
+      campaignStats.push({
+        campaignId: source,
+        campaignName: formatSourceName(source),
+        newLeads: leads.length,
+        qualified,
+        unqualified,
+        contacted,
+        notContacted,
+        avgScore,
+        topSource: formatSourceName(source),
+      });
+    }
+
+    // Sort by new leads descending
+    campaignStats.sort((a, b) => b.newLeads - a.newLeads);
+
+    const avgLeadScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 0;
+
+    return {
+      summary: {
+        totalLeads,
+        newThisWeek,
+        qualifiedLeads,
+        avgLeadScore,
+      },
+      campaigns: campaignStats,
+    };
+  }
+
+  /**
+   * 8. CAMPAIGN DEAL STATS (for Campaign Deal Report page)
+   * Shows deal performance by campaign/source
+   */
+  async getCampaignDealStats(filters: ReportFilters): Promise<{
+    summary: {
+      totalDeals: number;
+      totalRevenue: number;
+      avgDealValue: number;
+      bestCampaign: string;
+    };
+    campaigns: CampaignDealStats[];
+  }> {
+    const { organizationId, dateRange = this.getDefaultDateRange() } = filters;
+
+    // Format source names
+    const formatSourceName = (source: string): string => {
+      return source
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+    };
+
+    // Get all leads grouped by source
+    const leadsBySource = await prisma.lead.groupBy({
+      by: ['source'],
+      where: {
+        organizationId,
+        createdAt: { gte: dateRange.start, lte: dateRange.end },
+      },
+      _count: { id: true },
+    });
+
+    const campaignStats: CampaignDealStats[] = [];
+    let totalDeals = 0;
+    let totalRevenue = 0;
+    let bestCampaign = '';
+    let bestCampaignRevenue = 0;
+
+    for (const sourceGroup of leadsBySource) {
+      const source = sourceGroup.source;
+
+      // Get leads with their stages and deals/admissions
+      const leads = await prisma.lead.findMany({
+        where: {
+          organizationId,
+          source,
+          createdAt: { gte: dateRange.start, lte: dateRange.end },
+        },
+        include: {
+          pipelineStage: { select: { stageType: true } },
+          admissions: { select: { totalFee: true, status: true } },
+          deals: { select: { amount: true, stage: true } },
+        },
+      });
+
+      let wonDeals = 0;
+      let lostDeals = 0;
+      let campaignRevenue = 0;
+      let pipelineValue = 0;
+
+      for (const lead of leads) {
+        const stageType = lead.pipelineStage?.stageType?.toLowerCase() || '';
+
+        // Count won/lost based on stage type or isConverted
+        if (lead.isConverted || stageType === 'won') {
+          wonDeals++;
+          // Add revenue from admissions
+          for (const admission of lead.admissions) {
+            campaignRevenue += Number(admission.totalFee || 0);
+          }
+          // Add revenue from deals marked as WON
+          for (const deal of lead.deals) {
+            if (deal.stage === 'WON') {
+              campaignRevenue += Number(deal.amount || 0);
+            }
+          }
+        } else if (stageType === 'lost') {
+          lostDeals++;
+        }
+
+        // Also count deals directly
+        for (const deal of lead.deals) {
+          if (deal.stage === 'WON') {
+            // Already counted above if lead is converted
+            if (!lead.isConverted && stageType !== 'won') {
+              wonDeals++;
+              campaignRevenue += Number(deal.amount || 0);
+            }
+          } else if (deal.stage === 'LOST') {
+            if (stageType !== 'lost') {
+              lostDeals++;
+            }
+          } else {
+            // Pipeline value - deals in progress
+            pipelineValue += Number(deal.amount || 0);
+          }
+        }
+      }
+
+      const totalCampaignDeals = wonDeals + lostDeals;
+      const winRate = totalCampaignDeals > 0 ? ((wonDeals / totalCampaignDeals) * 100).toFixed(1) : '0';
+      const avgDealValue = wonDeals > 0 ? Math.round(campaignRevenue / wonDeals) : 0;
+
+      campaignStats.push({
+        campaign: formatSourceName(source),
+        wonDeals,
+        lostDeals,
+        totalRevenue: campaignRevenue,
+        avgDealValue,
+        winRate,
+        pipelineValue,
+      });
+
+      totalDeals += wonDeals;
+      totalRevenue += campaignRevenue;
+
+      if (campaignRevenue > bestCampaignRevenue) {
+        bestCampaignRevenue = campaignRevenue;
+        bestCampaign = formatSourceName(source);
+      }
+    }
+
+    // Sort by revenue descending
+    campaignStats.sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+    const avgDealValue = totalDeals > 0 ? Math.round(totalRevenue / totalDeals) : 0;
+
+    return {
+      summary: {
+        totalDeals,
+        totalRevenue,
+        avgDealValue,
+        bestCampaign: bestCampaign || 'N/A',
+      },
+      campaigns: campaignStats,
+    };
+  }
+
+  /**
+   * 9. CAMPAIGN STAGE STATS (for Campaign Stage Report page)
+   * Shows lead stage distribution by campaign/source
+   */
+  async getCampaignStageStats(filters: ReportFilters): Promise<{
+    stages: string[];
+    campaigns: CampaignStageStats[];
+    totals: Record<string, number>;
+  }> {
+    const { organizationId, dateRange = this.getDefaultDateRange() } = filters;
+
+    // Format source names
+    const formatSourceName = (source: string): string => {
+      return source
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+    };
+
+    // Get all pipeline stages for this organization
+    const pipelineStages = await prisma.pipelineStage.findMany({
+      where: {
+        pipeline: { organizationId },
+      },
+      select: { id: true, name: true, stageType: true, order: true },
+      orderBy: { order: 'asc' },
+    });
+
+    // Create stage name list (unique)
+    const stageNames = [...new Set(pipelineStages.map(s => s.name))];
+
+    // Get all leads grouped by source
+    const leadsBySource = await prisma.lead.groupBy({
+      by: ['source'],
+      where: {
+        organizationId,
+        createdAt: { gte: dateRange.start, lte: dateRange.end },
+      },
+      _count: { id: true },
+    });
+
+    const campaignStats: CampaignStageStats[] = [];
+    const totals: Record<string, number> = {};
+
+    // Initialize totals
+    for (const stageName of stageNames) {
+      totals[stageName] = 0;
+    }
+
+    for (const sourceGroup of leadsBySource) {
+      const source = sourceGroup.source;
+
+      // Get leads with their stages
+      const leads = await prisma.lead.findMany({
+        where: {
+          organizationId,
+          source,
+          createdAt: { gte: dateRange.start, lte: dateRange.end },
+        },
+        include: {
+          pipelineStage: { select: { name: true } },
+        },
+      });
+
+      // Count leads per stage
+      const stageCounts: Record<string, number> = {};
+      for (const stageName of stageNames) {
+        stageCounts[stageName] = 0;
+      }
+
+      for (const lead of leads) {
+        const stageName = lead.pipelineStage?.name || 'New';
+        if (stageCounts[stageName] !== undefined) {
+          stageCounts[stageName]++;
+          totals[stageName]++;
+        } else {
+          // Handle leads with stages not in our list
+          if (!stageCounts['Other']) {
+            stageCounts['Other'] = 0;
+            if (!stageNames.includes('Other')) stageNames.push('Other');
+            if (totals['Other'] === undefined) totals['Other'] = 0;
+          }
+          stageCounts['Other']++;
+          totals['Other']++;
+        }
+      }
+
+      campaignStats.push({
+        campaign: formatSourceName(source),
+        stages: stageCounts,
+        total: leads.length,
+      });
+    }
+
+    // Sort by total leads descending
+    campaignStats.sort((a, b) => b.total - a.total);
+
+    return {
+      stages: stageNames,
+      campaigns: campaignStats,
+      totals,
+    };
   }
 
   /**

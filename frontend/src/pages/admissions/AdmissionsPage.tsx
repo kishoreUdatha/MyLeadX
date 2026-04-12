@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { admissionService, Admission, AdmissionType, RecordPaymentInput } from '../../services/admission.service';
 import { universityService, University } from '../../services/university.service';
+import { branchService, Branch } from '../../services/branch.service';
 import { RootState } from '../../store';
 
 // Roles that can see commission and payment details (normalized - no underscores)
@@ -49,12 +50,14 @@ export default function AdmissionsPage() {
 
   const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [universities, setUniversities] = useState<University[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [academicYears, setAcademicYears] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [universityFilter, setUniversityFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<AdmissionType | ''>('');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
@@ -73,10 +76,11 @@ export default function AdmissionsPage() {
 
   useEffect(() => {
     loadAdmissions();
-  }, [searchQuery, universityFilter, typeFilter, paymentStatusFilter, yearFilter, pagination.page]);
+  }, [searchQuery, universityFilter, branchFilter, typeFilter, paymentStatusFilter, yearFilter, pagination.page]);
 
   useEffect(() => {
     loadUniversities();
+    loadBranches();
     loadAcademicYears();
   }, []);
 
@@ -86,6 +90,7 @@ export default function AdmissionsPage() {
       const result = await admissionService.getAll({
         search: searchQuery || undefined,
         universityId: universityFilter || undefined,
+        branchId: branchFilter || undefined,
         admissionType: typeFilter || undefined,
         paymentStatus: paymentStatusFilter || undefined,
         academicYear: yearFilter || undefined,
@@ -107,6 +112,15 @@ export default function AdmissionsPage() {
       setUniversities(result.universities);
     } catch (err) {
       console.error('Failed to load universities:', err);
+    }
+  };
+
+  const loadBranches = async () => {
+    try {
+      const result = await branchService.getAll(true);
+      setBranches(result);
+    } catch (err) {
+      console.error('Failed to load branches:', err);
     }
   };
 
@@ -191,6 +205,18 @@ export default function AdmissionsPage() {
               <option key={u.id} value={u.id}>{u.shortName || u.name}</option>
             ))}
           </select>
+          {branches.length > 0 && (
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 bg-white focus:border-primary-500 outline-none"
+          >
+            <option value="">All Branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          )}
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as AdmissionType | '')}
@@ -469,20 +495,23 @@ export default function AdmissionsPage() {
         </div>
       )}
 
-      {/* Detail Modal */}
+      {/* Detail Panel - Right Side Slide Over */}
       {showDetailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900">Admission Details</h3>
-                <p className="text-xs text-slate-500 font-mono">{showDetailModal.admissionNumber}</p>
-              </div>
-              <button onClick={() => setShowDetailModal(null)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded">
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-6">
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setShowDetailModal(null)} />
+          <div className="absolute inset-y-0 right-0 flex max-w-full">
+            <div className="w-screen max-w-lg transform transition-transform duration-300 ease-in-out">
+              <div className="flex h-full flex-col bg-white shadow-xl">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Admission Details</h3>
+                    <p className="text-xs text-slate-500 font-mono">{showDetailModal.admissionNumber}</p>
+                  </div>
+                  <button onClick={() => setShowDetailModal(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded">
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-5 space-y-6">
               {/* Student Info */}
               <div>
                 <h4 className="text-sm font-semibold text-slate-800 mb-3">Student Information</h4>
@@ -612,6 +641,8 @@ export default function AdmissionsPage() {
                   </div>
                 </div>
               )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

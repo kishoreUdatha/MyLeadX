@@ -42,7 +42,7 @@ function parseFilters(req: TenantRequest) {
 }
 
 // GET /audit-reports/summary
-router.get('/summary', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/summary', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const summary = await auditReportsService.getAuditSummary(parseFilters(req));
     return ApiResponse.success(res, { summary });
@@ -52,7 +52,7 @@ router.get('/summary', filterValidation, validate, async (req: TenantRequest, re
 });
 
 // GET /audit-reports/lead-edits
-router.get('/lead-edits', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/lead-edits', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 100;
     const data = await auditReportsService.getLeadEditLogs(parseFilters(req), limit);
@@ -63,7 +63,7 @@ router.get('/lead-edits', filterValidation, validate, async (req: TenantRequest,
 });
 
 // GET /audit-reports/payment-deletes
-router.get('/payment-deletes', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/payment-deletes', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 100;
     const data = await auditReportsService.getPaymentDeleteLogs(parseFilters(req), limit);
@@ -74,7 +74,7 @@ router.get('/payment-deletes', filterValidation, validate, async (req: TenantReq
 });
 
 // GET /audit-reports/data-exports
-router.get('/data-exports', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/data-exports', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 100;
     const data = await auditReportsService.getDataExportLogs(parseFilters(req), limit);
@@ -85,7 +85,7 @@ router.get('/data-exports', filterValidation, validate, async (req: TenantReques
 });
 
 // GET /audit-reports/stage-changes
-router.get('/stage-changes', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/stage-changes', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 100;
     const data = await auditReportsService.getStageChangeLogs(parseFilters(req), limit);
@@ -96,7 +96,7 @@ router.get('/stage-changes', filterValidation, validate, async (req: TenantReque
 });
 
 // GET /audit-reports/login-history
-router.get('/login-history', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/login-history', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 100;
     const data = await auditReportsService.getLoginHistory(parseFilters(req), limit);
@@ -107,7 +107,7 @@ router.get('/login-history', filterValidation, validate, async (req: TenantReque
 });
 
 // GET /audit-reports/failed-logins
-router.get('/failed-logins', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/failed-logins', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const data = await auditReportsService.getFailedLoginAttempts(parseFilters(req));
     return ApiResponse.success(res, { failedLogins: data });
@@ -117,7 +117,7 @@ router.get('/failed-logins', filterValidation, validate, async (req: TenantReque
 });
 
 // GET /audit-reports/security-alerts
-router.get('/security-alerts', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/security-alerts', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const data = await auditReportsService.getSecurityAlerts(parseFilters(req));
     return ApiResponse.success(res, { securityAlerts: data });
@@ -127,7 +127,7 @@ router.get('/security-alerts', filterValidation, validate, async (req: TenantReq
 });
 
 // GET /audit-reports/activity-by-entity
-router.get('/activity-by-entity', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/activity-by-entity', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const data = await auditReportsService.getActivityByEntityType(parseFilters(req));
     return ApiResponse.success(res, { activityByEntity: data });
@@ -137,7 +137,7 @@ router.get('/activity-by-entity', filterValidation, validate, async (req: Tenant
 });
 
 // GET /audit-reports/comprehensive
-router.get('/comprehensive', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/comprehensive', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const report = await auditReportsService.getComprehensiveReport(parseFilters(req));
     return ApiResponse.success(res, { report });

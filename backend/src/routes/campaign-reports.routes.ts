@@ -113,6 +113,36 @@ router.get('/trends', validate([
   }
 });
 
+// GET /campaign-reports/campaign-leads
+router.get('/campaign-leads', validate(filterValidation), async (req: TenantRequest, res: Response) => {
+  try {
+    const report = await campaignReportsService.getCampaignLeadStats(parseFilters(req));
+    return ApiResponse.success(res, { report });
+  } catch (error: any) {
+    return ApiResponse.error(res, error.message, 500);
+  }
+});
+
+// GET /campaign-reports/campaign-stages
+router.get('/campaign-stages', validate(filterValidation), async (req: TenantRequest, res: Response) => {
+  try {
+    const report = await campaignReportsService.getCampaignStageStats(parseFilters(req));
+    return ApiResponse.success(res, { report });
+  } catch (error: any) {
+    return ApiResponse.error(res, error.message, 500);
+  }
+});
+
+// GET /campaign-reports/campaign-deals
+router.get('/campaign-deals', validate(filterValidation), async (req: TenantRequest, res: Response) => {
+  try {
+    const report = await campaignReportsService.getCampaignDealStats(parseFilters(req));
+    return ApiResponse.success(res, { report });
+  } catch (error: any) {
+    return ApiResponse.error(res, error.message, 500);
+  }
+});
+
 // GET /campaign-reports/comprehensive
 router.get('/comprehensive', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {

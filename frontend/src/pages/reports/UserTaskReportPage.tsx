@@ -2,8 +2,9 @@
  * User Task Report - Detailed task tracking with task names
  */
 import { useState, useEffect } from 'react';
-import { ClipboardDocumentCheckIcon, CheckCircleIcon, ClockIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
-import ReportTemplate, { ReportStatsGrid, ReportStatCard, DateRange } from './components/ReportTemplate';
+import { ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import ReportTemplate, { DateRange } from './components/ReportTemplate';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 interface TaskRow {
@@ -43,33 +44,56 @@ export default function UserTaskReportPage() {
 
   const loadData = async () => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setData({
-      tasks: [
-        { no: 1, taskName: 'Call back for fee discussion', taskType: 'Call', assignedTo: 'John Smith', reportingManager: 'Michael Brown', leadName: 'Rahul Sharma', leadMobile: '9876543210', createdDate: '2024-01-12', dueDate: '2024-01-15', dueTime: '10:00 AM', completedDate: '-', priority: 'High', status: 'Pending', remarks: 'Interested in MBA' },
-        { no: 2, taskName: 'Send brochure via WhatsApp', taskType: 'Follow-Up', assignedTo: 'John Smith', reportingManager: 'Michael Brown', leadName: 'Priya Patel', leadMobile: '9876543211', createdDate: '2024-01-13', dueDate: '2024-01-15', dueTime: '11:00 AM', completedDate: '2024-01-15', priority: 'Medium', status: 'Completed', remarks: 'Brochure sent' },
-        { no: 3, taskName: 'Schedule campus visit', taskType: 'Meeting', assignedTo: 'Sarah Johnson', reportingManager: 'Michael Brown', leadName: 'Amit Kumar', leadMobile: '9876543212', createdDate: '2024-01-10', dueDate: '2024-01-14', dueTime: '02:00 PM', completedDate: '-', priority: 'High', status: 'Overdue', remarks: 'Waiting for confirmation' },
-        { no: 4, taskName: 'Email course details', taskType: 'Email', assignedTo: 'Sarah Johnson', reportingManager: 'Michael Brown', leadName: 'Sneha Reddy', leadMobile: '9876543213', createdDate: '2024-01-14', dueDate: '2024-01-15', dueTime: '03:00 PM', completedDate: '-', priority: 'Low', status: 'In Progress', remarks: 'Preparing email' },
-        { no: 5, taskName: 'Collect admission documents', taskType: 'Document', assignedTo: 'Mike Wilson', reportingManager: 'Emily Davis', leadName: 'Vikram Singh', leadMobile: '9876543214', createdDate: '2024-01-11', dueDate: '2024-01-15', dueTime: '04:00 PM', completedDate: '2024-01-14', priority: 'High', status: 'Completed', remarks: 'Documents received' },
-        { no: 6, taskName: 'Follow up on payment', taskType: 'Call', assignedTo: 'Mike Wilson', reportingManager: 'Emily Davis', leadName: 'Ananya Gupta', leadMobile: '9876543215', createdDate: '2024-01-13', dueDate: '2024-01-16', dueTime: '10:30 AM', completedDate: '-', priority: 'High', status: 'Pending', remarks: 'Payment pending' },
-        { no: 7, taskName: 'Home visit for counseling', taskType: 'Visit', assignedTo: 'Emily Brown', reportingManager: 'Emily Davis', leadName: 'Rohan Mehta', leadMobile: '9876543216', createdDate: '2024-01-12', dueDate: '2024-01-15', dueTime: '11:00 AM', completedDate: '2024-01-15', priority: 'Medium', status: 'Completed', remarks: 'Visit completed' },
-        { no: 8, taskName: 'Share scholarship details', taskType: 'Email', assignedTo: 'Emily Brown', reportingManager: 'Emily Davis', leadName: 'Kavya Nair', leadMobile: '9876543217', createdDate: '2024-01-14', dueDate: '2024-01-15', dueTime: '12:00 PM', completedDate: '-', priority: 'Medium', status: 'In Progress', remarks: 'Checking eligibility' },
-        { no: 9, taskName: 'Call for admission confirmation', taskType: 'Call', assignedTo: 'David Lee', reportingManager: 'Michael Brown', leadName: 'Arjun Verma', leadMobile: '9876543218', createdDate: '2024-01-09', dueDate: '2024-01-13', dueTime: '02:30 PM', completedDate: '-', priority: 'High', status: 'Overdue', remarks: 'Multiple attempts failed' },
-        { no: 10, taskName: 'Send fee structure', taskType: 'Follow-Up', assignedTo: 'David Lee', reportingManager: 'Michael Brown', leadName: 'Meera Iyer', leadMobile: '9876543219', createdDate: '2024-01-14', dueDate: '2024-01-15', dueTime: '05:00 PM', completedDate: '-', priority: 'Low', status: 'Pending', remarks: 'Initial enquiry' },
-        { no: 11, taskName: 'Arrange demo class', taskType: 'Meeting', assignedTo: 'John Smith', reportingManager: 'Michael Brown', leadName: 'Kiran Rao', leadMobile: '9876543220', createdDate: '2024-01-13', dueDate: '2024-01-16', dueTime: '09:00 AM', completedDate: '-', priority: 'Medium', status: 'Pending', remarks: 'Demo scheduled' },
-        { no: 12, taskName: 'Verify documents submitted', taskType: 'Document', assignedTo: 'Sarah Johnson', reportingManager: 'Michael Brown', leadName: 'Deepak Joshi', leadMobile: '9876543221', createdDate: '2024-01-14', dueDate: '2024-01-15', dueTime: '01:00 PM', completedDate: '2024-01-15', priority: 'High', status: 'Completed', remarks: 'All documents verified' },
-      ],
-      summary: {
-        totalTasks: 245,
-        completed: 98,
-        pending: 82,
-        inProgress: 35,
-        overdue: 30,
-        dueToday: 18,
-        highPriority: 45,
-      },
-    });
-    setIsLoading(false);
+    try {
+      const response = await api.get('/task-reports/comprehensive', {
+        params: {
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
+        },
+      });
+
+      const report = response.data.data.report;
+
+      // Map tasks with row numbers
+      const tasks: TaskRow[] = report.tasks.map((task: any, index: number) => ({
+        no: index + 1,
+        taskName: task.taskName,
+        taskType: task.taskType,
+        assignedTo: task.assigneeName,
+        reportingManager: task.reportingManager,
+        leadName: task.leadName,
+        leadMobile: task.leadMobile,
+        createdDate: task.createdDate,
+        dueDate: task.dueDate,
+        dueTime: task.dueTime,
+        completedDate: task.completedDate,
+        priority: task.priority,
+        status: task.status,
+        remarks: task.remarks,
+      }));
+
+      setData({
+        tasks,
+        summary: report.summary,
+      });
+    } catch (error: any) {
+      console.error('Failed to load task report:', error);
+      toast.error(error.response?.data?.message || 'Failed to load report data');
+      setData({
+        tasks: [],
+        summary: {
+          total: 0,
+          completed: 0,
+          pending: 0,
+          inProgress: 0,
+          overdue: 0,
+          dueToday: 0,
+          highPriority: 0,
+        },
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -194,15 +218,34 @@ export default function UserTaskReportPage() {
       searchPlaceholder="Search task, user, or lead..."
     >
       {data && (
-        <div className="space-y-6">
-          <ReportStatsGrid>
-            <ReportStatCard label="Total Tasks" value={data.summary.totalTasks} icon={ClipboardDocumentCheckIcon} iconColor="bg-blue-500" />
-            <ReportStatCard label="Completed" value={data.summary.completed} icon={CheckCircleIcon} iconColor="bg-green-500" />
-            <ReportStatCard label="Pending" value={data.summary.pending} icon={ClockIcon} iconColor="bg-yellow-500" />
-            <ReportStatCard label="In Progress" value={data.summary.inProgress} icon={ClockIcon} iconColor="bg-blue-500" />
-            <ReportStatCard label="Overdue" value={data.summary.overdue} icon={ExclamationCircleIcon} iconColor="bg-red-500" />
-            <ReportStatCard label="Due Today" value={data.summary.dueToday} icon={ClockIcon} iconColor="bg-orange-500" />
-          </ReportStatsGrid>
+        <div className="space-y-4">
+          {/* Compact Summary Stats */}
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-xs text-blue-600">Total</span>
+              <span className="text-sm font-bold text-blue-700">{data.summary.total}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+              <span className="text-xs text-green-600">Completed</span>
+              <span className="text-sm font-bold text-green-700">{data.summary.completed}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <span className="text-xs text-yellow-600">Pending</span>
+              <span className="text-sm font-bold text-yellow-700">{data.summary.pending}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-xs text-blue-600">In Progress</span>
+              <span className="text-sm font-bold text-blue-700">{data.summary.inProgress}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg">
+              <span className="text-xs text-red-600">Overdue</span>
+              <span className="text-sm font-bold text-red-700">{data.summary.overdue}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
+              <span className="text-xs text-orange-600">Due Today</span>
+              <span className="text-sm font-bold text-orange-700">{data.summary.dueToday}</span>
+            </div>
+          </div>
 
           {/* Wide Table with Horizontal Scroll */}
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">

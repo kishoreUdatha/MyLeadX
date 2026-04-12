@@ -87,14 +87,79 @@ export interface PendingPaymentsReport {
   overdueCount: number;
 }
 
+export interface PaymentTransaction {
+  id: string;
+  leadName: string;
+  phone: string;
+  email: string;
+  amount: number;
+  status: string;
+  paymentMethod: string;
+  paymentType: string;
+  description: string;
+  referenceNumber: string;
+  collectorName: string;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface TransactionsReport {
+  transactions: PaymentTransaction[];
+  total: number;
+}
+
+export interface PeriodComparison {
+  previousCollected: number;
+  previousTransactions: number;
+  collectedGrowth: number;
+  transactionsGrowth: number;
+}
+
+export interface BranchRevenue {
+  branchId: string;
+  branchName: string;
+  collected: number;
+  transactions: number;
+  percentage: string;
+}
+
+export interface CourseRevenue {
+  courseId: string;
+  courseName: string;
+  collected: number;
+  admissions: number;
+  percentage: string;
+}
+
+export interface UpcomingDue {
+  id: string;
+  studentName: string;
+  phone: string;
+  amount: number;
+  dueDate: string;
+  daysUntilDue: number;
+  splitNumber: number;
+}
+
+export interface UpcomingDuesReport {
+  dues: UpcomingDue[];
+  totalAmount: number;
+  count: number;
+}
+
 export interface ComprehensivePaymentReport {
   summary: RevenueSummary;
+  comparison: PeriodComparison;
   byPeriod: RevenueByPeriod[];
   byCategory: RevenueByCategory[];
   byMethod: PaymentMethodBreakdown[];
+  byBranch: BranchRevenue[];
+  byCourse: CourseRevenue[];
   pending: PendingPaymentsReport;
+  upcomingDues: UpcomingDuesReport;
   collectors: CollectorPerformance[];
   refunds: RefundsReport;
+  transactions: TransactionsReport;
 }
 
 class PaymentReportsService {
@@ -154,6 +219,55 @@ class PaymentReportsService {
     const query = this.buildQueryString(filters);
     const response = await api.get(`/payment-reports/comprehensive?${query}`);
     return response.data.data.report;
+  }
+
+  async exportReport(filters: ReportFilters = {}): Promise<void> {
+    const query = this.buildQueryString(filters);
+    const response = await api.get(`/payment-reports/export?${query}`, {
+      responseType: 'blob',
+    });
+
+    // Create download link
+    const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payment-report-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+
+  async exportToCSV(filters: ReportFilters = {}): Promise<void> {
+    const report = await this.getComprehensive(filters);
+
+    // Convert transactions to CSV
+    const headers = ['Date', 'Lead Name', 'Phone', 'Email', 'Amount', 'Method', 'Type', 'Reference', 'Status', 'Collected By'];
+    const rows = report.transactions.transactions.map(t => [
+      t.paidAt || t.createdAt,
+      t.leadName,
+      t.phone,
+      t.email,
+      t.amount,
+      t.paymentMethod,
+      t.paymentType,
+      t.referenceNumber,
+      t.status,
+      t.collectorName,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payment-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   }
 }
 

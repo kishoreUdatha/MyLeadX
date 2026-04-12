@@ -124,14 +124,14 @@ class AuditReportsService {
       },
       select: {
         action: true,
-        userId: true,
+        actorId: true,
+        actorEmail: true,
         createdAt: true,
-        user: { select: { firstName: true, lastName: true } },
       },
     });
 
     const totalActions = logs.length;
-    const uniqueUsers = new Set(logs.map(l => l.userId)).size;
+    const uniqueUsers = new Set(logs.filter(l => l.actorId).map(l => l.actorId)).size;
 
     // Top actions
     const actionCounts = new Map<string, number>();
@@ -146,12 +146,13 @@ class AuditReportsService {
     // Top users
     const userCounts = new Map<string, { name: string; count: number }>();
     for (const log of logs) {
-      const existing = userCounts.get(log.userId) || {
-        name: log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : 'Unknown',
+      if (!log.actorId) continue;
+      const existing = userCounts.get(log.actorId) || {
+        name: log.actorEmail || 'Unknown',
         count: 0,
       };
       existing.count++;
-      userCounts.set(log.userId, existing);
+      userCounts.set(log.actorId, existing);
     }
     const topUsers = Array.from(userCounts.entries())
       .map(([userId, data]) => ({ userId, userName: data.name, count: data.count }))
@@ -188,26 +189,23 @@ class AuditReportsService {
         organizationId,
         action: { in: ['LEAD_UPDATE', 'LEAD_EDIT', 'lead_update', 'UPDATE_LEAD'] },
         createdAt: { gte: dateRange.start, lte: dateRange.end },
-        ...(userId && { userId }),
-      },
-      include: {
-        user: { select: { firstName: true, lastName: true } },
+        ...(userId && { actorId: userId }),
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
 
     return logs.map(log => {
-      const details = (log.details as any) || {};
+      const changes = (log.changes as any) || {};
       return {
         id: log.id,
-        leadId: log.entityId || '',
-        leadName: details.leadName || 'Unknown Lead',
-        editedBy: log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : 'Unknown',
-        editedById: log.userId,
-        field: details.field || 'Multiple fields',
-        oldValue: details.oldValue || null,
-        newValue: details.newValue || null,
+        leadId: log.targetId || '',
+        leadName: changes.leadName || 'Unknown Lead',
+        editedBy: log.actorEmail || 'Unknown',
+        editedById: log.actorId || '',
+        field: changes.field || 'Multiple fields',
+        oldValue: changes.oldValue || null,
+        newValue: changes.newValue || null,
         editedAt: log.createdAt,
       };
     });
@@ -225,22 +223,19 @@ class AuditReportsService {
         action: { in: ['PAYMENT_DELETE', 'DELETE_PAYMENT', 'payment_delete'] },
         createdAt: { gte: dateRange.start, lte: dateRange.end },
       },
-      include: {
-        user: { select: { firstName: true, lastName: true } },
-      },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
 
     return logs.map(log => {
-      const details = (log.details as any) || {};
+      const changes = (log.changes as any) || {};
       return {
         id: log.id,
-        paymentId: log.entityId || '',
-        amount: details.amount || 0,
-        deletedBy: log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : 'Unknown',
-        deletedById: log.userId,
-        reason: details.reason || null,
+        paymentId: log.targetId || '',
+        amount: changes.amount || 0,
+        deletedBy: log.actorEmail || 'Unknown',
+        deletedById: log.actorId || '',
+        reason: changes.reason || null,
         deletedAt: log.createdAt,
       };
     });
@@ -258,22 +253,19 @@ class AuditReportsService {
         action: { in: ['EXPORT', 'DATA_EXPORT', 'EXPORT_DATA', 'export', 'BULK_EXPORT'] },
         createdAt: { gte: dateRange.start, lte: dateRange.end },
       },
-      include: {
-        user: { select: { firstName: true, lastName: true } },
-      },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
 
     return logs.map(log => {
-      const details = (log.details as any) || {};
+      const changes = (log.changes as any) || {};
       return {
         id: log.id,
-        exportedBy: log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : 'Unknown',
-        exportedById: log.userId,
-        exportType: details.exportType || details.entityType || 'Unknown',
-        recordCount: details.recordCount || details.count || 0,
-        fileName: details.fileName || null,
+        exportedBy: log.actorEmail || 'Unknown',
+        exportedById: log.actorId || '',
+        exportType: changes.exportType || changes.targetType || 'Unknown',
+        recordCount: changes.recordCount || changes.count || 0,
+        fileName: changes.fileName || null,
         exportedAt: log.createdAt,
         ipAddress: log.ipAddress,
       };
@@ -291,25 +283,22 @@ class AuditReportsService {
         organizationId,
         action: { in: ['STAGE_CHANGE', 'LEAD_STAGE_CHANGE', 'UPDATE_STAGE', 'stage_change'] },
         createdAt: { gte: dateRange.start, lte: dateRange.end },
-        ...(userId && { userId }),
-      },
-      include: {
-        user: { select: { firstName: true, lastName: true } },
+        ...(userId && { actorId: userId }),
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
 
     return logs.map(log => {
-      const details = (log.details as any) || {};
+      const changes = (log.changes as any) || {};
       return {
         id: log.id,
-        leadId: log.entityId || '',
-        leadName: details.leadName || 'Unknown Lead',
-        changedBy: log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : 'Unknown',
-        changedById: log.userId,
-        fromStage: details.fromStage || details.oldStage || 'Unknown',
-        toStage: details.toStage || details.newStage || 'Unknown',
+        leadId: log.targetId || '',
+        leadName: changes.leadName || 'Unknown Lead',
+        changedBy: log.actorEmail || 'Unknown',
+        changedById: log.actorId || '',
+        fromStage: changes.fromStage || changes.oldStage || 'Unknown',
+        toStage: changes.toStage || changes.newStage || 'Unknown',
         changedAt: log.createdAt,
       };
     });
@@ -326,26 +315,23 @@ class AuditReportsService {
         organizationId,
         action: { in: ['LOGIN', 'login', 'USER_LOGIN'] },
         createdAt: { gte: dateRange.start, lte: dateRange.end },
-        ...(userId && { userId }),
-      },
-      include: {
-        user: { select: { firstName: true, lastName: true, email: true } },
+        ...(userId && { actorId: userId }),
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
 
     return logs.map(log => {
-      const details = (log.details as any) || {};
+      const changes = (log.changes as any) || {};
       return {
         id: log.id,
-        userId: log.userId,
-        userName: log.user ? `${log.user.firstName} ${log.user.lastName}`.trim() : 'Unknown',
-        email: log.user?.email || '',
+        userId: log.actorId || '',
+        userName: log.actorEmail || 'Unknown',
+        email: log.actorEmail || '',
         loginTime: log.createdAt,
         ipAddress: log.ipAddress,
-        userAgent: details.userAgent || null,
-        location: details.location || null,
+        userAgent: changes.userAgent || null,
+        location: changes.location || null,
         status: 'SUCCESS' as const,
       };
     });
@@ -374,8 +360,8 @@ class AuditReportsService {
     }>();
 
     for (const log of logs) {
-      const details = (log.details as any) || {};
-      const email = details.email || details.identifier || 'unknown';
+      const changes = (log.changes as any) || {};
+      const email = changes.email || changes.identifier || log.actorEmail || 'unknown';
       const existing = attemptsByEmail.get(email) || {
         count: 0,
         lastAttempt: log.createdAt,
@@ -506,11 +492,11 @@ class AuditReportsService {
     const { organizationId, dateRange = this.getDefaultDateRange() } = filters;
 
     const logs = await prisma.auditLog.groupBy({
-      by: ['entityType', 'action'],
+      by: ['targetType', 'action'],
       where: {
         organizationId,
         createdAt: { gte: dateRange.start, lte: dateRange.end },
-        entityType: { not: null },
+        targetType: { not: null },
       },
       _count: { id: true },
     });
@@ -518,7 +504,7 @@ class AuditReportsService {
     const entityStats = new Map<string, { created: number; updated: number; deleted: number }>();
 
     for (const log of logs) {
-      const entityType = log.entityType || 'Unknown';
+      const entityType = log.targetType || 'Unknown';
       const existing = entityStats.get(entityType) || { created: 0, updated: 0, deleted: 0 };
       const action = log.action.toUpperCase();
 

@@ -26,3 +26,12 @@ export { default as CampaignLeadReportPage } from './CampaignLeadReportPage';
 export { default as CampaignStageReportPage } from './CampaignStageReportPage';
 export { default as CampaignDealReportPage } from './CampaignDealReportPage';
 export { default as CampaignSourceReportPage } from './CampaignSourceReportPage';
+
+// Pipeline Reports
+export { default as DealVelocityReportPage } from './DealVelocityReportPage';
+
+// Business Trends
+export { default as BusinessTrendsPage } from './BusinessTrendsPage';
+
+// User Trends
+export { default as UserTrendsPage } from './UserTrendsPage';

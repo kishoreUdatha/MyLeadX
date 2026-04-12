@@ -35,6 +35,7 @@ interface AdmissionFilters {
   commissionStatus?: string;
   academicYear?: string;
   closedById?: string;
+  branchId?: string;
   fromDate?: Date;
   toDate?: Date;
   search?: string;
@@ -498,6 +499,7 @@ export class AdmissionService {
       commissionStatus,
       academicYear,
       closedById,
+      branchId,
       fromDate,
       toDate,
       search,
@@ -514,6 +516,7 @@ export class AdmissionService {
     if (commissionStatus) where.commissionStatus = commissionStatus;
     if (academicYear) where.academicYear = academicYear;
     if (closedById) where.closedById = closedById;
+    if (branchId) where.closedBy = { branchId: branchId };
 
     if (fromDate || toDate) {
       where.closedAt = {};
@@ -544,7 +547,7 @@ export class AdmissionService {
             select: { firstName: true, lastName: true },
           },
           _count: {
-            select: { payments: true },
+            select: { admissionPayments: true },
           },
         },
         orderBy: { closedAt: 'desc' },
@@ -599,7 +602,7 @@ export class AdmissionService {
         closedBy: {
           select: { id: true, firstName: true, lastName: true, email: true },
         },
-        payments: {
+        admissionPayments: {
           orderBy: { createdAt: 'desc' },
           include: {
             receivedBy: {
@@ -672,7 +675,10 @@ export class AdmissionService {
     });
     const paymentNumber = (lastPayment?.paymentNumber || 0) + 1;
 
-    const payment = await prisma.admissionPayment.create({
+    const paidAt = new Date();
+
+    // Create AdmissionPayment (education-specific detailed record)
+    const admissionPayment = await prisma.admissionPayment.create({
       data: {
         admissionId,
         paymentNumber,
@@ -680,12 +686,31 @@ export class AdmissionService {
         paymentType: input.paymentType,
         paymentMode: input.paymentMode,
         referenceNumber: input.referenceNumber,
-        paidAt: new Date(),
+        paidAt,
         receivedById: input.receivedById,
         notes: input.notes,
         receiptUrl: input.receiptUrl,
       },
     });
+
+    // Also create generic Payment record (for unified reporting across all industries)
+    await prisma.payment.create({
+      data: {
+        organizationId,
+        leadId: admission.leadId,
+        admissionId,
+        amount: input.amount,
+        paymentMethod: input.paymentMode,
+        paymentType: input.paymentType,
+        description: input.notes || `Admission payment #${paymentNumber}`,
+        referenceNumber: input.referenceNumber,
+        status: 'COMPLETED',
+        paidAt,
+        createdById: input.receivedById || admission.closedById,
+      },
+    });
+
+    const payment = admissionPayment;
 
     // Update admission payment totals
     const newPaidAmount = Number(admission.paidAmount) + Number(input.amount);

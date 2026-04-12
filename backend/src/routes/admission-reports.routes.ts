@@ -169,11 +169,10 @@ router.get(
  */
 router.get(
   '/trends',
-  [
+  validate([
     ...filterValidation,
     query('interval').optional().isIn(['day', 'week', 'month']).withMessage('Invalid interval'),
-  ],
-  validate,
+  ]),
   async (req: TenantRequest, res: Response) => {
     try {
       const filters = parseFilters(req);

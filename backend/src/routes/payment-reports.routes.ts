@@ -30,11 +30,19 @@ const filterValidation = [
 
 function parseFilters(req: TenantRequest) {
   const { startDate, endDate, branchId, courseId, paymentMethod } = req.query;
+
+  let dateRange: { start: Date; end: Date } | undefined;
+  if (startDate && endDate) {
+    const start = new Date(startDate as string);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate as string);
+    end.setHours(23, 59, 59, 999);
+    dateRange = { start, end };
+  }
+
   return {
     organizationId: req.organizationId!,
-    dateRange: startDate && endDate
-      ? { start: new Date(startDate as string), end: new Date(endDate as string) }
-      : undefined,
+    dateRange,
     branchId: branchId as string | undefined,
     courseId: courseId as string | undefined,
     paymentMethod: paymentMethod as string | undefined,
@@ -42,7 +50,7 @@ function parseFilters(req: TenantRequest) {
 }
 
 // GET /payment-reports/summary
-router.get('/summary', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/summary', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const summary = await paymentReportsService.getRevenueSummary(parseFilters(req));
     return ApiResponse.success(res, { summary });
@@ -52,10 +60,10 @@ router.get('/summary', filterValidation, validate, async (req: TenantRequest, re
 });
 
 // GET /payment-reports/by-period
-router.get('/by-period', [
+router.get('/by-period', validate([
   ...filterValidation,
   query('interval').optional().isIn(['day', 'week', 'month']),
-], validate, async (req: TenantRequest, res: Response) => {
+]), async (req: TenantRequest, res: Response) => {
   try {
     const interval = (req.query.interval as 'day' | 'week' | 'month') || 'day';
     const data = await paymentReportsService.getRevenueByPeriod(parseFilters(req), interval);
@@ -66,7 +74,7 @@ router.get('/by-period', [
 });
 
 // GET /payment-reports/by-category
-router.get('/by-category', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/by-category', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const data = await paymentReportsService.getRevenueByCategory(parseFilters(req));
     return ApiResponse.success(res, { byCategory: data });
@@ -76,7 +84,7 @@ router.get('/by-category', filterValidation, validate, async (req: TenantRequest
 });
 
 // GET /payment-reports/by-method
-router.get('/by-method', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/by-method', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const data = await paymentReportsService.getPaymentMethodBreakdown(parseFilters(req));
     return ApiResponse.success(res, { byMethod: data });
@@ -86,10 +94,10 @@ router.get('/by-method', filterValidation, validate, async (req: TenantRequest, 
 });
 
 // GET /payment-reports/pending
-router.get('/pending', [
+router.get('/pending', validate([
   ...filterValidation,
   query('limit').optional().isInt({ min: 1, max: 100 }),
-], validate, async (req: TenantRequest, res: Response) => {
+]), async (req: TenantRequest, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     const data = await paymentReportsService.getPendingPayments(parseFilters(req), limit);
@@ -100,7 +108,7 @@ router.get('/pending', [
 });
 
 // GET /payment-reports/collectors
-router.get('/collectors', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/collectors', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const collectors = await paymentReportsService.getCollectorPerformance(parseFilters(req));
     return ApiResponse.success(res, { collectors });
@@ -110,7 +118,7 @@ router.get('/collectors', filterValidation, validate, async (req: TenantRequest,
 });
 
 // GET /payment-reports/refunds
-router.get('/refunds', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/refunds', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const data = await paymentReportsService.getRefundsReport(parseFilters(req));
     return ApiResponse.success(res, data);
@@ -120,10 +128,49 @@ router.get('/refunds', filterValidation, validate, async (req: TenantRequest, re
 });
 
 // GET /payment-reports/comprehensive
-router.get('/comprehensive', filterValidation, validate, async (req: TenantRequest, res: Response) => {
+router.get('/comprehensive', validate(filterValidation), async (req: TenantRequest, res: Response) => {
   try {
     const report = await paymentReportsService.getComprehensiveReport(parseFilters(req));
     return ApiResponse.success(res, { report });
+  } catch (error: any) {
+    return ApiResponse.error(res, error.message, 500);
+  }
+});
+
+// GET /payment-reports/export
+router.get('/export', validate(filterValidation), async (req: TenantRequest, res: Response) => {
+  try {
+    const report = await paymentReportsService.getComprehensiveReport(parseFilters(req));
+
+    // Format data for export
+    const exportData = {
+      generatedAt: new Date().toISOString(),
+      period: {
+        start: req.query.startDate,
+        end: req.query.endDate,
+      },
+      summary: report.summary,
+      comparison: report.comparison,
+      transactions: report.transactions.transactions.map(t => ({
+        date: t.paidAt || t.createdAt,
+        leadName: t.leadName,
+        phone: t.phone,
+        email: t.email,
+        amount: t.amount,
+        method: t.paymentMethod,
+        type: t.paymentType,
+        reference: t.referenceNumber,
+        status: t.status,
+        collectedBy: t.collectorName,
+      })),
+      byBranch: report.byBranch,
+      byCourse: report.byCourse,
+      collectors: report.collectors,
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=payment-report-${new Date().toISOString().slice(0,10)}.json`);
+    return res.json(exportData);
   } catch (error: any) {
     return ApiResponse.error(res, error.message, 500);
   }

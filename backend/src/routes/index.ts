@@ -108,6 +108,11 @@ import leadSlaRoutes from './lead-sla.routes';
 import leadSourceRoutes from './lead-source.routes';
 import leadReportsRoutes from './lead-reports.routes';
 import followUpReportsRoutes from './followup-reports.routes';
+import taskReportsRoutes from './task-reports.routes';
+import dealReportsRoutes from './deal-reports.routes';
+import businessTrendsRoutes from './business-trends.routes';
+import userTrendsRoutes from './user-trends.routes';
+import messageActivityReportsRoutes from './message-activity-reports.routes';
 import callReportsRoutes from './call-reports.routes';
 import paymentReportsRoutes from './payment-reports.routes';
 import admissionReportsRoutes from './admission-reports.routes';
@@ -314,6 +319,21 @@ router.use('/lead-reports', leadReportsRoutes);
 
 // Follow-up Reports (Tenant-scoped)
 router.use('/followup-reports', followUpReportsRoutes);
+
+// Task Reports (Tenant-scoped)
+router.use('/task-reports', taskReportsRoutes);
+
+// Deal Reports (Tenant-scoped)
+router.use('/deal-reports', dealReportsRoutes);
+
+// Business Trends (Tenant-scoped)
+router.use('/business-trends', businessTrendsRoutes);
+
+// User Trends (Tenant-scoped)
+router.use('/user-trends', userTrendsRoutes);
+
+// Message Activity Reports (Tenant-scoped)
+router.use('/message-activity-reports', messageActivityReportsRoutes);
 
 // Call Reports (Tenant-scoped)
 router.use('/call-reports', callReportsRoutes);

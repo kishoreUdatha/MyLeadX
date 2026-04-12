@@ -1,0 +1,1 @@
+const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.organization.findMany({select:{id:true,name:true,_count:{select:{phoneNumbers:true}}}}).then(o=>{o.forEach(x=>console.log(x.name,x.id,x._count.phoneNumbers));p.\x24disconnect()});

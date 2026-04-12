@@ -21,6 +21,7 @@ import {
   ComprehensiveAdmissionReport,
   ReportFilters,
 } from '../../services/admission-reports.service';
+import { branchService, Branch } from '../../services/branch.service';
 
 type TabType = 'overview' | 'universities' | 'counselors' | 'commission';
 
@@ -31,6 +32,12 @@ export default function AdmissionReportsPage() {
   const [trendInterval, setTrendInterval] = useState<'day' | 'week' | 'month'>('month');
   const [filters, setFilters] = useState<ReportFilters>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [branches, setBranches] = useState<Branch[]>([]);
+
+  // Fetch branches on mount
+  useEffect(() => {
+    branchService.getAll(true).then(setBranches).catch(console.error);
+  }, []);
 
   // Date presets - Academic Year based
   const datePresets = [
@@ -221,16 +228,23 @@ export default function AdmissionReportsPage() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Branch</label>
-              <select
-                value={filters.branchId || ''}
-                onChange={(e) => setFilters({ ...filters, branchId: e.target.value || undefined })}
-                className="input text-sm py-1.5"
-              >
-                <option value="">All Branches</option>
-              </select>
-            </div>
+            {branches.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Branch</label>
+                <select
+                  value={filters.branchId || ''}
+                  onChange={(e) => setFilters({ ...filters, branchId: e.target.value || undefined })}
+                  className="input text-sm py-1.5"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       )}

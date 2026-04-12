@@ -923,6 +923,9 @@ model Lead {
   studentVisits StudentVisit[]
   admissions    Admission[]
 
+  // Generic Payments (works for all industries)
+  payments      Payment[]
+
   // Interaction tracking
   totalCalls      Int       @default(0)
   lastContactedAt DateTime?
@@ -1725,7 +1728,6 @@ model StudentProfile {
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   lead      Lead?              @relation(fields: [leadId], references: [id])
   documents AcademicDocument[]
-  payments  Payment[]
 
   @@map("student_profiles")
 }
@@ -1810,27 +1812,42 @@ model DealActivity {
 }
 
 model Payment {
-  id               String        @id @default(uuid())
-  organizationId   String
-  studentProfileId String
-  createdById      String
-  orderId          String        @unique
-  paymentId        String?
-  amount           Decimal       @db.Decimal(10, 2)
-  currency         String        @default("INR")
-  status           PaymentStatus @default(PENDING)
-  paymentMethod    String?
-  description      String?
-  metadata         Json?         @default("{}")
-  paidAt           DateTime?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  organizationId String
+  leadId         String        // Generic - works for all industries (searchable by name/phone/email)
+  createdById    String
 
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id])
-  createdBy      User           @relation("PaymentCreator", fields: [createdById], references: [id])
+  // Payment details
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("INR")
+  status         PaymentStatus @default(PENDING)
+  paymentMethod  String?       // CASH, CARD, UPI, BANK_TRANSFER, CHEQUE
+  paymentType    String?       // FEE, DEPOSIT, EMI, BOOKING, ADVANCE, etc.
+  description    String?
+  referenceNumber String?      // Cheque/UTR/Transaction number
+
+  // External references
+  orderId        String?       // External order ID
+  paymentId      String?       // Payment gateway ID
+
+  // Optional context references
+  admissionId    String?       // Education: link to admission
+  dealId         String?       // Sales: link to deal
+
+  metadata       Json?         @default("{}")
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead           Lead          @relation(fields: [leadId], references: [id])
+  admission      Admission?    @relation(fields: [admissionId], references: [id])
+  createdBy      User          @relation("PaymentCreator", fields: [createdById], references: [id])
   splits         PaymentSplit[]
 
+  @@index([organizationId, status])
+  @@index([organizationId, leadId])
+  @@index([organizationId, paidAt])
   @@map("payments")
 }
 
@@ -8175,8 +8192,9 @@ model Admission {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  payments    AdmissionPayment[]
-  commissions Commission[]
+  admissionPayments AdmissionPayment[] // Education-specific detailed payments
+  genericPayments   Payment[]          // Generic payments (for unified reporting)
+  commissions       Commission[]
 
   @@index([organizationId])
   @@index([leadId])

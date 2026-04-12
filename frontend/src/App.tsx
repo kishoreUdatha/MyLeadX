@@ -108,6 +108,12 @@ import {
   CampaignStageReportPage,
   CampaignDealReportPage,
   CampaignSourceReportPage,
+  // Pipeline Reports
+  DealVelocityReportPage,
+  // Business Trends
+  BusinessTrendsPage,
+  // User Trends
+  UserTrendsPage,
 } from './pages/reports';
 import { RolesListPage } from './pages/roles';
 import { SocialMediaAdsPage, InstagramLeadSetupPage, AdIntegrationsPage, FacebookSetupPage, LinkedInSetupPage, GoogleAdsSetupPage, YouTubeSetupPage, TwitterSetupPage, TikTokSetupPage, WebhookUrlsPage } from './pages/ads';
@@ -567,6 +573,12 @@ function App() {
         <Route path="reports/campaign-stage" element={<CampaignStageReportPage />} />
         <Route path="reports/campaign-deal" element={<CampaignDealReportPage />} />
         <Route path="reports/campaign-source" element={<CampaignSourceReportPage />} />
+        {/* Pipeline Reports */}
+        <Route path="reports/deal-velocity" element={<DealVelocityReportPage />} />
+        {/* Business Trends */}
+        <Route path="reports/business-trends" element={<BusinessTrendsPage />} />
+        {/* User Trends */}
+        <Route path="reports/user-trends" element={<UserTrendsPage />} />
         <Route path="social-media-ads" element={<SocialMediaAdsPage />} />
         <Route path="ad-integrations" element={<AdIntegrationsPage />} />
         <Route path="webhook-urls" element={<WebhookUrlsPage />} />
