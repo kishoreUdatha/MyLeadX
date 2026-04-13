@@ -356,41 +356,129 @@ interface WhatsAppModalProps {
   phone: string;
 }
 
-export function WhatsAppModal({ isOpen, onClose, onSubmit, phone }: WhatsAppModalProps) {
-  const [form, setForm] = useState({ message: '', mediaUrl: '' });
+// WhatsApp Icon Component
+const WhatsAppIconLarge = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+  </svg>
+);
 
-  const handleSubmit = () => {
-    onSubmit(form);
-    setForm({ message: '', mediaUrl: '' });
+export function WhatsAppModal({ isOpen, onClose, onSubmit, phone }: WhatsAppModalProps) {
+  const [message, setMessage] = useState('');
+
+  // Format phone number for WhatsApp (remove spaces, dashes, and ensure country code)
+  const formatPhoneForWhatsApp = (phoneNumber: string): string => {
+    // Remove all non-numeric characters except +
+    let cleaned = phoneNumber.replace(/[^\d+]/g, '');
+    // If starts with 0, assume Indian number and add 91
+    if (cleaned.startsWith('0')) {
+      cleaned = '91' + cleaned.substring(1);
+    }
+    // If doesn't start with +, assume it needs country code
+    if (!cleaned.startsWith('+') && !cleaned.startsWith('91') && cleaned.length === 10) {
+      cleaned = '91' + cleaned;
+    }
+    // Remove + if present (WhatsApp URL doesn't need it)
+    cleaned = cleaned.replace('+', '');
+    return cleaned;
+  };
+
+  const handleSendWhatsApp = () => {
+    const formattedPhone = formatPhoneForWhatsApp(phone);
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+
+    // Open WhatsApp in new tab
+    window.open(whatsappUrl, '_blank');
+
+    // Also call the onSubmit to log the activity
+    onSubmit({ message, mediaUrl: '' });
+
+    // Reset and close
+    setMessage('');
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <ModalWrapper isOpen={isOpen} onClose={onClose} title="Send WhatsApp Message">
-      <div className="space-y-4">
-        <div className="p-3 bg-slate-50 rounded-lg">
-          <p className="text-sm text-slate-600">To: {phone}</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl">
+        {/* WhatsApp-style header */}
+        <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
+          <WhatsAppIconLarge className="h-6 w-6 text-white" />
+          <div>
+            <h3 className="text-white font-semibold">Send WhatsApp Message</h3>
+            <p className="text-green-100 text-xs">Opens WhatsApp to send message</p>
+          </div>
         </div>
-        <textarea
-          placeholder="Type your message..."
-          value={form.message}
-          onChange={(e) => setForm({ ...form, message: e.target.value })}
-          className="w-full px-4 py-2 border border-slate-200 rounded-lg"
-          rows={4}
-        />
-        <input
-          type="url"
-          placeholder="Media URL (optional)"
-          value={form.mediaUrl}
-          onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
-          className="w-full px-4 py-2 border border-slate-200 rounded-lg"
-        />
+
+        <div className="p-4 space-y-4">
+          {/* Recipient */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center">
+              <WhatsAppIconLarge className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">To</p>
+              <p className="font-medium text-slate-800">{phone}</p>
+            </div>
+          </div>
+
+          {/* Message input - WhatsApp style */}
+          <div className="relative">
+            <textarea
+              placeholder="Type a message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#25D366] focus:border-transparent resize-none"
+              rows={4}
+            />
+          </div>
+
+          {/* Quick message templates */}
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Quick Templates</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                'Hi, following up on our conversation.',
+                'Hello! I wanted to check in with you.',
+                'Hi, do you have time for a quick call?',
+              ].map((template, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setMessage(template)}
+                  className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+                >
+                  {template.length > 30 ? template.slice(0, 30) + '...' : template}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 bg-slate-50 flex justify-end gap-3">
+          <button
+            onClick={() => {
+              setMessage('');
+              onClose();
+            }}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSendWhatsApp}
+            disabled={!message.trim()}
+            className="px-4 py-2 text-sm bg-[#25D366] hover:bg-[#128C7E] text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <WhatsAppIconLarge className="h-4 w-4" />
+            Open WhatsApp
+          </button>
+        </div>
       </div>
-      <div className="flex justify-end gap-3 mt-6">
-        <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleSubmit} disabled={!form.message.trim()} className="btn btn-primary">Send WhatsApp</button>
-      </div>
-    </ModalWrapper>
+    </div>
   );
 }
 
@@ -404,32 +492,277 @@ interface SmsModalProps {
 export function SmsModal({ isOpen, onClose, onSubmit, phone }: SmsModalProps) {
   const [message, setMessage] = useState('');
 
-  const handleSubmit = () => {
+  const handleSendSms = () => {
+    // Create SMS URL - works on mobile and some desktop apps
+    const smsUrl = `sms:${phone}?body=${encodeURIComponent(message)}`;
+
+    // Open SMS app
+    window.location.href = smsUrl;
+
+    // Also call the onSubmit to log the activity
     onSubmit(message);
+
+    // Reset and close
     setMessage('');
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <ModalWrapper isOpen={isOpen} onClose={onClose} title="Send SMS">
-      <div className="space-y-4">
-        <div className="p-3 bg-slate-50 rounded-lg">
-          <p className="text-sm text-slate-600">To: {phone}</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl">
+        {/* SMS-style header */}
+        <div className="bg-amber-500 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+            <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">Send SMS</h3>
+            <p className="text-amber-100 text-xs">Opens messaging app</p>
+          </div>
         </div>
-        <textarea
-          placeholder="Type your message..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          className="w-full px-4 py-2 border border-slate-200 rounded-lg"
-          rows={4}
-        />
-        <p className="text-xs text-slate-400">Character count: {message.length}/160</p>
+
+        <div className="p-4 space-y-4">
+          {/* Recipient */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+              <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">To</p>
+              <p className="font-medium text-slate-800">{phone}</p>
+            </div>
+          </div>
+
+          {/* Message input */}
+          <div className="relative">
+            <textarea
+              placeholder="Type your message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none"
+              rows={4}
+              maxLength={160}
+            />
+            <div className="absolute bottom-2 right-3">
+              <span className={`text-xs ${message.length > 140 ? 'text-amber-600' : 'text-slate-400'}`}>
+                {message.length}/160
+              </span>
+            </div>
+          </div>
+
+          {/* Quick message templates */}
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Quick Templates</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                'Please call me back.',
+                'Are you available for a quick call?',
+                'Thank you for your inquiry!',
+              ].map((template, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setMessage(template)}
+                  className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+                >
+                  {template}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 bg-slate-50 flex justify-end gap-3">
+          <button
+            onClick={() => {
+              setMessage('');
+              onClose();
+            }}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSendSms}
+            disabled={!message.trim()}
+            className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+            Send SMS
+          </button>
+        </div>
       </div>
-      <div className="flex justify-end gap-3 mt-6">
-        <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleSubmit} disabled={!message.trim()} className="btn btn-primary">Send SMS</button>
+    </div>
+  );
+}
+
+// ==================== EMAIL MODAL ====================
+
+interface EmailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: { subject: string; body: string }) => void;
+  email: string;
+  leadName?: string;
+}
+
+export function EmailModal({ isOpen, onClose, onSubmit, email, leadName }: EmailModalProps) {
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleSendEmail = async () => {
+    setSending(true);
+    try {
+      // Call the onSubmit to send via backend API
+      await onSubmit({ subject, body });
+      toast.success('Email sent successfully');
+      setSubject('');
+      setBody('');
+      onClose();
+    } catch (error) {
+      toast.error('Failed to send email');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleOpenInClient = () => {
+    // Open in default email client with pre-filled content
+    const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailtoUrl;
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-lg overflow-hidden shadow-xl">
+        {/* Email-style header */}
+        <div className="bg-purple-600 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+            <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">Compose Email</h3>
+            <p className="text-purple-100 text-xs">Send email to lead</p>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Recipient */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+              <svg className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-slate-500">To</p>
+              <p className="font-medium text-slate-800 truncate">{leadName && <span className="text-slate-600">{leadName} &lt;</span>}{email}{leadName && <span className="text-slate-600">&gt;</span>}</p>
+            </div>
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Subject</label>
+            <input
+              type="text"
+              placeholder="Enter email subject..."
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Body */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Message</label>
+            <textarea
+              placeholder="Type your message..."
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+              rows={6}
+            />
+          </div>
+
+          {/* Quick templates */}
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Quick Templates</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { subject: 'Following up on our conversation', body: 'Hi,\n\nI wanted to follow up on our recent conversation. Please let me know if you have any questions.\n\nBest regards' },
+                { subject: 'Thank you for your inquiry', body: 'Hi,\n\nThank you for reaching out to us. We appreciate your interest.\n\nBest regards' },
+                { subject: 'Meeting request', body: 'Hi,\n\nI would like to schedule a meeting to discuss further. Please let me know your availability.\n\nBest regards' },
+              ].map((template, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setSubject(template.subject);
+                    setBody(template.body);
+                  }}
+                  className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+                >
+                  {template.subject.length > 25 ? template.subject.slice(0, 25) + '...' : template.subject}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 bg-slate-50 flex justify-between">
+          <button
+            onClick={handleOpenInClient}
+            disabled={!subject.trim() || !body.trim()}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Open in Email App
+          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setSubject('');
+                setBody('');
+                onClose();
+              }}
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSendEmail}
+              disabled={!subject.trim() || !body.trim() || sending}
+              className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {sending ? (
+                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              )}
+              Send Email
+            </button>
+          </div>
+        </div>
       </div>
-    </ModalWrapper>
+    </div>
   );
 }
 

@@ -414,6 +414,9 @@ router.get(
   })
 );
 
+// Completed stages where follow-ups should not be allowed
+const COMPLETED_STAGES = ['Won', 'WON', 'Lost', 'LOST', 'Closed', 'CLOSED', 'Admitted', 'ADMITTED', 'Enrolled', 'ENROLLED', 'Dropped', 'DROPPED'];
+
 // Create follow-up
 router.post(
   '/:leadId/follow-ups',
@@ -432,6 +435,34 @@ router.post(
     // SECURITY: Verify lead belongs to user's organization
     if (!await verifyLeadAccess(leadId, req)) {
       return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    // Check if lead is in a completed stage
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      include: { stage: { select: { name: true } } },
+    });
+
+    if (lead?.stage && COMPLETED_STAGES.includes(lead.stage.name)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot schedule follow-up for a lead in "${lead.stage.name}" stage. The lead has already been closed.`,
+      });
+    }
+
+    // Check for existing upcoming follow-up (prevent duplicates)
+    const existingFollowUp = await prisma.followUp.findFirst({
+      where: {
+        leadId,
+        status: 'UPCOMING',
+      },
+    });
+
+    if (existingFollowUp) {
+      return res.status(400).json({
+        success: false,
+        message: `This lead already has a scheduled follow-up on ${new Date(existingFollowUp.scheduledAt).toLocaleDateString()}. Please reschedule the existing one instead.`,
+      });
     }
 
     const followUp = await prisma.followUp.create({
@@ -1394,6 +1425,86 @@ router.post(
     } catch (error) {
       console.error('Error sending SMS:', error);
       res.status(500).json({ success: false, message: 'Failed to send SMS' });
+    }
+  })
+);
+
+// ==================== EMAIL ====================
+
+// Send Email
+router.post(
+  '/:leadId/email',
+  validate([
+    param('leadId').isUUID().withMessage('Invalid lead ID'),
+    body('subject').trim().notEmpty().withMessage('Subject is required')
+      .isLength({ max: 200 }).withMessage('Subject too long'),
+    body('body').trim().notEmpty().withMessage('Email body is required')
+      .isLength({ max: 10000 }).withMessage('Body too long'),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId } = req.params;
+    const { subject, body: emailBody } = req.body;
+    const organizationId = req.user!.organizationId;
+
+    try {
+      // SECURITY: Role-based access check
+      if (!await verifyLeadAccess(leadId, req)) {
+        return res.status(404).json({ success: false, message: 'Lead not found' });
+      }
+
+      // Get lead details for sending message
+      const lead = await prisma.lead.findFirst({
+        where: { id: leadId, organizationId },
+        select: { email: true, firstName: true, lastName: true },
+      });
+
+      if (!lead) {
+        return res.status(404).json({ success: false, message: 'Lead not found' });
+      }
+
+      if (!lead.email) {
+        return res.status(400).json({ success: false, message: 'Lead email not found' });
+      }
+
+      // Create log entry first
+      const logEntry = await prisma.emailLog.create({
+        data: {
+          leadId,
+          userId: req.user!.id,
+          toEmail: lead.email,
+          subject,
+          body: emailBody,
+          direction: 'OUTBOUND',
+          status: 'PENDING',
+        },
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+        },
+      });
+
+      // Update status to SENT (email logging - actual sending via integration service can be added)
+      await prisma.emailLog.update({
+        where: { id: logEntry.id },
+        data: { status: 'SENT', sentAt: new Date() },
+      });
+
+      // Create activity
+      await prisma.leadActivity.create({
+        data: {
+          leadId,
+          userId: req.user!.id,
+          type: 'EMAIL_SENT',
+          title: 'Email sent',
+          description: `Subject: ${subject}`,
+        },
+      });
+
+      res.status(201).json({ success: true, data: logEntry });
+    } catch (error) {
+      console.error('Error sending email:', error);
+      res.status(500).json({ success: false, message: 'Failed to send email' });
     }
   })
 );

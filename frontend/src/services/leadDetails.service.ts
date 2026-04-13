@@ -424,6 +424,24 @@ export const sendSms = async (leadId: string, data: { message: string }): Promis
   return response.data.data;
 };
 
+// ==================== EMAIL ====================
+
+export interface EmailLog {
+  id: string;
+  leadId: string;
+  to: string;
+  subject: string;
+  body: string;
+  status: 'SENT' | 'FAILED' | 'PENDING';
+  sentAt?: string;
+  createdAt: string;
+}
+
+export const sendEmail = async (leadId: string, data: { subject: string; body: string }): Promise<EmailLog> => {
+  const response = await api.post(`/lead-details/${leadId}/email`, data);
+  return response.data.data;
+};
+
 // ==================== PAYMENTS ====================
 
 export interface LeadPayment {
@@ -555,6 +573,8 @@ export default {
   // SMS
   getSmsLogs,
   sendSms,
+  // Email
+  sendEmail,
   // Payments
   getPayments,
   createPayment,

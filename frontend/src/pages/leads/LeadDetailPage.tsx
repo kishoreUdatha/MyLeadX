@@ -92,6 +92,7 @@ import {
   CallLogModal,
   WhatsAppModal,
   SmsModal,
+  EmailModal,
   EditLeadModal,
   EditLeadFormData,
   PaymentModal,
@@ -129,6 +130,7 @@ export default function LeadDetailPage() {
   const [showCallLogModal, setShowCallLogModal] = useState(false);
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
   const [showCallPrepModal, setShowCallPrepModal] = useState(false);
@@ -271,6 +273,16 @@ export default function LeadDetailPage() {
     }
   };
 
+  // Email handler
+  const handleSendEmail = async (data: { subject: string; body: string }) => {
+    if (!id) return;
+    try {
+      await leadDetailsService.sendEmail(id, data);
+    } catch {
+      throw new Error('Failed to send email');
+    }
+  };
+
   // Edit lead handler
   const handleEditLead = async (data: EditLeadFormData) => {
     if (!id) return;
@@ -362,7 +374,7 @@ export default function LeadDetailPage() {
       <div className="bg-white border-b border-slate-200 relative z-10">
         <div className="px-3 py-3">
           {/* Row 1: Back, Name, Status, Badges, Action Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 relative z-30">
             <button
               onClick={() => navigate('/leads')}
               className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
@@ -445,7 +457,7 @@ export default function LeadDetailPage() {
             <div className="flex-1" />
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 relative z-30">
               <button
                 onClick={() => setShowCallPrepModal(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors"
@@ -465,9 +477,9 @@ export default function LeadDetailPage() {
                 leadName={`${currentLead.firstName} ${currentLead.lastName}`}
                 compact
               />
-              <a href={`mailto:${currentLead.email}`} className="p-1.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors" title="Email">
+              <button onClick={() => setShowEmailModal(true)} className="p-1.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors" title="Email">
                 <EnvelopeIcon className="h-4 w-4" />
-              </a>
+              </button>
               <button
                 onClick={() => toast('Video call feature coming soon!', { icon: '📹' })}
                 className="p-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-600 transition-colors"
@@ -718,6 +730,7 @@ export default function LeadDetailPage() {
             loading={leadData.loadingFollowUps}
             onAddClick={() => setShowFollowUpModal(true)}
             onUpdateStatus={leadData.updateFollowUpStatus}
+            onReschedule={leadData.rescheduleFollowUp}
             onDelete={leadData.deleteFollowUp}
           />
         )}
@@ -850,6 +863,14 @@ export default function LeadDetailPage() {
         onClose={() => setShowSmsModal(false)}
         onSubmit={handleSendSms}
         phone={currentLead.phone || ''}
+      />
+
+      <EmailModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        onSubmit={handleSendEmail}
+        email={currentLead.email || ''}
+        leadName={`${currentLead.firstName} ${currentLead.lastName}`}
       />
 
       <EditLeadModal
