@@ -93,13 +93,13 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
         Alert.alert('Login Failed', data.message || 'Invalid credentials');
       }
     } catch (error: any) {
-      console.log('[Login] Error:', error);
       let message = 'Login failed. Please check your credentials.';
 
       if (error.response) {
         // Server responded with error
         const status = error.response.status;
         const serverMessage = error.response.data?.message;
+        console.log('[Login] Server error:', status, serverMessage);
 
         if (status === 429) {
           message = 'Too many attempts. Please wait a minute and try again.';
@@ -109,7 +109,10 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
           message = serverMessage;
         }
       } else if (error.message?.includes('Network Error') || error.message?.includes('timeout')) {
+        console.log('[Login] Network error - server unreachable');
         message = 'Cannot connect to server. Please check:\n• Internet connection\n• Phone is on same WiFi as server\n• Server is running';
+      } else {
+        console.log('[Login] Unexpected error:', error.message);
       }
 
       Alert.alert('Login Failed', message);

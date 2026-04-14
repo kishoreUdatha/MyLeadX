@@ -541,6 +541,7 @@ IMPORTANT:
 - If they mention a budget like "50 lakhs" extract budget: "50 lakhs"
 - If they mention location like "Hyderabad" extract city: "Hyderabad"
 - APPOINTMENT/SCHEDULING: If the user mentions ANY date, time, or scheduling preference for a meeting/appointment/demo/call, extract it to "appointmentTime" field. Capture the exact phrasing they used.
+- ALL extracted values MUST be in English. If the conversation is in Telugu, Hindi, or any other non-English language, translate the extracted values to English.
 - Return ONLY valid JSON with extracted fields
 - Return {} if nothing relevant found`,
         },
@@ -599,9 +600,9 @@ export async function analyzeCall(
       messages: [
         {
           role: 'system',
-          content: `Analyze this phone call and provide insights in JSON format:
+          content: `Analyze this phone call and provide insights in JSON format. ALL output MUST be in English regardless of the transcript language.
 {
-  "summary": "2-3 sentence summary of the call",
+  "summary": "2-3 sentence summary of the call in English",
   "sentiment": "positive/neutral/negative",
   "outcome": "INTERESTED/NOT_INTERESTED/CALLBACK_REQUESTED/NEEDS_FOLLOWUP/CONVERTED/NO_ANSWER/VOICEMAIL",
   "keyPoints": ["key point 1", "key point 2"],
@@ -1224,6 +1225,7 @@ Categories:
 - timeline: Deadlines, dates, urgency, decision timeframe
 - other: Anything else important
 
+ALL extracted values MUST be in English. If the transcript is in Telugu, Hindi, or any other non-English language, translate the extracted values to English. For example: "ఎంసెట్" → "EAMCET", "రామయ్య యూనివర్సిటీ" → "Ramayya University".
 Only extract information that was explicitly mentioned. Do not invent data.
 If no relevant data found, return empty items array.${languageDirective(outputLanguage)}`
         },

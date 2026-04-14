@@ -22,8 +22,9 @@ api.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     try {
       const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-      const fullUrl = `${config.baseURL || API_BASE_URL}${config.url}`;
-      console.log('[API] Full URL:', fullUrl, 'Token exists:', !!token);
+      if (__DEV__ && config.url?.includes('/auth/')) {
+        console.log('[API] Auth request:', config.url);
+      }
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }

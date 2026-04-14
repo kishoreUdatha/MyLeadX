@@ -123,7 +123,9 @@ class NotificationService {
     try {
       await messaging().getToken();
     } catch (probeError: any) {
-      console.warn('[NotificationService] Firebase not configured — notifications disabled');
+      if (__DEV__) {
+        console.log('[NotificationService] Firebase not configured — notifications disabled (expected in dev)');
+      }
       this.initialized = true;
       return false;
     }

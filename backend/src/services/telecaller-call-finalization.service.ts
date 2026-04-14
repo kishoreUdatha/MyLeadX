@@ -1096,7 +1096,7 @@ Reply with ONLY one of these outcomes:
         messages: [
           {
             role: 'system',
-            content: `Summarize this phone call in 2-3 sentences.
+            content: `Summarize this phone call in 2-3 sentences in English. Even if the transcript is in Telugu, Hindi, or any other language, the summary MUST be in English.
 Focus on:
 - Main topic discussed
 - Customer's response/attitude
@@ -1167,8 +1167,9 @@ Keys you may return (all optional):
 }
 
 Rules:
+- ALL values MUST be in English. If the transcript is in Telugu, Hindi, or any other non-English language, translate the extracted values to English. For example: "ఎంసెట్" → "EAMCET", "రామయ్య యూనివర్సిటీ" → "Ramayya University", "ఇంజనీరింగ్" → "Engineering".
 - Omit any key that was not mentioned. Empty object {} is valid.
-- "collegesInterested" must be an array of strings, each string one college name.
+- "collegesInterested" must be an array of strings, each string one college name (in English).
 - "interestLevel" must be exactly "High", "Medium", or "Low" if you include it.
 - Do not include commentary or any field not in the list above.`,
           },

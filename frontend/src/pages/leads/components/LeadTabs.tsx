@@ -60,37 +60,170 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ lead }: OverviewTabProps) {
+  // Helper to render a field row
+  const Field = ({ label, value }: { label: string; value: string | null | undefined }) => (
+    <div>
+      <label className="block text-sm text-slate-500 mb-1">{label}</label>
+      <p className="text-sm text-slate-900">{value || '--'}</p>
+    </div>
+  );
+
+  // Human-readable English labels for known custom field keys
+  const customFieldLabels: Record<string, string> = {
+    budget: 'Budget',
+    company: 'Company / Institution',
+    timeline: 'Timeline',
+    painPoints: 'Pain Points',
+    feeStructure: 'Fee Structure',
+    requirements: 'Requirements',
+    decisionMaker: 'Decision Maker',
+    interestLevel: 'Interest Level',
+    specialization: 'Specialization',
+    currentSolution: 'Current Solution',
+    courseInterested: 'Course Interested',
+    collegesInterested: 'Colleges Interested',
+    education: 'Education',
+    qualification: 'Qualification',
+    experience: 'Experience',
+    occupation: 'Occupation',
+    industry: 'Industry',
+    referralSource: 'Referral Source',
+    preferredLanguage: 'Preferred Language',
+    notes: 'Notes',
+  };
+
+  // Keys to exclude from custom fields display (duplicates of lead fields or internal meta)
+  const excludedCustomKeys = new Set([
+    'gender', 'dateOfBirth', 'firstName', 'lastName', 'fullName', 'name', 'email',
+    'lastTelecallerCall', 'lastCallSummary', 'callHistory',
+  ]);
+
+  // Format custom field value for display
+  const formatCustomValue = (val: any): string => {
+    if (val === null || val === undefined || val === '') return '--';
+    if (Array.isArray(val)) return val.join(', ');
+    if (typeof val === 'object') return JSON.stringify(val);
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    return String(val);
+  };
+
+  const customFieldEntries = lead.customFields
+    ? Object.entries(lead.customFields).filter(
+        ([key, val]) => {
+          if (excludedCustomKeys.has(key)) return false;
+          if (val === null || val === undefined || val === '') return false;
+          // Include primitives and arrays, skip nested objects (like lastTelecallerCall)
+          if (typeof val === 'object' && !Array.isArray(val)) return false;
+          return true;
+        }
+      )
+    : [];
+
   return (
     <div className="space-y-6">
+      {/* Personal Information */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-primary-600">Personal Information</h3>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div><label className="block text-sm text-slate-500 mb-1">Gender</label><p className="text-sm text-slate-900">{getCustomField(lead.customFields, 'gender')}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Date of Birth</label><p className="text-sm text-slate-900">{formatDate(getCustomField(lead.customFields, 'dateOfBirth'))}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Alternate Email</label><p className="text-sm text-slate-900">{lead.alternateEmail || '--'}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Alternate Phone</label><p className="text-sm text-slate-900">{lead.alternatePhone || '--'}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">City</label><p className="text-sm text-slate-900">{lead.city || '--'}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">State</label><p className="text-sm text-slate-900">{lead.state || '--'}</p></div>
+            <Field label="Gender" value={lead.gender || getCustomField(lead.customFields, 'gender')} />
+            <Field label="Date of Birth" value={formatDate(lead.dateOfBirth || lead.customFields?.dateOfBirth)} />
+            <Field label="Alternate Email" value={lead.alternateEmail} />
+            <Field label="Alternate Phone" value={lead.alternatePhone} />
+            <Field label="Father's Name" value={lead.fatherName} />
+            <Field label="Father's Mobile" value={lead.fatherMobile} />
+            <Field label="Mother's Name" value={lead.motherName} />
+            <Field label="Mother's Mobile" value={lead.motherMobile} />
           </div>
         </div>
       </div>
 
+      {/* Address Information */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-primary-600">Address</h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <Field label="Address" value={lead.address} />
+            <Field label="City" value={lead.city} />
+            <Field label="State" value={lead.state} />
+            <Field label="Country" value={lead.country} />
+            <Field label="Pincode" value={lead.pincode} />
+          </div>
+        </div>
+      </div>
+
+      {/* Education / Course Information */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-primary-600">Course & Assignment</h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <Field label="Course" value={lead.course?.name || lead.courseId} />
+            <Field label="Branch" value={lead.branch?.name || lead.branchId} />
+            <Field label="Center Name" value={lead.centerName} />
+            <Field label="Preferred Location" value={lead.preferredLocation} />
+            <Field label="Agent Name" value={lead.agentName} />
+            <Field label="Faculty Name" value={lead.facultyName} />
+          </div>
+        </div>
+      </div>
+
+      {/* Fee Information */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-primary-600">Fee Details</h3>
+        </div>
+        <div className="p-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <Field label="Total Fees" value={lead.totalFees ? `₹${lead.totalFees}` : null} />
+            <Field label="Paid Amount" value={lead.paidAmount ? `₹${lead.paidAmount}` : null} />
+            <Field label="Payment Status" value={lead.paymentStatus} />
+            <Field label="Installment 1" value={lead.installment1 ? `₹${lead.installment1}` : null} />
+            <Field label="Installment 2" value={lead.installment2 ? `₹${lead.installment2}` : null} />
+            <Field label="Installment 3" value={lead.installment3 ? `₹${lead.installment3}` : null} />
+          </div>
+        </div>
+      </div>
+
+      {/* Dates & Other */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-primary-600">Additional Information</h3>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div><label className="block text-sm text-slate-500 mb-1">Walkin Date</label><p className="text-sm text-slate-900">{formatDate(lead.walkinDate)}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Lineup Date</label><p className="text-sm text-slate-900">{formatDate(lead.lineupDate)}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Preferred Location</label><p className="text-sm text-slate-900">{lead.preferredLocation || '--'}</p></div>
-            <div><label className="block text-sm text-slate-500 mb-1">Total Fees</label><p className="text-sm text-slate-900">{lead.totalFees ? `₹${lead.totalFees}` : '--'}</p></div>
+            <Field label="Walkin Date" value={formatDate(lead.walkinDate)} />
+            <Field label="Lineup Date" value={formatDate(lead.lineupDate)} />
+            <Field label="Source Details" value={lead.sourceDetails} />
+            <Field label="Re-Enquiry" value={lead.isReEnquiry ? 'Yes' : 'No'} />
           </div>
         </div>
       </div>
+
+      {/* Custom Fields (dynamic) */}
+      {customFieldEntries.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-primary-600">Extracted Information</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {customFieldEntries.map(([key, val]) => (
+                <Field
+                  key={key}
+                  label={customFieldLabels[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())}
+                  value={formatCustomValue(val)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
