@@ -8,127 +8,160 @@ import {
   ArrowTrendingDownIcon,
   CalendarIcon,
   FunnelIcon,
+  AcademicCapIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
-interface ReportStats {
-  leads: {
-    total: number;
-    thisMonth: number;
-    lastMonth: number;
-    bySource: { source: string; count: number }[];
-    byStatus: { status: string; count: number }[];
-  };
-  calls: {
-    total: number;
-    thisMonth: number;
-    answered: number;
-    avgDuration: number;
-    byOutcome: { outcome: string; count: number }[];
-  };
-  conversions: {
-    total: number;
-    thisMonth: number;
-    rate: number;
-    bySource: { source: string; count: number; rate: number }[];
-  };
-  performance: {
-    topCounselors: { name: string; conversions: number; calls: number }[];
-    aiAgentStats: { agentName: string; calls: number; interested: number }[];
-  };
+interface AdmissionSummary {
+  totalAdmissions: number;
+  activeAdmissions: number;
+  completedAdmissions: number;
+  droppedAdmissions: number;
+  totalFeeValue: number;
+  collectedAmount: number;
+  pendingAmount: number;
+  collectionRate: string;
+  avgFeePerAdmission: number;
+}
+
+interface AdmissionByStatus {
+  status: string;
+  count: number;
+  percentage: string;
+}
+
+interface AdmissionByCourse {
+  courseName: string;
+  admissions: number;
+  totalFee: number;
+  avgFee: number;
+  percentage: string;
+}
+
+interface CounselorPerformance {
+  userId: string;
+  userName: string;
+  admissions: number;
+  totalFeeGenerated: number;
+  commissionEarned: number;
+  conversionRate: string;
+}
+
+interface AdmissionTrend {
+  period: string;
+  admissions: number;
+  feeCollected: number;
+  cumulative: number;
+}
+
+interface ReportData {
+  summary: AdmissionSummary;
+  byStatus: AdmissionByStatus[];
+  byCourse: AdmissionByCourse[];
+  counselorPerformance: CounselorPerformance[];
+  trends: AdmissionTrend[];
 }
 
 export default function ReportsPage() {
-  const [stats, setStats] = useState<ReportStats | null>(null);
+  const [data, setData] = useState<ReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [dateRange, setDateRange] = useState('thisMonth');
+  const [dateRange, setDateRange] = useState('thisYear');
 
   useEffect(() => {
-    loadStats();
+    loadReports();
   }, [dateRange]);
 
-  const loadStats = async () => {
+  const getDateParams = () => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = now;
+
+    switch (dateRange) {
+      case 'today':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case 'thisWeek':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - now.getDay());
+        break;
+      case 'thisMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'lastMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case 'thisYear':
+      default:
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+    }
+
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+    };
+  };
+
+  const loadReports = async () => {
     try {
       setIsLoading(true);
+      const params = getDateParams();
+      console.log('[ReportsPage] Fetching with params:', params);
 
-      // Fetch multiple endpoints for comprehensive stats
-      const [leadsRes, callsRes] = await Promise.all([
-        api.get('/leads', { params: { limit: 1 } }),
-        api.get('/outbound-calls/stats').catch(() => ({ data: { data: {} } })),
-      ]);
-      // Analytics endpoint for future use
-      void api.get('/advanced/analytics').catch(() => ({ data: { data: {} } }));
+      // Fetch comprehensive admission report
+      const response = await api.get('/admission-reports/comprehensive', { params });
+      console.log('[ReportsPage] API Response:', response.data);
 
-      // Aggregate stats (using available data)
-      const mockStats: ReportStats = {
-        leads: {
-          total: leadsRes.data.data?.total || 0,
-          thisMonth: Math.floor((leadsRes.data.data?.total || 0) * 0.3),
-          lastMonth: Math.floor((leadsRes.data.data?.total || 0) * 0.25),
-          bySource: [
-            { source: 'Facebook Ads', count: 45 },
-            { source: 'Instagram Ads', count: 32 },
-            { source: 'Google Ads', count: 28 },
-            { source: 'Form', count: 20 },
-            { source: 'Manual', count: 15 },
-          ],
-          byStatus: [
-            { status: 'New', count: 35 },
-            { status: 'Contacted', count: 45 },
-            { status: 'Qualified', count: 30 },
-            { status: 'Negotiation', count: 15 },
-            { status: 'Won', count: 10 },
-            { status: 'Lost', count: 5 },
-          ],
-        },
-        calls: {
-          total: callsRes.data.data?.totalCalls || 150,
-          thisMonth: callsRes.data.data?.thisMonthCalls || 45,
-          answered: callsRes.data.data?.answeredCalls || 120,
-          avgDuration: callsRes.data.data?.avgDuration || 180,
-          byOutcome: [
-            { outcome: 'Interested', count: 45 },
-            { outcome: 'Callback', count: 30 },
-            { outcome: 'Not Interested', count: 25 },
-            { outcome: 'No Answer', count: 35 },
-            { outcome: 'Voicemail', count: 15 },
-          ],
-        },
-        conversions: {
-          total: 25,
-          thisMonth: 8,
-          rate: 12.5,
-          bySource: [
-            { source: 'Facebook Ads', rate: 15.2, count: 10 },
-            { source: 'Google Ads', rate: 12.8, count: 8 },
-            { source: 'Form', rate: 18.5, count: 5 },
-            { source: 'Instagram Ads', rate: 8.3, count: 2 },
-          ],
-        },
-        performance: {
-          topCounselors: [
-            { name: 'John Doe', conversions: 12, calls: 45 },
-            { name: 'Jane Smith', conversions: 8, calls: 38 },
-            { name: 'Mike Johnson', conversions: 5, calls: 30 },
-          ],
-          aiAgentStats: [
-            { agentName: 'Sales Bot', calls: 120, interested: 45 },
-            { agentName: 'Support Bot', calls: 80, interested: 28 },
-          ],
-        },
-      };
+      if (response.data?.success && response.data?.data?.report) {
+        console.log('[ReportsPage] Setting data:', response.data.data.report);
+        setData(response.data.data.report);
+      } else {
+        console.log('[ReportsPage] No report data, trying fallback');
+        // Fallback to individual endpoints if comprehensive fails
+        const [summaryRes, statusRes, courseRes, counselorRes, trendsRes] = await Promise.all([
+          api.get('/admission-reports/summary', { params }).catch(() => null),
+          api.get('/admission-reports/by-status', { params }).catch(() => null),
+          api.get('/admission-reports/by-course', { params }).catch(() => null),
+          api.get('/admission-reports/counselor-performance', { params }).catch(() => null),
+          api.get('/admission-reports/trends', { params }).catch(() => null),
+        ]);
 
-      setStats(mockStats);
+        setData({
+          summary: summaryRes?.data?.data?.summary || {
+            totalAdmissions: 0,
+            activeAdmissions: 0,
+            completedAdmissions: 0,
+            droppedAdmissions: 0,
+            totalFeeValue: 0,
+            collectedAmount: 0,
+            pendingAmount: 0,
+            collectionRate: '0',
+            avgFeePerAdmission: 0,
+          },
+          byStatus: statusRes?.data?.data?.byStatus || [],
+          byCourse: courseRes?.data?.data?.byCourse || [],
+          counselorPerformance: counselorRes?.data?.data?.counselorPerformance || [],
+          trends: trendsRes?.data?.data?.trends || [],
+        });
+      }
     } catch (error) {
+      console.error('Failed to load reports:', error);
       toast.error('Failed to load reports');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getChangePercent = (current: number, previous: number) => {
-    if (previous === 0) return 100;
-    return ((current - previous) / previous) * 100;
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
 
   if (isLoading) {
@@ -139,9 +172,9 @@ export default function ReportsPage() {
     );
   }
 
-  if (!stats) return null;
+  if (!data) return null;
 
-  const leadChange = getChangePercent(stats.leads.thisMonth, stats.leads.lastMonth);
+  const { summary, byStatus, byCourse, counselorPerformance, trends } = data;
 
   return (
     <div className="space-y-4">
@@ -149,7 +182,7 @@ export default function ReportsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-slate-900">Reports & Analytics</h1>
-          <p className="text-slate-500 text-xs">Track performance and insights</p>
+          <p className="text-slate-500 text-xs">Track admissions, performance and insights</p>
         </div>
         <select
           value={dateRange}
@@ -169,21 +202,14 @@ export default function ReportsPage() {
         <div className="card p-3">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <p className="text-xs text-slate-500">Total Leads</p>
-              <p className="text-xl font-bold text-slate-900">{stats.leads.total}</p>
-              <div className="flex items-center gap-1 mt-1">
-                {leadChange >= 0 ? (
-                  <ArrowTrendingUpIcon className="w-3 h-3 text-success-500" />
-                ) : (
-                  <ArrowTrendingDownIcon className="w-3 h-3 text-danger-500" />
-                )}
-                <span className={`text-xs font-medium ${leadChange >= 0 ? 'text-success-600' : 'text-danger-600'}`}>
-                  {Math.abs(leadChange).toFixed(1)}%
-                </span>
-              </div>
+              <p className="text-xs text-slate-500">Total Admissions</p>
+              <p className="text-xl font-bold text-slate-900">{summary.totalAdmissions}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {summary.completedAdmissions} enrolled
+              </p>
             </div>
             <div className="p-2 rounded-lg bg-primary-100 flex-shrink-0">
-              <UserGroupIcon className="w-4 h-4 text-primary-600" />
+              <AcademicCapIcon className="w-4 h-4 text-primary-600" />
             </div>
           </div>
         </div>
@@ -191,14 +217,14 @@ export default function ReportsPage() {
         <div className="card p-3">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <p className="text-xs text-slate-500">AI Calls</p>
-              <p className="text-xl font-bold text-slate-900">{stats.calls.total}</p>
+              <p className="text-xs text-slate-500">Total Fee Value</p>
+              <p className="text-xl font-bold text-slate-900">{formatCurrency(summary.totalFeeValue)}</p>
               <p className="text-xs text-slate-500 mt-1">
-                {((stats.calls.answered / stats.calls.total) * 100).toFixed(0)}% answered
+                Avg: {formatCurrency(summary.avgFeePerAdmission)}
               </p>
             </div>
             <div className="p-2 rounded-lg bg-success-100 flex-shrink-0">
-              <PhoneIcon className="w-4 h-4 text-success-600" />
+              <BanknotesIcon className="w-4 h-4 text-success-600" />
             </div>
           </div>
         </div>
@@ -206,215 +232,181 @@ export default function ReportsPage() {
         <div className="card p-3">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <p className="text-xs text-slate-500">Conversions</p>
-              <p className="text-xl font-bold text-slate-900">{stats.conversions.total}</p>
-              <p className="text-xs text-slate-500 mt-1">{stats.conversions.rate.toFixed(1)}% rate</p>
+              <p className="text-xs text-slate-500">Collected</p>
+              <p className="text-xl font-bold text-success-600">{formatCurrency(summary.collectedAmount)}</p>
+              <p className="text-xs text-slate-500 mt-1">{summary.collectionRate}% collected</p>
+            </div>
+            <div className="p-2 rounded-lg bg-green-100 flex-shrink-0">
+              <CheckCircleIcon className="w-4 h-4 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="card p-3">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500">Pending</p>
+              <p className="text-xl font-bold text-warning-600">{formatCurrency(summary.pendingAmount)}</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {summary.activeAdmissions} in progress
+              </p>
             </div>
             <div className="p-2 rounded-lg bg-warning-100 flex-shrink-0">
-              <CurrencyRupeeIcon className="w-4 h-4 text-warning-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-3">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500">Avg Duration</p>
-              <p className="text-xl font-bold text-slate-900">
-                {Math.floor(stats.calls.avgDuration / 60)}:{(stats.calls.avgDuration % 60).toString().padStart(2, '0')}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">minutes</p>
-            </div>
-            <div className="p-2 rounded-lg bg-purple-100 flex-shrink-0">
-              <CalendarIcon className="w-4 h-4 text-purple-600" />
+              <ClockIcon className="w-4 h-4 text-warning-600" />
             </div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* Leads by Source */}
-        <div className="card">
-          <div className="px-3 py-2 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-900">Leads by Source</h3>
-          </div>
-          <div className="p-3">
-            <div className="space-y-2">
-              {stats.leads.bySource.map((item, index) => {
-                const maxCount = Math.max(...stats.leads.bySource.map((s) => s.count));
-                const percentage = (item.count / maxCount) * 100;
-                return (
-                  <div key={index}>
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-xs font-medium text-slate-700">{item.source}</span>
-                      <span className="text-xs text-slate-500">{item.count}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-1.5">
-                      <div
-                        className="bg-primary-500 h-1.5 rounded-full transition-all"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Lead Status Funnel */}
+        {/* Admission Pipeline */}
         <div className="card">
           <div className="px-3 py-2 border-b border-slate-100">
             <h3 className="text-sm font-semibold text-slate-900">
               <FunnelIcon className="w-4 h-4 inline mr-1.5" />
-              Lead Funnel
+              Admission Pipeline
             </h3>
           </div>
           <div className="p-3">
-            <div className="space-y-2">
-              {stats.leads.byStatus.map((item, index) => {
-                const colors = [
-                  'bg-primary-500',
-                  'bg-warning-500',
-                  'bg-success-500',
-                  'bg-purple-500',
-                  'bg-green-600',
-                  'bg-danger-500',
-                ];
-                const maxCount = Math.max(...stats.leads.byStatus.map((s) => s.count));
-                const percentage = (item.count / maxCount) * 100;
-                return (
-                  <div key={index} className="flex items-center gap-2">
-                    <div className="w-20 text-xs text-slate-600">{item.status}</div>
-                    <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
-                      <div
-                        className={`${colors[index % colors.length]} h-5 rounded-full flex items-center justify-end pr-2 transition-all`}
-                        style={{ width: `${percentage}%` }}
-                      >
-                        <span className="text-[10px] text-white font-medium">{item.count}</span>
+            {byStatus.length === 0 ? (
+              <p className="text-center text-slate-500 py-4">No admission data</p>
+            ) : (
+              <div className="space-y-2">
+                {byStatus.map((item, index) => {
+                  const colors = [
+                    'bg-blue-500',
+                    'bg-cyan-500',
+                    'bg-teal-500',
+                    'bg-yellow-500',
+                    'bg-orange-500',
+                    'bg-purple-500',
+                    'bg-pink-500',
+                    'bg-green-600',
+                    'bg-emerald-600',
+                    'bg-red-500',
+                  ];
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="w-28 text-xs text-slate-600 truncate" title={item.status}>
+                        {item.status.replace(/_/g, ' ')}
+                      </div>
+                      <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                        <div
+                          className={`${colors[index % colors.length]} h-5 rounded-full flex items-center justify-end pr-2 transition-all`}
+                          style={{ width: `${Math.max(parseFloat(item.percentage), 5)}%` }}
+                        >
+                          <span className="text-[10px] text-white font-medium">{item.count}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Call Outcomes */}
+        {/* Admissions by Course */}
         <div className="card">
           <div className="px-3 py-2 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-900">AI Call Outcomes</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Admissions by Course</h3>
           </div>
           <div className="p-3">
-            <div className="grid grid-cols-3 gap-2">
-              {stats.calls.byOutcome.map((item, index) => {
-                const colors = [
-                  { bg: 'bg-success-50', text: 'text-success-700' },
-                  { bg: 'bg-warning-50', text: 'text-warning-700' },
-                  { bg: 'bg-danger-50', text: 'text-danger-700' },
-                  { bg: 'bg-slate-50', text: 'text-slate-700' },
-                  { bg: 'bg-purple-50', text: 'text-purple-700' },
-                ];
-                const color = colors[index % colors.length];
-                return (
-                  <div key={index} className={`${color.bg} rounded-lg p-2 text-center`}>
-                    <p className={`text-lg font-bold ${color.text}`}>{item.count}</p>
-                    <p className="text-[10px] text-slate-600">{item.outcome}</p>
-                  </div>
-                );
-              })}
-            </div>
+            {byCourse.length === 0 ? (
+              <p className="text-center text-slate-500 py-4">No course data</p>
+            ) : (
+              <div className="space-y-2">
+                {byCourse.slice(0, 6).map((item, index) => {
+                  const maxCount = Math.max(...byCourse.map((c) => c.admissions));
+                  const percentage = maxCount > 0 ? (item.admissions / maxCount) * 100 : 0;
+                  return (
+                    <div key={index}>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-xs font-medium text-slate-700 truncate max-w-[60%]">
+                          {item.courseName}
+                        </span>
+                        <span className="text-xs text-slate-500">{item.admissions} ({item.percentage}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5">
+                        <div
+                          className="bg-primary-500 h-1.5 rounded-full transition-all"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Conversion by Source */}
-        <div className="card">
-          <div className="px-3 py-2 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-900">Conversion by Source</h3>
-          </div>
-          <div className="p-3">
-            <div className="space-y-2">
-              {stats.conversions.bySource.map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                  <div>
-                    <p className="text-xs font-medium text-slate-900">{item.source}</p>
-                    <p className="text-[10px] text-slate-500">{item.count} conversions</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-success-600">{item.rate.toFixed(1)}%</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Top Performers */}
+        {/* Counselor Performance */}
         <div className="card">
           <div className="px-3 py-2 border-b border-slate-100">
             <h3 className="text-sm font-semibold text-slate-900">Top Counselors</h3>
           </div>
           <div className="p-3">
-            <div className="space-y-2">
-              {stats.performance.topCounselors.map((counselor, index) => (
-                <div key={index} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                  <div className="w-6 h-6 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {index + 1}
+            {counselorPerformance.length === 0 ? (
+              <p className="text-center text-slate-500 py-4">No counselor data</p>
+            ) : (
+              <div className="space-y-2">
+                {counselorPerformance.slice(0, 5).map((counselor, index) => (
+                  <div key={index} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <div className="w-6 h-6 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      {index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-900 truncate">{counselor.userName}</p>
+                      <p className="text-[10px] text-slate-500">
+                        {formatCurrency(counselor.totalFeeGenerated)} | {counselor.conversionRate}% conv.
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-success-600">{counselor.admissions}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-slate-900 truncate">{counselor.name}</p>
-                    <p className="text-[10px] text-slate-500">{counselor.calls} calls</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-success-600">{counselor.conversions}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* AI Agent Performance */}
+        {/* Admission Trends */}
         <div className="card">
           <div className="px-3 py-2 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-900">AI Agent Performance</h3>
+            <h3 className="text-sm font-semibold text-slate-900">
+              <CalendarIcon className="w-4 h-4 inline mr-1.5" />
+              Monthly Trends
+            </h3>
           </div>
           <div className="p-3">
-            <div className="space-y-2">
-              {stats.performance.aiAgentStats.map((agent, index) => (
-                <div key={index} className="p-2 border border-slate-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-slate-900">{agent.agentName}</p>
-                    <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 text-[10px] font-medium rounded">
-                      Active
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div className="text-center bg-slate-50 rounded p-1.5">
-                      <p className="text-sm font-bold text-slate-900">{agent.calls}</p>
-                      <p className="text-[10px] text-slate-500">Calls</p>
+            {trends.length === 0 ? (
+              <p className="text-center text-slate-500 py-4">No trend data</p>
+            ) : (
+              <div className="space-y-2">
+                {trends.slice(-6).map((trend, index) => {
+                  const maxAdmissions = Math.max(...trends.map((t) => t.admissions));
+                  const percentage = maxAdmissions > 0 ? (trend.admissions / maxAdmissions) * 100 : 0;
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="w-16 text-xs text-slate-600">{trend.period}</div>
+                      <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                        <div
+                          className="bg-primary-500 h-5 rounded-full flex items-center justify-end pr-2 transition-all"
+                          style={{ width: `${Math.max(percentage, 10)}%` }}
+                        >
+                          <span className="text-[10px] text-white font-medium">{trend.admissions}</span>
+                        </div>
+                      </div>
+                      <div className="w-20 text-right text-xs text-slate-500">
+                        {formatCurrency(trend.feeCollected)}
+                      </div>
                     </div>
-                    <div className="text-center bg-success-50 rounded p-1.5">
-                      <p className="text-sm font-bold text-success-600">{agent.interested}</p>
-                      <p className="text-[10px] text-slate-500">Interested</p>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-[10px] mb-0.5">
-                      <span className="text-slate-500">Success</span>
-                      <span className="font-medium">{((agent.interested / agent.calls) * 100).toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-1">
-                      <div
-                        className="bg-success-500 h-1 rounded-full"
-                        style={{ width: `${(agent.interested / agent.calls) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>

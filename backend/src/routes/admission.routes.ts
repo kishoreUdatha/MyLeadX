@@ -80,6 +80,7 @@ router.get(
   query('commissionStatus').optional().isIn(['PENDING', 'RECEIVED']),
   query('academicYear').optional().trim(),
   query('closedById').optional().isUUID(),
+  query('branchId').optional().isUUID(),
   query('fromDate').optional().isISO8601(),
   query('toDate').optional().isISO8601(),
   query('search').optional().trim(),

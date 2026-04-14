@@ -37,6 +37,10 @@ export class UserController {
         roleSlug: req.query.role as string | undefined,
         isActive: req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined,
         search: req.query.search as string | undefined,
+        // Pass current user info for role-based filtering
+        currentUserId: req.user!.id,
+        currentUserRole: req.user!.role || req.user!.roleSlug,
+        currentUserBranchId: req.user!.branchId,
       };
 
       const { users, total } = await userService.findAll(filter, page, limit);
@@ -69,7 +73,10 @@ export class UserController {
 
   async getCounselors(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const counselors = await userService.getCounselors(req.organizationId!);
+      const userRole = req.user!.role || req.user!.roleSlug;
+      const userId = req.user!.id;
+
+      const counselors = await userService.getCounselors(req.organizationId!, userRole, userId);
 
       ApiResponse.success(res, 'Counselors retrieved successfully', counselors);
     } catch (error) {
@@ -79,7 +86,10 @@ export class UserController {
 
   async getTelecallers(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const telecallers = await userService.getTelecallers(req.organizationId!);
+      const userRole = req.user!.role || req.user!.roleSlug;
+      const userId = req.user!.id;
+
+      const telecallers = await userService.getTelecallers(req.organizationId!, userRole, userId);
 
       ApiResponse.success(res, 'Telecallers retrieved successfully', telecallers);
     } catch (error) {

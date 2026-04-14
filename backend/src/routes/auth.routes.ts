@@ -4,6 +4,7 @@ import { authController } from '../controllers/auth.controller';
 import { validate } from '../middlewares/validate';
 import { authenticate } from '../middlewares/auth';
 import { rateLimiters } from '../services/rate-limit.service';
+import { subdomainTenant } from '../middlewares/subdomain';
 
 const router = Router();
 
@@ -53,9 +54,8 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
-const refreshTokenValidation = [
-  body('refreshToken').notEmpty().withMessage('Refresh token is required'),
-];
+// refreshToken validation removed - tokens are now in httpOnly cookies
+// The controller handles both cookie and body (for backward compatibility)
 
 const forgotPasswordValidation = [
   body('email').trim().isEmail().withMessage('Valid email is required').normalizeEmail(),
@@ -81,8 +81,8 @@ const changePasswordValidation = [
 
 // Routes
 router.post('/register', rateLimiters.authRegister, validate(registerValidation), authController.register.bind(authController));
-router.post('/login', validate(loginValidation), authController.login.bind(authController));
-router.post('/refresh-token', validate(refreshTokenValidation), authController.refreshToken.bind(authController));
+router.post('/login', subdomainTenant, validate(loginValidation), authController.login.bind(authController));
+router.post('/refresh-token', authController.refreshToken.bind(authController));
 router.post('/logout', authenticate, authController.logout.bind(authController));
 router.post('/forgot-password', rateLimiters.authPasswordReset, validate(forgotPasswordValidation), authController.forgotPassword.bind(authController));
 router.post('/reset-password', rateLimiters.authPasswordReset, validate(resetPasswordValidation), authController.resetPassword.bind(authController));

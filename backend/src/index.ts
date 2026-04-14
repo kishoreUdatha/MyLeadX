@@ -17,6 +17,7 @@ import testCallRoutes from './routes/test-call.routes';
 import voicebotRoutes, { initializeVoiceBotWebSocket } from './routes/voicebot.routes';
 import { initializeScheduledJobs } from './services/job-initializer.service';
 import { csrfTokenSetter, csrfProtection, csrfTokenEndpoint } from './middlewares/csrf';
+import { maintenanceMiddleware } from './middlewares/maintenance.middleware';
 import fs from 'fs';
 import path from 'path';
 
@@ -105,10 +106,28 @@ app.use((req, res, next) => {
   next();
 });
 
+// CORS configuration - allow all origins in development for team testing
 app.use(
   cors({
-    origin: config.corsOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, etc)
+      if (!origin) return callback(null, true);
+      // In development, allow all origins
+      if (process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      // In production, check against allowed origins
+      const allowedOrigins = Array.isArray(config.corsOrigins)
+        ? config.corsOrigins
+        : [config.corsOrigins];
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-csrf-token', 'X-CSRF-Token'],
   })
 );
 
@@ -164,6 +183,9 @@ app.use('/api', apiLimiter);
 
 // Audit logging
 app.use('/api', auditMiddleware);
+
+// Maintenance mode check (blocks non-super-admin requests when in maintenance)
+app.use('/api', maintenanceMiddleware);
 
 // Swagger documentation
 setupSwagger(app);
@@ -284,8 +306,8 @@ async function startServer() {
     // Initialize Voice Bot WebSocket for Exotel streaming
     initializeVoiceBotWebSocket(httpServer);
 
-    httpServer.listen(config.port, async () => {
-      console.log(`Server running on port ${config.port}`);
+    httpServer.listen(config.port, '0.0.0.0', async () => {
+      console.log(`Server running on port ${config.port} (network: 0.0.0.0)`);
       console.log(`WebSocket enabled`);
       console.log(`Voice Bot WebSocket: wss://${config.baseUrl?.replace('https://', '').replace('http://', '')}/voice-stream`);
       console.log(`Environment: ${config.env}`);

@@ -13,31 +13,31 @@ router.use(tenantMiddleware);
 // Validation schemas
 const createUniversityValidation = [
   body('name').trim().notEmpty().withMessage('University name is required'),
-  body('shortName').optional().trim(),
-  body('type').optional().trim(),
-  body('city').optional().trim(),
-  body('state').optional().trim(),
-  body('website').optional().trim().isURL().withMessage('Invalid website URL'),
-  body('contactPerson').optional().trim(),
-  body('contactPhone').optional().trim(),
-  body('contactEmail').optional().isEmail().withMessage('Invalid email'),
-  body('defaultCommissionPercent').optional().isFloat({ min: 0, max: 100 }),
-  body('donationCommissionPercent').optional().isFloat({ min: 0, max: 100 }),
+  body('shortName').optional({ values: 'falsy' }).trim(),
+  body('type').optional({ values: 'falsy' }).trim(),
+  body('city').optional({ values: 'falsy' }).trim(),
+  body('state').optional({ values: 'falsy' }).trim(),
+  body('website').optional({ values: 'falsy' }).trim().isURL().withMessage('Invalid website URL'),
+  body('contactPerson').optional({ values: 'falsy' }).trim(),
+  body('contactPhone').optional({ values: 'falsy' }).trim(),
+  body('contactEmail').optional({ values: 'falsy' }).isEmail().withMessage('Invalid email'),
+  body('defaultCommissionPercent').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }),
+  body('donationCommissionPercent').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }),
 ];
 
 const updateUniversityValidation = [
   param('id').isUUID(),
-  body('name').optional().trim().notEmpty().withMessage('University name cannot be empty'),
-  body('shortName').optional().trim(),
-  body('type').optional().trim(),
-  body('city').optional().trim(),
-  body('state').optional().trim(),
-  body('website').optional().trim().isURL().withMessage('Invalid website URL'),
-  body('contactPerson').optional().trim(),
-  body('contactPhone').optional().trim(),
-  body('contactEmail').optional().isEmail().withMessage('Invalid email'),
-  body('defaultCommissionPercent').optional().isFloat({ min: 0, max: 100 }),
-  body('donationCommissionPercent').optional().isFloat({ min: 0, max: 100 }),
+  body('name').optional({ values: 'falsy' }).trim().notEmpty().withMessage('University name cannot be empty'),
+  body('shortName').optional({ values: 'falsy' }).trim(),
+  body('type').optional({ values: 'falsy' }).trim(),
+  body('city').optional({ values: 'falsy' }).trim(),
+  body('state').optional({ values: 'falsy' }).trim(),
+  body('website').optional({ values: 'falsy' }).trim().isURL().withMessage('Invalid website URL'),
+  body('contactPerson').optional({ values: 'falsy' }).trim(),
+  body('contactPhone').optional({ values: 'falsy' }).trim(),
+  body('contactEmail').optional({ values: 'falsy' }).isEmail().withMessage('Invalid email'),
+  body('defaultCommissionPercent').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }),
+  body('donationCommissionPercent').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }),
   body('isActive').optional().isBoolean(),
 ];
 
@@ -65,12 +65,6 @@ router.post(
 // List all universities
 router.get(
   '/',
-  query('page').optional().isInt({ min: 1 }),
-  query('limit').optional().isInt({ min: 1, max: 100 }),
-  query('search').optional().trim(),
-  query('type').optional().trim(),
-  query('state').optional().trim(),
-  query('isActive').optional().isIn(['true', 'false']),
   universityController.findAll.bind(universityController)
 );
 

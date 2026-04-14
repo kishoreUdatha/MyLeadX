@@ -21,6 +21,7 @@ export interface Lead {
   email?: string;
   phone: string;
   alternatePhone?: string;
+  whatsapp?: string;
   source: string;
   sourceDetails?: string;
   status: string;
@@ -31,11 +32,23 @@ export interface Lead {
   convertedAt?: string;
   createdAt: string;
   updatedAt: string;
+  stageId?: string;
   stage?: {
     id: string;
     name: string;
     color?: string;
   };
+  // Unified Pipeline System
+  pipelineStageId?: string;
+  pipelineStage?: {
+    id: string;
+    name: string;
+    color?: string;
+    stageType?: string;
+    order?: number;
+  };
+  pipelineEnteredAt?: string;
+  pipelineDaysInStage?: number;
   channel?: {
     id: string;
     name: string;
@@ -49,6 +62,34 @@ export interface Lead {
       email: string;
     };
   }>;
+  tagAssignments?: Array<{
+    tag: {
+      id: string;
+      name: string;
+      color: string;
+      slug?: string;
+    };
+  }>;
+  // Common fields (proper columns)
+  fatherName?: string;
+  fatherPhone?: string;
+  motherName?: string;
+  motherPhone?: string;
+  occupation?: string;
+  budget?: number;
+  preferredContactMethod?: string;
+  preferredContactTime?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  // B2B fields
+  companyName?: string;
+  jobTitle?: string;
+  industryType?: string;
   // Education Admission Management fields
   admissionStatus?: AdmissionStatus;
   admissionType?: AdmissionType;
@@ -62,21 +103,14 @@ export interface Lead {
   enrollmentNumber?: string;
   academicYear?: string;
   preferredUniversities?: string[];
-  fatherName?: string;
+  // Legacy aliases (for backward compatibility)
   fatherMobile?: string;
-  motherName?: string;
   motherMobile?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  pincode?: string;
-  dateOfBirth?: string;
-  gender?: string;
 }
 
 export interface LeadFilter {
   status?: string;
+  pipelineStageId?: string; // Unified Pipeline Stage filter
   source?: string;
   priority?: string;
   assignedToId?: string;
@@ -84,6 +118,8 @@ export interface LeadFilter {
   dateFrom?: string;
   dateTo?: string;
   isConverted?: string;
+  tag?: string;
+  customFields?: string; // JSON string of custom field filters
   page?: number;
   limit?: number;
 }

@@ -1,29 +1,25 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-async function getRoles() {
-  try {
-    // Check roles table
-    const roles = await prisma.role.findMany({
-      select: { id: true, name: true, description: true, organizationId: true }
-    });
-    console.log('=== Roles in database ===');
-    console.log('Total:', roles.length);
-    roles.forEach(r => console.log('  -', r.name, ':', r.description || 'No description'));
+async function check() {
+  const roles = await prisma.role.findMany({
+    select: { id: true, name: true, slug: true }
+  });
+  console.log('All roles:');
+  roles.forEach(r => console.log('  -', r.name, '| slug:', r.slug));
 
-    // Check user role enum distribution
-    const userRoles = await prisma.user.groupBy({
-      by: ['role'],
-      _count: { role: true }
-    });
-    console.log('\n=== User role distribution ===');
-    userRoles.forEach(r => console.log('  -', r.role, ':', r._count.role, 'users'));
+  const users = await prisma.user.findMany({
+    where: { organizationId: '8bd8d25d-827b-416d-81a6-3010a66204e6' },
+    select: {
+      firstName: true,
+      lastName: true,
+      isActive: true,
+      role: { select: { name: true, slug: true } }
+    }
+  });
+  console.log('\nUsers in org:');
+  users.forEach(u => console.log('  -', u.firstName, u.lastName, '| role:', u.role?.name, '| slug:', u.role?.slug, '| active:', u.isActive));
 
-  } catch (e) {
-    console.error('Error:', e.message);
-  } finally {
-    await prisma.$disconnect();
-  }
+  await prisma.$disconnect();
 }
-
-getRoles();
+check().catch(console.error);

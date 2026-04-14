@@ -2,7 +2,10 @@
  * Lead Detail Modals - Extracted modal components
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
+import { LeadPayment, LeadDocument } from '../../../services/leadDetails.service';
+import { CustomFieldsRenderer } from '../../../components/CustomFieldsRenderer';
 
 interface ModalWrapperProps {
   isOpen: boolean;
@@ -353,41 +356,129 @@ interface WhatsAppModalProps {
   phone: string;
 }
 
-export function WhatsAppModal({ isOpen, onClose, onSubmit, phone }: WhatsAppModalProps) {
-  const [form, setForm] = useState({ message: '', mediaUrl: '' });
+// WhatsApp Icon Component
+const WhatsAppIconLarge = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+  </svg>
+);
 
-  const handleSubmit = () => {
-    onSubmit(form);
-    setForm({ message: '', mediaUrl: '' });
+export function WhatsAppModal({ isOpen, onClose, onSubmit, phone }: WhatsAppModalProps) {
+  const [message, setMessage] = useState('');
+
+  // Format phone number for WhatsApp (remove spaces, dashes, and ensure country code)
+  const formatPhoneForWhatsApp = (phoneNumber: string): string => {
+    // Remove all non-numeric characters except +
+    let cleaned = phoneNumber.replace(/[^\d+]/g, '');
+    // If starts with 0, assume Indian number and add 91
+    if (cleaned.startsWith('0')) {
+      cleaned = '91' + cleaned.substring(1);
+    }
+    // If doesn't start with +, assume it needs country code
+    if (!cleaned.startsWith('+') && !cleaned.startsWith('91') && cleaned.length === 10) {
+      cleaned = '91' + cleaned;
+    }
+    // Remove + if present (WhatsApp URL doesn't need it)
+    cleaned = cleaned.replace('+', '');
+    return cleaned;
+  };
+
+  const handleSendWhatsApp = () => {
+    const formattedPhone = formatPhoneForWhatsApp(phone);
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+
+    // Open WhatsApp in new tab
+    window.open(whatsappUrl, '_blank');
+
+    // Also call the onSubmit to log the activity
+    onSubmit({ message, mediaUrl: '' });
+
+    // Reset and close
+    setMessage('');
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <ModalWrapper isOpen={isOpen} onClose={onClose} title="Send WhatsApp Message">
-      <div className="space-y-4">
-        <div className="p-3 bg-slate-50 rounded-lg">
-          <p className="text-sm text-slate-600">To: {phone}</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl">
+        {/* WhatsApp-style header */}
+        <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
+          <WhatsAppIconLarge className="h-6 w-6 text-white" />
+          <div>
+            <h3 className="text-white font-semibold">Send WhatsApp Message</h3>
+            <p className="text-green-100 text-xs">Opens WhatsApp to send message</p>
+          </div>
         </div>
-        <textarea
-          placeholder="Type your message..."
-          value={form.message}
-          onChange={(e) => setForm({ ...form, message: e.target.value })}
-          className="w-full px-4 py-2 border border-slate-200 rounded-lg"
-          rows={4}
-        />
-        <input
-          type="url"
-          placeholder="Media URL (optional)"
-          value={form.mediaUrl}
-          onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
-          className="w-full px-4 py-2 border border-slate-200 rounded-lg"
-        />
+
+        <div className="p-4 space-y-4">
+          {/* Recipient */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center">
+              <WhatsAppIconLarge className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">To</p>
+              <p className="font-medium text-slate-800">{phone}</p>
+            </div>
+          </div>
+
+          {/* Message input - WhatsApp style */}
+          <div className="relative">
+            <textarea
+              placeholder="Type a message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#25D366] focus:border-transparent resize-none"
+              rows={4}
+            />
+          </div>
+
+          {/* Quick message templates */}
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Quick Templates</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                'Hi, following up on our conversation.',
+                'Hello! I wanted to check in with you.',
+                'Hi, do you have time for a quick call?',
+              ].map((template, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setMessage(template)}
+                  className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+                >
+                  {template.length > 30 ? template.slice(0, 30) + '...' : template}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 bg-slate-50 flex justify-end gap-3">
+          <button
+            onClick={() => {
+              setMessage('');
+              onClose();
+            }}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSendWhatsApp}
+            disabled={!message.trim()}
+            className="px-4 py-2 text-sm bg-[#25D366] hover:bg-[#128C7E] text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <WhatsAppIconLarge className="h-4 w-4" />
+            Open WhatsApp
+          </button>
+        </div>
       </div>
-      <div className="flex justify-end gap-3 mt-6">
-        <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleSubmit} disabled={!form.message.trim()} className="btn btn-primary">Send WhatsApp</button>
-      </div>
-    </ModalWrapper>
+    </div>
   );
 }
 
@@ -401,32 +492,277 @@ interface SmsModalProps {
 export function SmsModal({ isOpen, onClose, onSubmit, phone }: SmsModalProps) {
   const [message, setMessage] = useState('');
 
-  const handleSubmit = () => {
+  const handleSendSms = () => {
+    // Create SMS URL - works on mobile and some desktop apps
+    const smsUrl = `sms:${phone}?body=${encodeURIComponent(message)}`;
+
+    // Open SMS app
+    window.location.href = smsUrl;
+
+    // Also call the onSubmit to log the activity
     onSubmit(message);
+
+    // Reset and close
     setMessage('');
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <ModalWrapper isOpen={isOpen} onClose={onClose} title="Send SMS">
-      <div className="space-y-4">
-        <div className="p-3 bg-slate-50 rounded-lg">
-          <p className="text-sm text-slate-600">To: {phone}</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-xl">
+        {/* SMS-style header */}
+        <div className="bg-amber-500 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+            <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">Send SMS</h3>
+            <p className="text-amber-100 text-xs">Opens messaging app</p>
+          </div>
         </div>
-        <textarea
-          placeholder="Type your message..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          className="w-full px-4 py-2 border border-slate-200 rounded-lg"
-          rows={4}
-        />
-        <p className="text-xs text-slate-400">Character count: {message.length}/160</p>
+
+        <div className="p-4 space-y-4">
+          {/* Recipient */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+              <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">To</p>
+              <p className="font-medium text-slate-800">{phone}</p>
+            </div>
+          </div>
+
+          {/* Message input */}
+          <div className="relative">
+            <textarea
+              placeholder="Type your message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none"
+              rows={4}
+              maxLength={160}
+            />
+            <div className="absolute bottom-2 right-3">
+              <span className={`text-xs ${message.length > 140 ? 'text-amber-600' : 'text-slate-400'}`}>
+                {message.length}/160
+              </span>
+            </div>
+          </div>
+
+          {/* Quick message templates */}
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Quick Templates</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                'Please call me back.',
+                'Are you available for a quick call?',
+                'Thank you for your inquiry!',
+              ].map((template, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setMessage(template)}
+                  className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+                >
+                  {template}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 bg-slate-50 flex justify-end gap-3">
+          <button
+            onClick={() => {
+              setMessage('');
+              onClose();
+            }}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSendSms}
+            disabled={!message.trim()}
+            className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+            Send SMS
+          </button>
+        </div>
       </div>
-      <div className="flex justify-end gap-3 mt-6">
-        <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleSubmit} disabled={!message.trim()} className="btn btn-primary">Send SMS</button>
+    </div>
+  );
+}
+
+// ==================== EMAIL MODAL ====================
+
+interface EmailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: { subject: string; body: string }) => void;
+  email: string;
+  leadName?: string;
+}
+
+export function EmailModal({ isOpen, onClose, onSubmit, email, leadName }: EmailModalProps) {
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleSendEmail = async () => {
+    setSending(true);
+    try {
+      // Call the onSubmit to send via backend API
+      await onSubmit({ subject, body });
+      toast.success('Email sent successfully');
+      setSubject('');
+      setBody('');
+      onClose();
+    } catch (error) {
+      toast.error('Failed to send email');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleOpenInClient = () => {
+    // Open in default email client with pre-filled content
+    const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailtoUrl;
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-lg overflow-hidden shadow-xl">
+        {/* Email-style header */}
+        <div className="bg-purple-600 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+            <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">Compose Email</h3>
+            <p className="text-purple-100 text-xs">Send email to lead</p>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Recipient */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+              <svg className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-slate-500">To</p>
+              <p className="font-medium text-slate-800 truncate">{leadName && <span className="text-slate-600">{leadName} &lt;</span>}{email}{leadName && <span className="text-slate-600">&gt;</span>}</p>
+            </div>
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Subject</label>
+            <input
+              type="text"
+              placeholder="Enter email subject..."
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Body */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Message</label>
+            <textarea
+              placeholder="Type your message..."
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+              rows={6}
+            />
+          </div>
+
+          {/* Quick templates */}
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Quick Templates</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { subject: 'Following up on our conversation', body: 'Hi,\n\nI wanted to follow up on our recent conversation. Please let me know if you have any questions.\n\nBest regards' },
+                { subject: 'Thank you for your inquiry', body: 'Hi,\n\nThank you for reaching out to us. We appreciate your interest.\n\nBest regards' },
+                { subject: 'Meeting request', body: 'Hi,\n\nI would like to schedule a meeting to discuss further. Please let me know your availability.\n\nBest regards' },
+              ].map((template, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setSubject(template.subject);
+                    setBody(template.body);
+                  }}
+                  className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+                >
+                  {template.subject.length > 25 ? template.subject.slice(0, 25) + '...' : template.subject}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 bg-slate-50 flex justify-between">
+          <button
+            onClick={handleOpenInClient}
+            disabled={!subject.trim() || !body.trim()}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Open in Email App
+          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setSubject('');
+                setBody('');
+                onClose();
+              }}
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSendEmail}
+              disabled={!subject.trim() || !body.trim() || sending}
+              className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {sending ? (
+                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              )}
+              Send Email
+            </button>
+          </div>
+        </div>
       </div>
-    </ModalWrapper>
+    </div>
   );
 }
 
@@ -448,6 +784,25 @@ interface EditLeadModalProps {
     designation?: string;
     source?: string;
     priority?: string;
+    gender?: string;
+    dateOfBirth?: string;
+    alternateEmail?: string;
+    alternatePhone?: string;
+    walkinDate?: string;
+    lineupDate?: string;
+    preferredLocation?: string;
+    totalFees?: number | string;
+    // New direct columns
+    fatherName?: string;
+    fatherPhone?: string;
+    motherName?: string;
+    motherPhone?: string;
+    whatsapp?: string;
+    occupation?: string;
+    budget?: number | string;
+    preferredContactMethod?: string;
+    preferredContactTime?: string;
+    customFields?: Record<string, any>;
   } | null;
 }
 
@@ -465,9 +820,39 @@ export interface EditLeadFormData {
   designation: string;
   source: string;
   priority: string;
+  // Personal Information
+  gender: string;
+  dateOfBirth: string;
+  alternateEmail: string;
+  alternatePhone: string;
+  // Family & Contact Details (direct columns)
+  fatherName: string;
+  fatherPhone: string;
+  motherName: string;
+  motherPhone: string;
+  whatsapp: string;
+  occupation: string;
+  budget: string;
+  preferredContactMethod: string;
+  preferredContactTime: string;
+  // Additional Information
+  walkinDate: string;
+  lineupDate: string;
+  preferredLocation: string;
+  totalFees: string;
+  // Custom Fields (dynamic)
+  customFields: Record<string, any>;
 }
 
+// Email validation helper
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModalProps) {
+  const [emailError, setEmailError] = useState('');
+  const [alternateEmailError, setAlternateEmailError] = useState('');
   const [form, setForm] = useState<EditLeadFormData>({
     firstName: '',
     lastName: '',
@@ -482,11 +867,55 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
     designation: '',
     source: '',
     priority: '',
+    gender: '',
+    dateOfBirth: '',
+    alternateEmail: '',
+    alternatePhone: '',
+    // Family & Contact Details
+    fatherName: '',
+    fatherPhone: '',
+    motherName: '',
+    motherPhone: '',
+    whatsapp: '',
+    occupation: '',
+    budget: '',
+    preferredContactMethod: '',
+    preferredContactTime: '',
+    // Additional
+    walkinDate: '',
+    lineupDate: '',
+    preferredLocation: '',
+    totalFees: '',
+    customFields: {},
   });
 
   // Reset form when modal opens with lead data
   useEffect(() => {
     if (isOpen && lead) {
+      // Reset email errors
+      setEmailError('');
+      setAlternateEmailError('');
+
+      // Helper to get custom field value
+      const getCustomFieldValue = (key: string) => {
+        if (lead.customFields && lead.customFields[key]) {
+          return String(lead.customFields[key]);
+        }
+        return '';
+      };
+
+      // Format date for input field (YYYY-MM-DD)
+      const formatDateForInput = (date: string | undefined) => {
+        if (!date) return '';
+        try {
+          const d = new Date(date);
+          if (isNaN(d.getTime())) return '';
+          return d.toISOString().split('T')[0];
+        } catch {
+          return '';
+        }
+      };
+
       setForm({
         firstName: lead.firstName || '',
         lastName: lead.lastName || '',
@@ -501,17 +930,75 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
         designation: lead.designation || '',
         source: lead.source || '',
         priority: lead.priority || '',
+        gender: lead.gender || getCustomFieldValue('gender'),
+        dateOfBirth: formatDateForInput(lead.dateOfBirth) || formatDateForInput(getCustomFieldValue('dateOfBirth')),
+        alternateEmail: lead.alternateEmail || '',
+        alternatePhone: lead.alternatePhone || '',
+        // Family & Contact Details - read from direct columns first, fallback to customFields
+        fatherName: lead.fatherName || getCustomFieldValue('fatherName') || getCustomFieldValue('father_name') || '',
+        fatherPhone: lead.fatherPhone || getCustomFieldValue('fatherPhone') || getCustomFieldValue('father_phone') || '',
+        motherName: lead.motherName || getCustomFieldValue('motherName') || getCustomFieldValue('mother_name') || '',
+        motherPhone: lead.motherPhone || getCustomFieldValue('motherPhone') || getCustomFieldValue('mother_phone') || '',
+        whatsapp: lead.whatsapp || getCustomFieldValue('whatsapp') || '',
+        occupation: lead.occupation || getCustomFieldValue('occupation') || '',
+        budget: lead.budget ? String(lead.budget) : getCustomFieldValue('budget') || '',
+        preferredContactMethod: lead.preferredContactMethod || getCustomFieldValue('preferredContactMethod') || getCustomFieldValue('preferred_contact_method') || '',
+        preferredContactTime: lead.preferredContactTime || getCustomFieldValue('preferredContactTime') || getCustomFieldValue('preferred_contact_time') || '',
+        // Additional
+        walkinDate: formatDateForInput(lead.walkinDate),
+        lineupDate: formatDateForInput(lead.lineupDate),
+        preferredLocation: lead.preferredLocation || '',
+        totalFees: lead.totalFees ? String(lead.totalFees) : '',
+        customFields: lead.customFields || {},
       });
     }
   }, [isOpen, lead]);
 
+  // Handle custom field change
+  const handleCustomFieldChange = (fieldSlug: string, value: any) => {
+    setForm(prev => ({
+      ...prev,
+      customFields: {
+        ...prev.customFields,
+        [fieldSlug]: value,
+      },
+    }));
+  };
+
   const handleSubmit = () => {
+    // Validate email before submit
+    if (form.email && form.email.trim() && !isValidEmail(form.email.trim())) {
+      setEmailError('Please enter a valid email address');
+      toast.error('Please enter a valid email address');
+      return;
+    }
+    if (form.alternateEmail && form.alternateEmail.trim() && !isValidEmail(form.alternateEmail.trim())) {
+      setAlternateEmailError('Please enter a valid alternate email address');
+      toast.error('Please enter a valid alternate email address');
+      return;
+    }
     onSubmit(form);
     onClose();
   };
 
   const handleChange = (field: keyof EditLeadFormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
+
+    // Real-time email validation
+    if (field === 'email') {
+      if (value.trim() && !isValidEmail(value.trim())) {
+        setEmailError('Please enter a valid email address');
+      } else {
+        setEmailError('');
+      }
+    }
+    if (field === 'alternateEmail') {
+      if (value.trim() && !isValidEmail(value.trim())) {
+        setAlternateEmailError('Please enter a valid alternate email address');
+      } else {
+        setAlternateEmailError('');
+      }
+    }
   };
 
   if (!isOpen) return null;
@@ -566,8 +1053,64 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
               type="email"
               value={form.email}
               onChange={(e) => handleChange('email', e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${
+                emailError
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'border-slate-200 focus:ring-primary-500 focus:border-transparent'
+              }`}
               placeholder="email@example.com"
+            />
+            {emailError && <p className="mt-1 text-xs text-red-500">{emailError}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Gender</label>
+            <select
+              value={form.gender}
+              onChange={(e) => handleChange('gender', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Date of Birth</label>
+            <input
+              type="date"
+              value={form.dateOfBirth}
+              onChange={(e) => handleChange('dateOfBirth', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Alternate Email</label>
+            <input
+              type="email"
+              value={form.alternateEmail}
+              onChange={(e) => handleChange('alternateEmail', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${
+                alternateEmailError
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'border-slate-200 focus:ring-primary-500 focus:border-transparent'
+              }`}
+              placeholder="alternate@example.com"
+            />
+            {alternateEmailError && <p className="mt-1 text-xs text-red-500">{alternateEmailError}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Alternate Phone</label>
+            <input
+              type="tel"
+              value={form.alternatePhone}
+              onChange={(e) => handleChange('alternatePhone', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
             />
           </div>
 
@@ -658,6 +1201,118 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
             />
           </div>
 
+          {/* Family & Contact Details */}
+          <div className="col-span-2 mt-2">
+            <p className="text-sm font-medium text-slate-700 mb-2">Family & Contact Details</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Father's Name</label>
+            <input
+              type="text"
+              value={form.fatherName}
+              onChange={(e) => handleChange('fatherName', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Father's Name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Father's Phone</label>
+            <input
+              type="tel"
+              value={form.fatherPhone}
+              onChange={(e) => handleChange('fatherPhone', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Mother's Name</label>
+            <input
+              type="text"
+              value={form.motherName}
+              onChange={(e) => handleChange('motherName', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Mother's Name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Mother's Phone</label>
+            <input
+              type="tel"
+              value={form.motherPhone}
+              onChange={(e) => handleChange('motherPhone', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">WhatsApp Number</label>
+            <input
+              type="tel"
+              value={form.whatsapp}
+              onChange={(e) => handleChange('whatsapp', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="+91 98765 43210"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Occupation</label>
+            <input
+              type="text"
+              value={form.occupation}
+              onChange={(e) => handleChange('occupation', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Occupation"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Budget</label>
+            <input
+              type="number"
+              value={form.budget}
+              onChange={(e) => handleChange('budget', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="0"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preferred Contact Method</label>
+            <select
+              value={form.preferredContactMethod}
+              onChange={(e) => handleChange('preferredContactMethod', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select Method</option>
+              <option value="phone">Phone Call</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="email">Email</option>
+              <option value="sms">SMS</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preferred Contact Time</label>
+            <select
+              value={form.preferredContactTime}
+              onChange={(e) => handleChange('preferredContactTime', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select Time</option>
+              <option value="morning">Morning (9 AM - 12 PM)</option>
+              <option value="afternoon">Afternoon (12 PM - 5 PM)</option>
+              <option value="evening">Evening (5 PM - 9 PM)</option>
+              <option value="anytime">Anytime</option>
+            </select>
+          </div>
+
           {/* Lead Info */}
           <div className="col-span-2 mt-2">
             <p className="text-sm font-medium text-slate-700 mb-2">Lead Information</p>
@@ -671,17 +1326,37 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="">Select Source</option>
-              <option value="MANUAL">Manual</option>
-              <option value="WEBSITE">Website</option>
-              <option value="FACEBOOK">Facebook</option>
-              <option value="INSTAGRAM">Instagram</option>
-              <option value="GOOGLE">Google Ads</option>
-              <option value="LINKEDIN">LinkedIn</option>
-              <option value="REFERRAL">Referral</option>
-              <option value="WALK_IN">Walk In</option>
-              <option value="PHONE">Phone Inquiry</option>
-              <option value="EMAIL">Email Inquiry</option>
-              <option value="OTHER">Other</option>
+              <optgroup label="Direct Sources">
+                <option value="MANUAL">Manual</option>
+                <option value="WEBSITE">Website</option>
+                <option value="WALK_IN">Walk In</option>
+                <option value="PHONE">Phone Inquiry</option>
+                <option value="EMAIL">Email Inquiry</option>
+                <option value="REFERRAL">Referral</option>
+              </optgroup>
+              <optgroup label="Social Media">
+                <option value="FACEBOOK">Facebook</option>
+                <option value="INSTAGRAM">Instagram</option>
+                <option value="GOOGLE">Google Ads</option>
+                <option value="LINKEDIN">LinkedIn</option>
+                <option value="YOUTUBE">YouTube</option>
+                <option value="TWITTER">Twitter</option>
+                <option value="TIKTOK">TikTok</option>
+              </optgroup>
+              <optgroup label="Indian Lead Sources">
+                <option value="JUSTDIAL">JustDial</option>
+                <option value="INDIAMART">IndiaMART</option>
+                <option value="SULEKHA">Sulekha</option>
+                <option value="TAWKTO">Tawk.to Chat</option>
+              </optgroup>
+              <optgroup label="Real Estate Portals">
+                <option value="99ACRES">99Acres</option>
+                <option value="MAGICBRICKS">MagicBricks</option>
+                <option value="HOUSING">Housing.com</option>
+              </optgroup>
+              <optgroup label="Other">
+                <option value="OTHER">Other</option>
+              </optgroup>
             </select>
           </div>
 
@@ -699,6 +1374,64 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
               <option value="URGENT">Urgent</option>
             </select>
           </div>
+
+          {/* Additional Information */}
+          <div className="col-span-2 mt-2">
+            <p className="text-sm font-medium text-slate-700 mb-2">Additional Information</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Walkin Date</label>
+            <input
+              type="date"
+              value={form.walkinDate}
+              onChange={(e) => handleChange('walkinDate', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Lineup Date</label>
+            <input
+              type="date"
+              value={form.lineupDate}
+              onChange={(e) => handleChange('lineupDate', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Preferred Location</label>
+            <input
+              type="text"
+              value={form.preferredLocation}
+              onChange={(e) => handleChange('preferredLocation', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Preferred Location"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Total Fees</label>
+            <input
+              type="number"
+              value={form.totalFees}
+              onChange={(e) => handleChange('totalFees', e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="0"
+            />
+          </div>
+
+          {/* Custom Fields (from Settings > Custom Contact Property) */}
+          <div className="col-span-2 mt-2">
+            <p className="text-sm font-medium text-slate-700 mb-2">Custom Fields</p>
+          </div>
+          <div className="col-span-2">
+            <CustomFieldsRenderer
+              values={form.customFields}
+              onChange={handleCustomFieldChange}
+            />
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
@@ -711,6 +1444,351 @@ export function EditLeadModal({ isOpen, onClose, onSubmit, lead }: EditLeadModal
             className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== PAYMENT MODAL ====================
+
+interface PaymentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (payment: Omit<LeadPayment, 'id' | 'createdAt'>) => void;
+}
+
+export function PaymentModal({ isOpen, onClose, onSubmit }: PaymentModalProps) {
+  const [form, setForm] = useState({
+    amount: '',
+    currency: 'INR',
+    paymentType: 'TUITION' as LeadPayment['paymentType'],
+    paymentMethod: 'UPI' as LeadPayment['paymentMethod'],
+    status: 'PENDING' as LeadPayment['status'],
+    transactionId: '',
+    receiptNo: '',
+    dueDate: '',
+    notes: '',
+  });
+
+  const handleSubmit = () => {
+    onSubmit({
+      amount: parseFloat(form.amount) || 0,
+      currency: form.currency,
+      paymentType: form.paymentType,
+      paymentMethod: form.paymentMethod,
+      status: form.status,
+      transactionId: form.transactionId || undefined,
+      receiptNo: form.receiptNo || undefined,
+      dueDate: form.dueDate || undefined,
+      paidAt: form.status === 'COMPLETED' ? new Date().toISOString() : undefined,
+      notes: form.notes || undefined,
+    });
+    setForm({
+      amount: '',
+      currency: 'INR',
+      paymentType: 'TUITION',
+      paymentMethod: 'UPI',
+      status: 'PENDING',
+      transactionId: '',
+      receiptNo: '',
+      dueDate: '',
+      notes: '',
+    });
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-semibold mb-4">Add Payment</h3>
+
+        <div className="space-y-4">
+          {/* Amount and Currency */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs text-slate-500 mb-1">Amount *</label>
+              <input
+                type="number"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Currency</label>
+              <select
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="INR">INR</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Payment Type */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Payment Type *</label>
+            <select
+              value={form.paymentType}
+              onChange={(e) => setForm({ ...form, paymentType: e.target.value as LeadPayment['paymentType'] })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            >
+              <option value="REGISTRATION">Registration Fee</option>
+              <option value="TUITION">Tuition Fee</option>
+              <option value="EXAM">Exam Fee</option>
+              <option value="HOSTEL">Hostel Fee</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+
+          {/* Payment Method */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Payment Method *</label>
+            <select
+              value={form.paymentMethod}
+              onChange={(e) => setForm({ ...form, paymentMethod: e.target.value as LeadPayment['paymentMethod'] })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            >
+              <option value="CASH">Cash</option>
+              <option value="CARD">Card</option>
+              <option value="UPI">UPI</option>
+              <option value="BANK_TRANSFER">Bank Transfer</option>
+              <option value="CHEQUE">Cheque</option>
+              <option value="ONLINE">Online</option>
+            </select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Status *</label>
+            <select
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value as LeadPayment['status'] })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            >
+              <option value="PENDING">Pending</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="PARTIAL">Partial</option>
+              <option value="FAILED">Failed</option>
+              <option value="REFUNDED">Refunded</option>
+            </select>
+          </div>
+
+          {/* Transaction ID */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Transaction ID</label>
+            <input
+              type="text"
+              value={form.transactionId}
+              onChange={(e) => setForm({ ...form, transactionId: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              placeholder="TXN123456789"
+            />
+          </div>
+
+          {/* Receipt No */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Receipt Number</label>
+            <input
+              type="text"
+              value={form.receiptNo}
+              onChange={(e) => setForm({ ...form, receiptNo: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              placeholder="RCP-2024-001"
+            />
+          </div>
+
+          {/* Due Date (only show for pending payments) */}
+          {form.status === 'PENDING' && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Due Date</label>
+              <input
+                type="date"
+                value={form.dueDate}
+                onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              />
+            </div>
+          )}
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Notes</label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              rows={3}
+              placeholder="Additional notes..."
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!form.amount || parseFloat(form.amount) <= 0}
+            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Add Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== DOCUMENT MODAL ====================
+
+interface DocumentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (file: File, documentType: LeadDocument['documentType'], documentName: string) => void;
+}
+
+export function DocumentModal({ isOpen, onClose, onSubmit }: DocumentModalProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState({
+    documentType: 'OTHER' as LeadDocument['documentType'],
+    documentName: '',
+    file: null as File | null,
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setForm({
+        ...form,
+        file,
+        documentName: form.documentName || file.name.replace(/\.[^/.]+$/, ''), // Use filename without extension as default name
+      });
+    }
+  };
+
+  const handleSubmit = () => {
+    if (form.file && form.documentName) {
+      onSubmit(form.file, form.documentType, form.documentName);
+      setForm({
+        documentType: 'OTHER',
+        documentName: '',
+        file: null,
+      });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      onClose();
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <h3 className="text-lg font-semibold mb-4">Upload Document</h3>
+
+        <div className="space-y-4">
+          {/* Document Type */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Document Type *</label>
+            <select
+              value={form.documentType}
+              onChange={(e) => setForm({ ...form, documentType: e.target.value as LeadDocument['documentType'] })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            >
+              <option value="ID_PROOF">ID Proof (Aadhar, PAN, Passport)</option>
+              <option value="ADDRESS_PROOF">Address Proof</option>
+              <option value="PHOTO">Photo</option>
+              <option value="CERTIFICATE">Certificate</option>
+              <option value="MARKSHEET">Marksheet</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+
+          {/* Document Name */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Document Name *</label>
+            <input
+              type="text"
+              value={form.documentName}
+              onChange={(e) => setForm({ ...form, documentName: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              placeholder="e.g., Aadhar Card, 10th Marksheet"
+            />
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">File *</label>
+            <div
+              className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
+                form.file ? 'border-green-300 bg-green-50' : 'border-slate-200 hover:border-primary-300 hover:bg-slate-50'
+              }`}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              />
+              {form.file ? (
+                <div>
+                  <p className="text-sm font-medium text-green-700">{form.file.name}</p>
+                  <p className="text-xs text-green-600 mt-1">{formatFileSize(form.file.size)}</p>
+                  <p className="text-xs text-slate-500 mt-2">Click to change file</p>
+                </div>
+              ) : (
+                <div>
+                  <svg className="mx-auto h-10 w-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <p className="text-sm text-slate-600 mt-2">Click to upload</p>
+                  <p className="text-xs text-slate-400 mt-1">PDF, JPG, PNG, DOC (max 10MB)</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+          <button
+            onClick={() => {
+              setForm({ documentType: 'OTHER', documentName: '', file: null });
+              if (fileInputRef.current) fileInputRef.current.value = '';
+              onClose();
+            }}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!form.file || !form.documentName.trim()}
+            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Upload Document
           </button>
         </div>
       </div>

@@ -15,13 +15,48 @@ const router = Router();
 router.use(authenticate);
 router.use(tenantMiddleware);
 
+// Custom validators - validate format only when value is provided
+const validateEmail = (value: string | undefined | null): boolean => {
+  // Skip validation if empty/undefined/null
+  if (value === undefined || value === null || value === '' || (typeof value === 'string' && value.trim() === '')) {
+    return true;
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(value.trim())) {
+    throw new Error('Invalid email format (e.g., user@example.com)');
+  }
+  return true;
+};
+
+const validatePhone = (value: string | undefined | null, { req, path }: { req: any; path: string }): boolean => {
+  const isRequired = path === 'phone' && req.method === 'POST';
+
+  // Skip validation if empty/undefined/null (unless required)
+  if (value === undefined || value === null || value === '' || (typeof value === 'string' && value.trim() === '')) {
+    if (isRequired) throw new Error('Phone number is required');
+    return true;
+  }
+
+  const digitsOnly = value.replace(/[\s\-\(\)\+]/g, '');
+  if (!/^\d+$/.test(digitsOnly)) {
+    throw new Error('Phone must contain only digits');
+  }
+  if (digitsOnly.length < 10) {
+    throw new Error('Phone must be at least 10 digits');
+  }
+  if (digitsOnly.length > 15) {
+    throw new Error('Phone must not exceed 15 digits');
+  }
+  return true;
+};
+
 // Validation rules
 const createLeadValidation = [
   body('firstName').trim().notEmpty().withMessage('First name is required'),
   body('lastName').optional().trim(),
-  body('email').optional().trim().isEmail().withMessage('Invalid email format'),
-  body('phone').trim().notEmpty().withMessage('Phone number is required'),
-  body('alternatePhone').optional().trim(),
+  body('email').custom(validateEmail),
+  body('phone').custom(validatePhone),
+  body('alternatePhone').custom(validatePhone),
   body('source').optional().isIn([
     'MANUAL', 'BULK_UPLOAD', 'FORM', 'LANDING_PAGE', 'CHATBOT',
     'AD_FACEBOOK', 'AD_INSTAGRAM', 'AD_LINKEDIN', 'REFERRAL', 'WEBSITE', 'OTHER'
@@ -37,8 +72,9 @@ const updateLeadValidation = [
   param('id').isUUID().withMessage('Invalid lead ID'),
   body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
   body('lastName').optional().trim(),
-  body('email').optional().trim().isEmail().withMessage('Invalid email format'),
-  body('phone').optional().trim().notEmpty().withMessage('Phone cannot be empty'),
+  body('email').custom(validateEmail),
+  body('phone').custom(validatePhone),
+  body('alternatePhone').custom(validatePhone),
   body('status').optional().isIn([
     'NEW', 'CONTACTED', 'QUALIFIED', 'NEGOTIATION', 'WON', 'LOST', 'FOLLOW_UP'
   ]),
@@ -53,17 +89,18 @@ const assignLeadValidation = [
 const listLeadsValidation = [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
-  query('status').optional().isIn([
-    'NEW', 'CONTACTED', 'QUALIFIED', 'NEGOTIATION', 'WON', 'LOST', 'FOLLOW_UP'
-  ]),
+  // Status accepts dynamic stage names from database (not hardcoded)
+  query('status').optional().isString().trim().notEmpty().withMessage('Status must be a valid stage name'),
   query('source').optional().isIn([
     'MANUAL', 'BULK_UPLOAD', 'FORM', 'LANDING_PAGE', 'CHATBOT',
     'AD_FACEBOOK', 'AD_INSTAGRAM', 'AD_LINKEDIN', 'REFERRAL', 'WEBSITE', 'OTHER'
   ]),
   query('priority').optional().isIn(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
   query('assignedToId').optional().isUUID(),
+  query('tag').optional().isUUID().withMessage('Invalid tag ID'),
   query('dateFrom').optional().isISO8601(),
   query('dateTo').optional().isISO8601(),
+  query('customFields').optional().isString().withMessage('Custom fields must be a JSON string'),
 ];
 
 // Lead stages/statuses

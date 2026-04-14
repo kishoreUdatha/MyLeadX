@@ -14,10 +14,10 @@ import { Prisma } from '@prisma/client';
 import { TenantRequest } from '../middlewares/tenant';
 
 // Roles that have full organization access (can see all branches)
-const ADMIN_ROLES = ['admin'];
+const ADMIN_ROLES = ['admin', 'super_admin'];
 
 // Roles that have team-based access (can see their team members' leads)
-const MANAGER_ROLES = ['manager'];
+const MANAGER_ROLES = ['manager', 'team_lead'];
 
 /**
  * Context needed for lead access checks
@@ -52,14 +52,16 @@ export function getLeadAccessContext(req: TenantRequest): LeadAccessContext {
  * Check if the user's role has full admin access
  */
 export function hasAdminAccess(role: string): boolean {
-  return ADMIN_ROLES.includes(role);
+  const normalizedRole = role?.toLowerCase();
+  return ADMIN_ROLES.includes(normalizedRole);
 }
 
 /**
  * Check if the user's role has manager-level access (team-based)
  */
 export function hasManagerAccess(role: string): boolean {
-  return MANAGER_ROLES.includes(role);
+  const normalizedRole = role?.toLowerCase();
+  return MANAGER_ROLES.includes(normalizedRole);
 }
 
 /**
@@ -116,21 +118,10 @@ export async function canAccessLead(
     return true;
   }
 
-  // Manager roles can access leads assigned to themselves or their team members
+  // Manager/Team Lead roles can access any lead in their organization
+  // (Previously restricted to team members only, now expanded for better usability)
   if (hasManagerAccess(role)) {
-    const teamMemberIds = await getTeamMemberIds(userId, organizationId);
-    const allowedUserIds = [userId, ...teamMemberIds];
-
-    const assignment = await prisma.leadAssignment.findFirst({
-      where: {
-        leadId,
-        assignedToId: { in: allowedUserIds },
-        isActive: true,
-      },
-      select: { id: true },
-    });
-
-    return assignment !== null;
+    return true;
   }
 
   // Other roles can only access leads actively assigned to them

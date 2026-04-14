@@ -233,16 +233,20 @@ router.get(
   validate([param('leadId').isUUID()]),
   async (req: TenantRequest, res: Response) => {
     try {
+      const organizationId = req.organizationId!;
       const { leadId } = req.params;
 
-      const tags = await leadTagsService.getLeadTags(leadId);
+      const tags = await leadTagsService.getLeadTags(leadId, organizationId);
 
       return ApiResponse.success(res, 'Lead tags retrieved', {
         tags,
         total: tags.length,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching lead tags:', error);
+      if (error.message === 'Lead not found') {
+        return ApiResponse.error(res, 'Lead not found or access denied', 404);
+      }
       return ApiResponse.error(res, 'Failed to fetch lead tags', 500);
     }
   }
@@ -262,10 +266,11 @@ router.post(
   async (req: TenantRequest, res: Response) => {
     try {
       const organizationId = req.organizationId!;
+      const userId = req.user?.id;
       const { leadId } = req.params;
       const { tagIds } = req.body;
 
-      const assignments = await leadTagsService.assignTagsToLead(leadId, tagIds, organizationId);
+      const assignments = await leadTagsService.assignTagsToLead(leadId, tagIds, organizationId, userId);
 
       return ApiResponse.success(res, 'Tags assigned', {
         assignments,
@@ -273,6 +278,9 @@ router.post(
       });
     } catch (error: any) {
       console.error('Error assigning tags:', error);
+      if (error.message === 'Lead not found') {
+        return ApiResponse.error(res, 'Lead not found or access denied', 404);
+      }
       return ApiResponse.error(res, error.message || 'Failed to assign tags', 400);
     }
   }
@@ -292,14 +300,18 @@ router.post(
   async (req: TenantRequest, res: Response) => {
     try {
       const organizationId = req.organizationId!;
+      const userId = req.user?.id;
       const { leadId } = req.params;
       const { tagIds } = req.body;
 
-      await leadTagsService.removeTagsFromLead(leadId, tagIds, organizationId);
+      await leadTagsService.removeTagsFromLead(leadId, tagIds, organizationId, userId);
 
       return ApiResponse.success(res, 'Tags removed');
     } catch (error: any) {
       console.error('Error removing tags:', error);
+      if (error.message === 'Lead not found') {
+        return ApiResponse.error(res, 'Lead not found or access denied', 404);
+      }
       return ApiResponse.error(res, error.message || 'Failed to remove tags', 400);
     }
   }
@@ -330,6 +342,9 @@ router.put(
       });
     } catch (error: any) {
       console.error('Error replacing tags:', error);
+      if (error.message === 'Lead not found') {
+        return ApiResponse.error(res, 'Lead not found or access denied', 404);
+      }
       return ApiResponse.error(res, error.message || 'Failed to replace tags', 400);
     }
   }

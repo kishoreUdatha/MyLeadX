@@ -106,17 +106,41 @@ class SuperAdminService {
   }
 
   /**
-   * Get platform statistics
+   * Get platform statistics - comprehensive tenant tracking
    */
   async getPlatformStats() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    // Organization stats
-    const [totalOrgs, activeOrgs, newOrgsThisMonth] = await Promise.all([
+    // Organization stats with subscription status
+    const [
+      totalOrgs,
+      activeOrgs,
+      trialOrgs,
+      expiredOrgs,
+      newOrgsThisMonth,
+    ] = await Promise.all([
       prisma.organization.count(),
-      prisma.organization.count({ where: { isActive: true } }),
+      prisma.organization.count({
+        where: {
+          isActive: true,
+          subscriptionStatus: 'ACTIVE',
+        }
+      }),
+      prisma.organization.count({
+        where: { subscriptionStatus: 'TRIAL' }
+      }),
+      prisma.organization.count({
+        where: {
+          OR: [
+            { subscriptionStatus: 'EXPIRED' },
+            { subscriptionStatus: 'CANCELLED' },
+            { isActive: false },
+          ]
+        }
+      }),
       prisma.organization.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
@@ -129,7 +153,7 @@ class SuperAdminService {
     ]);
 
     // Revenue stats
-    const [totalRevenue, monthlyRevenue] = await Promise.all([
+    const [totalRevenue, monthlyRevenue, lastMonthRevenue] = await Promise.all([
       prisma.invoice.aggregate({
         where: { status: 'PAID' },
         _sum: { totalAmount: true },
@@ -141,9 +165,16 @@ class SuperAdminService {
         },
         _sum: { totalAmount: true },
       }),
+      prisma.invoice.aggregate({
+        where: {
+          status: 'PAID',
+          paidAt: { gte: startOfLastMonth, lte: endOfLastMonth },
+        },
+        _sum: { totalAmount: true },
+      }),
     ]);
 
-    // Usage stats
+    // Usage stats - comprehensive
     const usageThisMonth = await prisma.usageTracking.aggregate({
       where: {
         month: now.getMonth() + 1,
@@ -152,38 +183,100 @@ class SuperAdminService {
       _sum: {
         leadsCount: true,
         aiCallsCount: true,
+        voiceMinutesUsed: true,
         smsCount: true,
+        whatsappCount: true,
         emailsCount: true,
+        apiCallsCount: true,
+        storageUsedMb: true,
       },
     });
 
-    // Plan distribution
+    // Plan distribution with revenue
     const planDistribution = await prisma.organization.groupBy({
       by: ['activePlanId'],
       _count: true,
     });
 
-    // Top organizations by usage
+    // Get revenue per plan
+    const planRevenue = await prisma.invoice.groupBy({
+      by: ['planName'],
+      where: { status: 'PAID' },
+      _sum: { totalAmount: true },
+    });
+    const planRevenueMap = new Map(planRevenue.map(p => [p.planName, p._sum.totalAmount || 0]));
+
+    // Subscription status distribution
+    const subscriptionStatus = await prisma.organization.groupBy({
+      by: ['subscriptionStatus'],
+      _count: true,
+    });
+
+    // Top organizations by usage with comprehensive metrics
     const topOrgsByUsage = await prisma.usageTracking.findMany({
       where: {
         month: now.getMonth() + 1,
         year: now.getFullYear(),
       },
       orderBy: { aiCallsCount: 'desc' },
-      take: 10,
+      take: 20,
       select: {
         organizationId: true,
         aiCallsCount: true,
+        voiceMinutesUsed: true,
         leadsCount: true,
         smsCount: true,
+        whatsappCount: true,
+        emailsCount: true,
+        apiCallsCount: true,
+        storageUsedMb: true,
       },
     });
 
-    // Get org names for top orgs
+    // Get org details for top orgs
     const topOrgIds = topOrgsByUsage.map((u) => u.organizationId);
     const orgs = await prisma.organization.findMany({
       where: { id: { in: topOrgIds } },
-      select: { id: true, name: true, activePlanId: true },
+      select: {
+        id: true,
+        name: true,
+        activePlanId: true,
+        subscriptionStatus: true,
+        industry: true,
+        _count: {
+          select: { users: true },
+        },
+      },
+    });
+
+    // Get revenue per org
+    const orgRevenue = await prisma.invoice.groupBy({
+      by: ['organizationId'],
+      where: {
+        organizationId: { in: topOrgIds },
+        status: 'PAID',
+      },
+      _sum: { totalAmount: true },
+    });
+    const orgRevenueMap = new Map(orgRevenue.map(o => [o.organizationId, o._sum.totalAmount || 0]));
+
+    // Get last login per org
+    const lastLogins = await prisma.loginHistory.findMany({
+      where: {
+        user: { organizationId: { in: topOrgIds } },
+      },
+      orderBy: { createdAt: 'desc' },
+      distinct: ['userId'],
+      select: {
+        createdAt: true,
+        user: { select: { organizationId: true } },
+      },
+    });
+    const lastLoginMap = new Map<string, Date>();
+    lastLogins.forEach(l => {
+      if (!lastLoginMap.has(l.user.organizationId)) {
+        lastLoginMap.set(l.user.organizationId, l.createdAt);
+      }
     });
 
     const orgMap = new Map(orgs.map((o) => [o.id, o]));
@@ -192,6 +285,8 @@ class SuperAdminService {
       overview: {
         totalOrganizations: totalOrgs,
         activeOrganizations: activeOrgs,
+        expiredOrganizations: expiredOrgs,
+        trialOrganizations: trialOrgs,
         newOrganizationsThisMonth: newOrgsThisMonth,
         totalUsers,
         activeUsers,
@@ -199,24 +294,195 @@ class SuperAdminService {
       revenue: {
         total: totalRevenue._sum.totalAmount || 0,
         thisMonth: monthlyRevenue._sum.totalAmount || 0,
+        lastMonth: lastMonthRevenue._sum.totalAmount || 0,
         currency: 'INR',
       },
       usage: {
         thisMonth: {
           leads: usageThisMonth._sum.leadsCount || 0,
           aiCalls: usageThisMonth._sum.aiCallsCount || 0,
+          voiceMinutes: usageThisMonth._sum.voiceMinutesUsed || 0,
           sms: usageThisMonth._sum.smsCount || 0,
+          whatsapp: usageThisMonth._sum.whatsappCount || 0,
           emails: usageThisMonth._sum.emailsCount || 0,
+          apiCalls: usageThisMonth._sum.apiCallsCount || 0,
+          storageGB: Math.round((usageThisMonth._sum.storageUsedMb || 0) / 1024 * 100) / 100,
         },
       },
       planDistribution: planDistribution.map((p) => ({
         plan: p.activePlanId || 'starter',
         count: p._count,
+        revenue: planRevenueMap.get(p.activePlanId || 'starter') || 0,
       })),
-      topOrganizations: topOrgsByUsage.map((u) => ({
-        ...u,
-        organization: orgMap.get(u.organizationId),
+      subscriptionStatus: subscriptionStatus.map((s) => ({
+        status: s.subscriptionStatus || 'UNKNOWN',
+        count: s._count,
       })),
+      topOrganizations: topOrgsByUsage.map((u) => {
+        const org = orgMap.get(u.organizationId);
+        return {
+          organizationId: u.organizationId,
+          aiCallsCount: u.aiCallsCount,
+          voiceMinutes: u.voiceMinutesUsed || 0,
+          leadsCount: u.leadsCount,
+          smsCount: u.smsCount,
+          whatsappCount: u.whatsappCount || 0,
+          emailCount: u.emailsCount,
+          usersCount: org?._count?.users || 0,
+          revenue: orgRevenueMap.get(u.organizationId) || 0,
+          lastActiveAt: lastLoginMap.get(u.organizationId) || null,
+          organization: org ? {
+            id: org.id,
+            name: org.name,
+            activePlanId: org.activePlanId,
+            subscriptionStatus: org.subscriptionStatus,
+            industry: org.industry,
+          } : null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Get detailed tenant information
+   */
+  async getTenantDetails(tenantId: string) {
+    const org = await prisma.organization.findUnique({
+      where: { id: tenantId },
+      include: {
+        users: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            isActive: true,
+            lastLoginAt: true,
+            role: { select: { name: true, slug: true } },
+          },
+        },
+        _count: {
+          select: {
+            leads: true,
+            callLogs: true,
+            campaigns: true,
+            voiceAgents: true,
+          },
+        },
+      },
+    });
+
+    if (!org) {
+      throw new Error('Tenant not found');
+    }
+
+    // Get current month usage
+    const now = new Date();
+    const usage = await prisma.usageTracking.findUnique({
+      where: {
+        organizationId_month_year: {
+          organizationId: tenantId,
+          month: now.getMonth() + 1,
+          year: now.getFullYear(),
+        },
+      },
+    });
+
+    // Get total revenue from this tenant
+    const revenue = await prisma.invoice.aggregate({
+      where: {
+        organizationId: tenantId,
+        status: 'PAID',
+      },
+      _sum: { totalAmount: true },
+    });
+
+    // Get last payment
+    const lastPayment = await prisma.invoice.findFirst({
+      where: {
+        organizationId: tenantId,
+        status: 'PAID',
+      },
+      orderBy: { paidAt: 'desc' },
+    });
+
+    // Get pending invoices
+    const pendingInvoices = await prisma.invoice.aggregate({
+      where: {
+        organizationId: tenantId,
+        status: 'PENDING',
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    });
+
+    // Get last login activity
+    const lastLogin = await prisma.loginHistory.findFirst({
+      where: { user: { organizationId: tenantId } },
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { email: true, firstName: true, lastName: true } } },
+    });
+
+    // Get active users (logged in last 30 days)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const activeUsersCount = await prisma.user.count({
+      where: {
+        organizationId: tenantId,
+        isActive: true,
+        lastLoginAt: { gte: thirtyDaysAgo },
+      },
+    });
+
+    return {
+      id: org.id,
+      tenantCode: org.tenantCode,
+      name: org.name,
+      slug: org.slug,
+      email: org.email,
+      phone: org.phone,
+      contactPerson: org.contactPerson,
+      industry: org.industry,
+      activePlanId: org.activePlanId,
+      subscriptionStatus: org.subscriptionStatus,
+      subscriptionExpiresAt: org.subscriptionExpiresAt,
+      trialEndsAt: org.trialEndsAt,
+      isActive: org.isActive,
+      createdAt: org.createdAt,
+
+      // Limits
+      maxUsers: org.maxUsers,
+      maxStorageGB: org.maxStorageGB,
+      voiceMinutesLimit: org.voiceMinutesLimit,
+
+      // Stats
+      stats: {
+        totalUsers: org.users.length,
+        activeUsers: activeUsersCount,
+        totalLeads: org._count.leads,
+        totalCalls: org._count.callLogs,
+        voiceMinutesUsed: org.voiceMinutesUsed || 0,
+        voiceMinutesLimit: org.voiceMinutesLimit || 0,
+        smsCount: usage?.smsCount || 0,
+        whatsappCount: usage?.whatsappCount || 0,
+        emailCount: usage?.emailsCount || 0,
+        storageUsedMB: usage?.storageUsedMb || 0,
+        apiCallsThisMonth: usage?.apiCallsCount || 0,
+        lastLoginAt: lastLogin?.createdAt || null,
+        lastLoginBy: lastLogin?.user ? `${lastLogin.user.firstName} ${lastLogin.user.lastName}` : null,
+      },
+
+      // Billing
+      billing: {
+        totalPaid: revenue._sum.totalAmount || 0,
+        lastPaymentAt: lastPayment?.paidAt || null,
+        lastPaymentAmount: lastPayment?.totalAmount || 0,
+        pendingAmount: pendingInvoices._sum.totalAmount || 0,
+        pendingInvoices: pendingInvoices._count,
+        nextBillingAt: org.subscriptionExpiresAt || null,
+      },
+
+      // Users list
+      users: org.users,
     };
   }
 

@@ -414,6 +414,9 @@ router.get(
   })
 );
 
+// Completed stages where follow-ups should not be allowed
+const COMPLETED_STAGES = ['Won', 'WON', 'Lost', 'LOST', 'Closed', 'CLOSED', 'Admitted', 'ADMITTED', 'Enrolled', 'ENROLLED', 'Dropped', 'DROPPED'];
+
 // Create follow-up
 router.post(
   '/:leadId/follow-ups',
@@ -432,6 +435,34 @@ router.post(
     // SECURITY: Verify lead belongs to user's organization
     if (!await verifyLeadAccess(leadId, req)) {
       return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    // Check if lead is in a completed stage
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      include: { stage: { select: { name: true } } },
+    });
+
+    if (lead?.stage && COMPLETED_STAGES.includes(lead.stage.name)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot schedule follow-up for a lead in "${lead.stage.name}" stage. The lead has already been closed.`,
+      });
+    }
+
+    // Check for existing upcoming follow-up (prevent duplicates)
+    const existingFollowUp = await prisma.followUp.findFirst({
+      where: {
+        leadId,
+        status: 'UPCOMING',
+      },
+    });
+
+    if (existingFollowUp) {
+      return res.status(400).json({
+        success: false,
+        message: `This lead already has a scheduled follow-up on ${new Date(existingFollowUp.scheduledAt).toLocaleDateString()}. Please reschedule the existing one instead.`,
+      });
     }
 
     const followUp = await prisma.followUp.create({
@@ -1398,6 +1429,86 @@ router.post(
   })
 );
 
+// ==================== EMAIL ====================
+
+// Send Email
+router.post(
+  '/:leadId/email',
+  validate([
+    param('leadId').isUUID().withMessage('Invalid lead ID'),
+    body('subject').trim().notEmpty().withMessage('Subject is required')
+      .isLength({ max: 200 }).withMessage('Subject too long'),
+    body('body').trim().notEmpty().withMessage('Email body is required')
+      .isLength({ max: 10000 }).withMessage('Body too long'),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId } = req.params;
+    const { subject, body: emailBody } = req.body;
+    const organizationId = req.user!.organizationId;
+
+    try {
+      // SECURITY: Role-based access check
+      if (!await verifyLeadAccess(leadId, req)) {
+        return res.status(404).json({ success: false, message: 'Lead not found' });
+      }
+
+      // Get lead details for sending message
+      const lead = await prisma.lead.findFirst({
+        where: { id: leadId, organizationId },
+        select: { email: true, firstName: true, lastName: true },
+      });
+
+      if (!lead) {
+        return res.status(404).json({ success: false, message: 'Lead not found' });
+      }
+
+      if (!lead.email) {
+        return res.status(400).json({ success: false, message: 'Lead email not found' });
+      }
+
+      // Create log entry first
+      const logEntry = await prisma.emailLog.create({
+        data: {
+          leadId,
+          userId: req.user!.id,
+          toEmail: lead.email,
+          subject,
+          body: emailBody,
+          direction: 'OUTBOUND',
+          status: 'PENDING',
+        },
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+        },
+      });
+
+      // Update status to SENT (email logging - actual sending via integration service can be added)
+      await prisma.emailLog.update({
+        where: { id: logEntry.id },
+        data: { status: 'SENT', sentAt: new Date() },
+      });
+
+      // Create activity
+      await prisma.leadActivity.create({
+        data: {
+          leadId,
+          userId: req.user!.id,
+          type: 'EMAIL_SENT',
+          title: 'Email sent',
+          description: `Subject: ${subject}`,
+        },
+      });
+
+      res.status(201).json({ success: true, data: logEntry });
+    } catch (error) {
+      console.error('Error sending email:', error);
+      res.status(500).json({ success: false, message: 'Failed to send email' });
+    }
+  })
+);
+
 // Create call log
 router.post(
   '/:leadId/calls',
@@ -1456,6 +1567,343 @@ router.post(
     });
 
     res.status(201).json({ success: true, data: call });
+  })
+);
+
+// ==================== PAYMENTS ====================
+
+// Get payments for a lead
+router.get(
+  '/:leadId/payments',
+  validate([param('leadId').isUUID().withMessage('Invalid lead ID')]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId } = req.params;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    const payments = await prisma.leadPayment.findMany({
+      where: { leadId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ success: true, data: payments });
+  })
+);
+
+// Create payment
+router.post(
+  '/:leadId/payments',
+  validate([
+    param('leadId').isUUID().withMessage('Invalid lead ID'),
+    body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
+    body('currency').optional().isLength({ max: 3 }).withMessage('Invalid currency'),
+    body('paymentType').isIn(['REGISTRATION', 'TUITION', 'EXAM', 'HOSTEL', 'OTHER']),
+    body('paymentMethod').isIn(['CASH', 'CARD', 'UPI', 'BANK_TRANSFER', 'CHEQUE', 'ONLINE']),
+    body('status').optional().isIn(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED', 'PARTIAL']),
+    body('transactionId').optional().trim().isLength({ max: 100 }),
+    body('receiptNo').optional().trim().isLength({ max: 50 }),
+    body('dueDate').optional().isISO8601(),
+    body('paidAt').optional().isISO8601(),
+    body('notes').optional().trim().isLength({ max: 1000 }),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId } = req.params;
+    const { amount, currency, paymentType, paymentMethod, status, transactionId, receiptNo, dueDate, paidAt, notes } = req.body;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    const payment = await prisma.leadPayment.create({
+      data: {
+        leadId,
+        amount,
+        currency: currency || 'INR',
+        paymentType,
+        paymentMethod,
+        status: status || 'PENDING',
+        transactionId,
+        receiptNo,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        paidAt: paidAt ? new Date(paidAt) : (status === 'COMPLETED' ? new Date() : null),
+        notes,
+      },
+    });
+
+    // Create activity
+    await prisma.leadActivity.create({
+      data: {
+        leadId,
+        userId: req.user!.id,
+        type: 'PAYMENT_RECEIVED',
+        title: `Payment recorded - ${paymentType}`,
+        description: `${currency || 'INR'} ${amount} via ${paymentMethod}`,
+      },
+    });
+
+    res.status(201).json({ success: true, data: payment });
+  })
+);
+
+// Update payment
+router.put(
+  '/:leadId/payments/:paymentId',
+  validate([
+    param('leadId').isUUID().withMessage('Invalid lead ID'),
+    param('paymentId').isUUID().withMessage('Invalid payment ID'),
+    body('amount').optional().isFloat({ min: 0.01 }),
+    body('status').optional().isIn(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED', 'PARTIAL']),
+    body('transactionId').optional().trim().isLength({ max: 100 }),
+    body('receiptNo').optional().trim().isLength({ max: 50 }),
+    body('notes').optional().trim().isLength({ max: 1000 }),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId, paymentId } = req.params;
+    const { amount, status, transactionId, receiptNo, notes } = req.body;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    // Verify payment belongs to this lead
+    const existingPayment = await prisma.leadPayment.findFirst({
+      where: { id: paymentId, leadId },
+    });
+    if (!existingPayment) {
+      return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
+
+    const updateData: any = {};
+    if (amount !== undefined) updateData.amount = amount;
+    if (status) {
+      updateData.status = status;
+      if (status === 'COMPLETED' && !existingPayment.paidAt) {
+        updateData.paidAt = new Date();
+      }
+    }
+    if (transactionId !== undefined) updateData.transactionId = transactionId;
+    if (receiptNo !== undefined) updateData.receiptNo = receiptNo;
+    if (notes !== undefined) updateData.notes = notes;
+
+    const payment = await prisma.leadPayment.update({
+      where: { id: paymentId },
+      data: updateData,
+    });
+
+    res.json({ success: true, data: payment });
+  })
+);
+
+// Delete payment
+router.delete(
+  '/:leadId/payments/:paymentId',
+  validate([
+    param('leadId').isUUID().withMessage('Invalid lead ID'),
+    param('paymentId').isUUID().withMessage('Invalid payment ID'),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId, paymentId } = req.params;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    // Verify payment belongs to this lead
+    const existingPayment = await prisma.leadPayment.findFirst({
+      where: { id: paymentId, leadId },
+    });
+    if (!existingPayment) {
+      return res.status(404).json({ success: false, message: 'Payment not found' });
+    }
+
+    await prisma.leadPayment.delete({ where: { id: paymentId } });
+
+    res.json({ success: true, message: 'Payment deleted' });
+  })
+);
+
+// ==================== DOCUMENTS ====================
+
+// Get documents for a lead
+router.get(
+  '/:leadId/documents',
+  validate([param('leadId').isUUID().withMessage('Invalid lead ID')]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId } = req.params;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    const documents = await prisma.leadDocument.findMany({
+      where: { leadId },
+      orderBy: { uploadedAt: 'desc' },
+    });
+
+    res.json({ success: true, data: documents });
+  })
+);
+
+// Upload document
+router.post(
+  '/:leadId/documents',
+  validate([param('leadId').isUUID().withMessage('Invalid lead ID')]),
+  uploadMiddleware.single('file'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId } = req.params;
+    const { documentType, documentName } = req.body;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    // Validate document type
+    const validTypes = ['ID_PROOF', 'ADDRESS_PROOF', 'PHOTO', 'CERTIFICATE', 'MARKSHEET', 'OTHER'];
+    if (documentType && !validTypes.includes(documentType)) {
+      return res.status(400).json({ success: false, message: 'Invalid document type' });
+    }
+
+    // Upload to S3
+    const fileUrl = await uploadToS3(
+      req.file.buffer,
+      `leads/${leadId}/documents/${Date.now()}-${req.file.originalname}`,
+      req.file.mimetype
+    );
+
+    const document = await prisma.leadDocument.create({
+      data: {
+        leadId,
+        documentType: documentType || 'OTHER',
+        documentName: documentName || req.file.originalname,
+        fileName: req.file.originalname,
+        fileUrl,
+        fileSize: req.file.size,
+        status: 'PENDING',
+      },
+    });
+
+    // Create activity
+    await prisma.leadActivity.create({
+      data: {
+        leadId,
+        userId: req.user!.id,
+        type: 'DOCUMENT_UPLOADED',
+        title: 'Document uploaded',
+        description: `${documentType || 'Document'}: ${documentName || req.file.originalname}`,
+      },
+    });
+
+    res.status(201).json({ success: true, data: document });
+  })
+);
+
+// Update document (verify/reject)
+router.put(
+  '/:leadId/documents/:documentId',
+  validate([
+    param('leadId').isUUID().withMessage('Invalid lead ID'),
+    param('documentId').isUUID().withMessage('Invalid document ID'),
+    body('status').optional().isIn(['PENDING', 'VERIFIED', 'REJECTED']),
+    body('rejectionReason').optional().trim().isLength({ max: 500 }),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId, documentId } = req.params;
+    const { status, rejectionReason } = req.body;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    // Verify document belongs to this lead
+    const existingDocument = await prisma.leadDocument.findFirst({
+      where: { id: documentId, leadId },
+    });
+    if (!existingDocument) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    const updateData: any = {};
+    if (status) {
+      updateData.status = status;
+      if (status === 'VERIFIED') {
+        updateData.verifiedAt = new Date();
+        updateData.verifiedById = req.user!.id;
+        updateData.rejectionReason = null;
+      } else if (status === 'REJECTED') {
+        updateData.rejectionReason = rejectionReason;
+        updateData.verifiedAt = null;
+        updateData.verifiedById = null;
+      }
+    }
+
+    const document = await prisma.leadDocument.update({
+      where: { id: documentId },
+      data: updateData,
+    });
+
+    // Create activity for verification
+    if (status === 'VERIFIED' || status === 'REJECTED') {
+      await prisma.leadActivity.create({
+        data: {
+          leadId,
+          userId: req.user!.id,
+          type: 'CUSTOM',
+          title: `Document ${status.toLowerCase()}`,
+          description: existingDocument.documentName,
+        },
+      });
+    }
+
+    res.json({ success: true, data: document });
+  })
+);
+
+// Delete document
+router.delete(
+  '/:leadId/documents/:documentId',
+  validate([
+    param('leadId').isUUID().withMessage('Invalid lead ID'),
+    param('documentId').isUUID().withMessage('Invalid document ID'),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { leadId, documentId } = req.params;
+
+    // SECURITY: Verify lead belongs to user's organization
+    if (!await verifyLeadAccess(leadId, req)) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    // Verify document belongs to this lead
+    const document = await prisma.leadDocument.findFirst({
+      where: { id: documentId, leadId },
+    });
+    if (!document) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    // Delete from S3
+    try {
+      await deleteFromS3(document.fileUrl);
+    } catch (error) {
+      console.error('Failed to delete from S3:', error);
+    }
+
+    await prisma.leadDocument.delete({ where: { id: documentId } });
+
+    res.json({ success: true, message: 'Document deleted' });
   })
 );
 

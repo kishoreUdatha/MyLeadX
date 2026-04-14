@@ -5,7 +5,7 @@
 
 import { Router, Response } from 'express';
 import { body, param } from 'express-validator';
-import { authenticate } from '../middlewares/auth';
+import { authenticate, authorize } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { validate } from '../middlewares/validate';
 import { ApiResponse } from '../utils/apiResponse';
@@ -125,8 +125,9 @@ router.get('/industry', async (req: TenantRequest, res: Response) => {
 /**
  * PUT /api/lead-stages/industry
  * Set organization's industry and create default stages
+ * Admin only
  */
-router.put('/industry', validate(industryValidation), async (req: TenantRequest, res: Response) => {
+router.put('/industry', authorize('admin', 'org_admin', 'super_admin'), validate(industryValidation), async (req: TenantRequest, res: Response) => {
   try {
     const organizationId = req.organizationId!;
     const { industry, resetStages = false } = req.body;
@@ -203,8 +204,9 @@ router.get('/journey', async (req: TenantRequest, res: Response) => {
 /**
  * POST /api/lead-stages
  * Create a custom lead stage
+ * Admin only
  */
-router.post('/', validate(createStageValidation), async (req: TenantRequest, res: Response) => {
+router.post('/', authorize('admin'), validate(createStageValidation), async (req: TenantRequest, res: Response) => {
   try {
     const organizationId = req.organizationId!;
     const { name, slug, color, order, journeyOrder, icon, autoSyncStatus } = req.body;
@@ -232,8 +234,9 @@ router.post('/', validate(createStageValidation), async (req: TenantRequest, res
 /**
  * PUT /api/lead-stages/:stageId
  * Update a lead stage
+ * Admin only
  */
-router.put('/:stageId', validate(updateStageValidation), async (req: TenantRequest, res: Response) => {
+router.put('/:stageId', authorize('admin'), validate(updateStageValidation), async (req: TenantRequest, res: Response) => {
   try {
     const organizationId = req.organizationId!;
     const { stageId } = req.params;
@@ -262,8 +265,9 @@ router.put('/:stageId', validate(updateStageValidation), async (req: TenantReque
 /**
  * DELETE /api/lead-stages/:stageId
  * Delete a lead stage (soft delete)
+ * Admin only
  */
-router.delete('/:stageId', async (req: TenantRequest, res: Response) => {
+router.delete('/:stageId', authorize('admin'), async (req: TenantRequest, res: Response) => {
   try {
     const organizationId = req.organizationId!;
     const { stageId } = req.params;
@@ -283,8 +287,9 @@ router.delete('/:stageId', async (req: TenantRequest, res: Response) => {
 /**
  * POST /api/lead-stages/reset
  * Reset stages to industry template defaults
+ * Admin only
  */
-router.post('/reset', async (req: TenantRequest, res: Response) => {
+router.post('/reset', authorize('admin'), async (req: TenantRequest, res: Response) => {
   try {
     const organizationId = req.organizationId!;
     const stages = await leadStageService.resetStagesToTemplate(organizationId);
@@ -312,7 +317,7 @@ router.put(
       const { leadId } = req.params;
       const { stageId } = req.body;
 
-      const result = await leadStageService.updateLeadStage(leadId, stageId, organizationId);
+      const result = await leadStageService.updateLeadStage(leadId, stageId, organizationId, req.user?.id);
 
       return ApiResponse.success(res, 'Lead stage updated successfully', {
         lead: result.lead,
@@ -330,5 +335,97 @@ router.put(
     }
   }
 );
+
+/**
+ * POST /api/lead-stages/fix-journey-order
+ * Fix journey order for all stages based on logical education flow
+ * Admin only
+ */
+router.post('/fix-journey-order', authorize('admin'), async (req: TenantRequest, res: Response) => {
+  try {
+    const organizationId = req.organizationId!;
+
+    // Define the correct order for education industry stages
+    const educationStageOrder: Record<string, { journeyOrder: number; autoSyncStatus: string | null }> = {
+      'new': { journeyOrder: 1, autoSyncStatus: null },
+      'new inquiry': { journeyOrder: 1, autoSyncStatus: null },
+      'inquiry': { journeyOrder: 2, autoSyncStatus: null },
+      'contacted': { journeyOrder: 3, autoSyncStatus: null },
+      'interested': { journeyOrder: 4, autoSyncStatus: null },
+      'qualified': { journeyOrder: 5, autoSyncStatus: null },
+      'proposal': { journeyOrder: 6, autoSyncStatus: null },
+      'negotiation': { journeyOrder: 7, autoSyncStatus: null },
+      'visit scheduled': { journeyOrder: 8, autoSyncStatus: null },
+      'campus visit': { journeyOrder: 8, autoSyncStatus: null },
+      'visit completed': { journeyOrder: 9, autoSyncStatus: null },
+      'campus visit done': { journeyOrder: 9, autoSyncStatus: null },
+      'documents pending': { journeyOrder: 10, autoSyncStatus: null },
+      'application': { journeyOrder: 11, autoSyncStatus: null },
+      'processing': { journeyOrder: 12, autoSyncStatus: null },
+      'payment pending': { journeyOrder: 13, autoSyncStatus: null },
+      'admission': { journeyOrder: 14, autoSyncStatus: null },
+      'admitted': { journeyOrder: 15, autoSyncStatus: 'WON' },
+      'enrolled': { journeyOrder: 15, autoSyncStatus: 'WON' },
+      'won': { journeyOrder: 15, autoSyncStatus: 'WON' },
+      // Lost/dropped stages get negative journey order
+      'lost': { journeyOrder: -1, autoSyncStatus: 'LOST' },
+      'dropped': { journeyOrder: -1, autoSyncStatus: 'LOST' },
+      'not interested': { journeyOrder: -2, autoSyncStatus: 'LOST' },
+    };
+
+    // Fetch all stages for this organization
+    const { prisma } = require('../config/database');
+    const stages = await prisma.leadStage.findMany({
+      where: { organizationId },
+      orderBy: { order: 'asc' },
+    });
+
+    const updates: any[] = [];
+    let nextJourneyOrder = 100; // For stages not in the mapping
+
+    for (const stage of stages) {
+      const stageLower = stage.name.toLowerCase().trim();
+      const mapping = educationStageOrder[stageLower];
+
+      if (mapping) {
+        updates.push(
+          prisma.leadStage.update({
+            where: { id: stage.id },
+            data: {
+              journeyOrder: mapping.journeyOrder,
+              autoSyncStatus: mapping.autoSyncStatus,
+            },
+          })
+        );
+      } else {
+        // For unmapped stages, use their existing order or a high number
+        updates.push(
+          prisma.leadStage.update({
+            where: { id: stage.id },
+            data: {
+              journeyOrder: stage.order || nextJourneyOrder++,
+            },
+          })
+        );
+      }
+    }
+
+    await Promise.all(updates);
+
+    // Fetch updated stages
+    const updatedStages = await prisma.leadStage.findMany({
+      where: { organizationId },
+      orderBy: { journeyOrder: 'asc' },
+    });
+
+    return ApiResponse.success(res, 'Journey order fixed successfully', {
+      stages: updatedStages,
+      stagesUpdated: updates.length,
+    });
+  } catch (error) {
+    console.error('Error fixing journey order:', error);
+    return ApiResponse.error(res, 'Failed to fix journey order', 500);
+  }
+});
 
 export default router;

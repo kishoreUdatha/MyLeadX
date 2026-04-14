@@ -22,6 +22,10 @@ export interface RegisterData {
   lastName: string;
   phone?: string;
   planId?: string;
+  industry: string;
+  teamSize: string;
+  expectedLeadsPerMonth?: string;
+  country: string;
 }
 
 export interface AuthResponse {
@@ -32,12 +36,18 @@ export interface AuthResponse {
     lastName: string;
     organizationId: string;
     organizationName: string;
+    organizationSlug: string;
     role: string;
+    permissions: string[];
+    onboardingCompleted?: boolean;
+    organizationIndustry?: string | null;
   };
   // Tokens are now in httpOnly cookies, not in response body
   // These fields are kept for backward compatibility but may be undefined
   accessToken?: string;
   refreshToken?: string;
+  // Tenant URL for subdomain redirect
+  tenantUrl?: string;
 }
 
 export const authService = {
@@ -48,8 +58,10 @@ export const authService = {
     // Tokens are now set via httpOnly cookies by the server
     // No need to store them manually
 
-    // Reconnect socket (cookies will be sent automatically)
-    await socketService.reconnect();
+    // Connect socket in background (don't await - let login complete faster)
+    socketService.reconnect().catch(err => {
+      console.warn('[Auth] Socket reconnect failed:', err);
+    });
 
     return data;
   },

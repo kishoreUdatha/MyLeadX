@@ -8,6 +8,7 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     organizationId: string;
+    organizationName: string;
     email: string;
     firstName: string;
     lastName: string;
@@ -17,6 +18,8 @@ export interface AuthenticatedRequest extends Request {
     managerId: string | null; // Manager ID for team-based access control
     branchId: string | null; // Branch ID for multi-branch support
     branchName: string | null; // Branch name for display
+    onboardingCompleted: boolean; // Onboarding status
+    organizationIndustry: string | null; // Organization industry
   };
 }
 
@@ -38,12 +41,29 @@ export async function authenticate(
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      include: {
+      select: {
+        id: true,
+        organizationId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+        managerId: true,
+        branchId: true,
+        lastActivityAt: true,
         role: true,
         branch: {
           select: {
             id: true,
             name: true,
+          },
+        },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            industry: true,
+            settings: true,
           },
         },
       },
@@ -54,9 +74,14 @@ export async function authenticate(
       return;
     }
 
+    // Get onboarding status from organization settings
+    const orgSettings = (user.organization.settings as any) || {};
+    const onboardingCompleted = orgSettings.onboardingCompleted || false;
+
     req.user = {
       id: user.id,
       organizationId: user.organizationId,
+      organizationName: user.organization.name,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -66,7 +91,22 @@ export async function authenticate(
       managerId: user.managerId,
       branchId: user.branchId,
       branchName: user.branch?.name || null,
+      onboardingCompleted,
+      organizationIndustry: user.organization.industry,
     };
+
+    // Update lastActivityAt for team status tracking (throttled to once per minute)
+    const now = new Date();
+    const lastActivity = user.lastActivityAt;
+    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+
+    if (!lastActivity || lastActivity < oneMinuteAgo) {
+      // Update asynchronously to not block the request
+      prisma.user.update({
+        where: { id: user.id },
+        data: { lastActivityAt: now },
+      }).catch(() => {}); // Silently ignore errors
+    }
 
     next();
   } catch (error) {
@@ -146,13 +186,26 @@ export async function optionalAuth(
             name: true,
           },
         },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            industry: true,
+            settings: true,
+          },
+        },
       },
     });
 
     if (user && user.isActive) {
+      // Get onboarding status from organization settings
+      const orgSettings = (user.organization.settings as any) || {};
+      const onboardingCompleted = orgSettings.onboardingCompleted || false;
+
       req.user = {
         id: user.id,
         organizationId: user.organizationId,
+        organizationName: user.organization.name,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -162,6 +215,8 @@ export async function optionalAuth(
         managerId: user.managerId,
         branchId: user.branchId,
         branchName: user.branch?.name || null,
+        onboardingCompleted,
+        organizationIndustry: user.organization.industry,
       };
     }
 

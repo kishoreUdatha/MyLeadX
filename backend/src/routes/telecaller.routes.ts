@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import { telecallerCallFinalizationService } from '../services/telecaller-call-finalization.service';
 import { calendarService } from '../services/calendar.service';
+import { workSessionService } from '../services/work-session.service';
 
 const router = Router();
 
@@ -163,7 +164,8 @@ router.get('/my-qualified-leads/stats', async (req: TenantRequest, res: Response
 router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { status, search, limit = '50', offset, page, dateFrom, dateTo } = req.query;
+    const userRole = req.user!.role || req.user!.roleSlug;
+    const { status, search, limit = '50', offset, page, dateFrom, dateTo, assignedToId } = req.query;
 
     // Support both page and offset - prefer page if provided
     const limitNum = parseInt(limit as string) || 50;
@@ -175,19 +177,37 @@ router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
       skipNum = parseInt(offset as string) || 0;
     }
 
+    // Role-based filtering
+    const normalizedRole = userRole?.toLowerCase().replace('_', '');
+    const isManagerOrAdmin = ['manager', 'admin', 'teamlead'].includes(normalizedRole || '');
+
     const whereClause: any = {
       organizationId: req.organization!.id,
-      assignedToId: userId,
       convertedLeadId: null, // Not yet converted
     };
 
-    // Filter by status
-    if (status && status !== 'ALL') {
-      whereClause.status = status;
+    // If manager/admin, can see all or filter by specific assignee
+    // If telecaller, only see their own
+    if (isManagerOrAdmin) {
+      if (assignedToId) {
+        whereClause.assignedToId = assignedToId as string;
+      }
+      // No assignedToId filter = see all
     } else {
-      // Default: show all actionable statuses (everything except CONVERTED and NOT_INTERESTED)
-      whereClause.status = { in: ['ASSIGNED', 'CALLING', 'CALLBACK_REQUESTED', 'NO_ANSWER', 'INTERESTED'] };
+      whereClause.assignedToId = userId;
     }
+
+    // Filter by status - 'ALL' means show all records without status filter
+    if (status && status !== 'ALL') {
+      if (status === 'NEW') {
+        // NEW = records that haven't been called yet (callAttempts = 0)
+        whereClause.status = { in: ['ASSIGNED', 'PENDING'] };
+        whereClause.callAttempts = 0;
+      } else {
+        whereClause.status = status;
+      }
+    }
+    // When status is 'ALL' or not specified, show all records (no status filter)
 
     // Date filtering on assignedAt
     if (dateFrom || dateTo) {
@@ -220,6 +240,7 @@ router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
         include: {
           bulkImport: { select: { fileName: true } },
           assignedBy: { select: { firstName: true, lastName: true } },
+          assignedTo: { select: { id: true, firstName: true, lastName: true } },
         },
         orderBy: [
           { status: 'asc' }, // ASSIGNED first
@@ -241,19 +262,33 @@ router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
 router.get('/assigned-data/stats', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
+    const organizationId = req.organization!.id;
 
+    // Get status-wise counts
     const stats = await prisma.rawImportRecord.groupBy({
       by: ['status'],
       where: {
-        organizationId: req.organization!.id,
+        organizationId,
         assignedToId: userId,
         convertedLeadId: null,
       },
       _count: { status: true },
     });
 
+    // Get count of NEW records (assigned but never called - callAttempts = 0)
+    const newCount = await prisma.rawImportRecord.count({
+      where: {
+        organizationId,
+        assignedToId: userId,
+        convertedLeadId: null,
+        status: { in: ['ASSIGNED', 'PENDING'] },
+        callAttempts: 0,
+      },
+    });
+
     const result = {
       total: 0,
+      new: newCount,
       pending: 0,
       assigned: 0,
       calling: 0,
@@ -345,7 +380,8 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
   try {
     const { id } = req.params;
     const userId = req.user!.id;
-    const { status, notes, callSummary, interestLevel } = req.body;
+    const organizationId = req.organization!.id;
+    const { status, notes, callSummary, interestLevel, duration } = req.body;
 
     // Validate status
     const validStatuses = ['CALLING', 'INTERESTED', 'NOT_INTERESTED', 'NO_ANSWER', 'CALLBACK_REQUESTED'];
@@ -357,7 +393,7 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
     const existing = await prisma.rawImportRecord.findFirst({
       where: {
         id,
-        organizationId: req.organization!.id,
+        organizationId,
         assignedToId: userId,
         convertedLeadId: null,
       },
@@ -367,6 +403,7 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
       return ApiResponse.notFound(res, 'Record not found or already converted');
     }
 
+    // Update raw import record
     const record = await prisma.rawImportRecord.update({
       where: { id },
       data: {
@@ -378,6 +415,59 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
         callAttempts: { increment: 1 },
       },
     });
+
+    // Also log to telecallerCall table for proper call tracking
+    // Map rawImportRecord status to telecallerCall outcome (valid enum values)
+    const outcomeMap: Record<string, string> = {
+      'INTERESTED': 'INTERESTED',
+      'NOT_INTERESTED': 'NOT_INTERESTED',
+      'NO_ANSWER': 'NO_ANSWER',
+      'CALLBACK_REQUESTED': 'CALLBACK',  // Map to valid enum
+      'CALLING': 'PENDING',
+    };
+
+    // Find existing call for this raw import record (created when call started)
+    const existingCall = await prisma.telecallerCall.findFirst({
+      where: {
+        telecallerId: userId,
+        phoneNumber: existing.phone,
+        notes: { contains: id },
+        outcome: null, // Not yet finalized
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingCall && status !== 'CALLING') {
+      // Update existing call with outcome
+      await prisma.telecallerCall.update({
+        where: { id: existingCall.id },
+        data: {
+          outcome: outcomeMap[status] || status,
+          status: 'COMPLETED',
+          endedAt: new Date(),
+          duration: duration || Math.floor((Date.now() - existingCall.startedAt.getTime()) / 1000),
+          summary: callSummary || notes,
+        },
+      });
+    } else if (status !== 'CALLING') {
+      // Create new call record if none exists (manual status update)
+      await prisma.telecallerCall.create({
+        data: {
+          organizationId,
+          telecallerId: userId,
+          phoneNumber: existing.phone,
+          contactName: `${existing.firstName} ${existing.lastName || ''}`.trim(),
+          status: 'COMPLETED',
+          outcome: outcomeMap[status] || status,
+          callType: 'OUTBOUND',
+          startedAt: new Date(),
+          endedAt: new Date(),
+          duration: duration || 0,
+          summary: callSummary || notes,
+          notes: `Raw Import Record: ${id}`,
+        },
+      });
+    }
 
     ApiResponse.success(res, 'Status updated', record);
   } catch (error) {
@@ -430,6 +520,7 @@ router.post('/assigned-data/:id/call', async (req: TenantRequest, res: Response)
         phoneNumber: record.phone,
         contactName: `${record.firstName} ${record.lastName || ''}`.trim(),
         status: 'INITIATED',
+        callType: 'OUTBOUND',
         startedAt: new Date(),
         // Store raw import record ID in metadata for linking
         notes: `Raw Import Record: ${id}`,
@@ -487,6 +578,7 @@ router.post('/assigned-data/:id/recording', upload.single('recording'), async (r
           phoneNumber: record.phone,
           contactName: `${record.firstName} ${record.lastName || ''}`.trim(),
           status: 'COMPLETED',
+          callType: 'OUTBOUND',
           startedAt: new Date(),
           endedAt: new Date(),
           duration: callDuration,
@@ -565,9 +657,19 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
       return ApiResponse.notFound(res, 'Record not found or already converted');
     }
 
+    // Get the first stage for the organization (lowest positive journeyOrder)
+    const firstStage = await prisma.leadStage.findFirst({
+      where: {
+        organizationId,
+        journeyOrder: { gt: 0 }, // Positive = progress stage (not lost)
+        isActive: true,
+      },
+      orderBy: { journeyOrder: 'asc' },
+    });
+
     // Use transaction to ensure atomicity - all operations succeed or all fail
     const result = await prisma.$transaction(async (tx) => {
-      // Create lead
+      // Create lead with first stage assigned
       const lead = await tx.lead.create({
         data: {
           organizationId,
@@ -579,7 +681,7 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
           source: 'BULK_UPLOAD',
           sourceDetails: `Bulk Import: ${record.bulkImport?.fileName || 'Unknown'}`,
           priority,
-          status: 'NEW',
+          stageId: firstStage?.id || undefined, // Assign first stage
           customFields: record.customFields || undefined,
         },
       });
@@ -602,7 +704,6 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
             leadId: lead.id,
             userId,
             content: noteContent,
-            type: 'GENERAL',
           },
         });
       }
@@ -1098,11 +1199,17 @@ router.get('/calls/:id/summary', async (req: TenantRequest, res: Response) => {
 router.post('/calls', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { leadId, phoneNumber, contactName } = req.body;
+    const { leadId, phoneNumber, contactName, callType } = req.body;
 
     if (!phoneNumber) {
       return ApiResponse.error(res, 'Phone number is required', 400);
     }
+
+    // Validate callType if provided
+    const validCallTypes = ['OUTBOUND', 'INBOUND'];
+    const normalizedCallType = callType && validCallTypes.includes(callType.toUpperCase())
+      ? callType.toUpperCase()
+      : 'OUTBOUND';
 
     // Create call record
     const call = await prisma.telecallerCall.create({
@@ -1113,6 +1220,7 @@ router.post('/calls', async (req: TenantRequest, res: Response) => {
         phoneNumber,
         contactName: contactName || null,
         status: 'INITIATED',
+        callType: normalizedCallType,
         startedAt: new Date(),
       },
     });
@@ -1174,6 +1282,16 @@ router.put('/calls/:id', async (req: TenantRequest, res: Response) => {
           userId,
         },
       });
+    }
+
+    // Track active time in work session (for user activity reports)
+    if (duration && duration > 0) {
+      try {
+        await workSessionService.addActiveTime(userId, req.organization!.id, duration);
+      } catch (err) {
+        console.error('Failed to track active time:', err);
+        // Don't fail the call update if session tracking fails
+      }
     }
 
     ApiResponse.success(res, 'Call updated', call);
@@ -1326,7 +1444,7 @@ router.get('/calls/:id/analysis', async (req: TenantRequest, res: Response) => {
   }
 });
 
-// Get telecaller stats/dashboard - used by mobile app
+// Get telecaller stats/dashboard - used by mobile app and web dashboard
 router.get('/stats', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -1338,6 +1456,7 @@ router.get('/stats', async (req: TenantRequest, res: Response) => {
       todayCalls,
       totalCalls,
       outcomes,
+      todayOutcomes,
       avgDuration,
     ] = await Promise.all([
       // Total assigned leads
@@ -1355,10 +1474,16 @@ router.get('/stats', async (req: TenantRequest, res: Response) => {
       prisma.telecallerCall.count({
         where: { telecallerId: userId },
       }),
-      // Outcome distribution
+      // Overall outcome distribution
       prisma.telecallerCall.groupBy({
         by: ['outcome'],
         where: { telecallerId: userId, outcome: { not: null } },
+        _count: { outcome: true },
+      }),
+      // Today's outcome distribution
+      prisma.telecallerCall.groupBy({
+        by: ['outcome'],
+        where: { telecallerId: userId, createdAt: { gte: today }, outcome: { not: null } },
         _count: { outcome: true },
       }),
       // Average call duration
@@ -1368,16 +1493,39 @@ router.get('/stats', async (req: TenantRequest, res: Response) => {
       }),
     ]);
 
-    // Calculate conversion rate
-    const interested = outcomes.find(o => o.outcome === 'INTERESTED')?._count?.outcome || 0;
-    const converted = outcomes.find(o => o.outcome === 'CONVERTED')?._count?.outcome || 0;
-    const conversionRate = totalCalls > 0 ? Math.round(((interested + converted) / totalCalls) * 100) : 0;
-
-    // Build callsByOutcome map (matches mobile app TelecallerStats interface)
+    // Build callsByOutcome map
     const callsByOutcome = outcomes.reduce((acc, o) => {
       if (o.outcome) acc[o.outcome] = o._count.outcome;
       return acc;
     }, {} as Record<string, number>);
+
+    // Build today's outcome map
+    const todayByOutcome = todayOutcomes.reduce((acc, o) => {
+      if (o.outcome) acc[o.outcome] = o._count.outcome;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Connected = calls where customer answered (INTERESTED, NOT_INTERESTED, CALLBACK_REQUESTED, CONVERTED, CONNECTED)
+    const connectedOutcomes = ['INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'CONVERTED', 'CONNECTED'];
+    // Unconnected = calls where customer didn't answer (NO_ANSWER, BUSY, VOICEMAIL)
+    const unconnectedOutcomes = ['NO_ANSWER', 'BUSY', 'VOICEMAIL'];
+    // Lost = NOT_INTERESTED
+    const lostOutcomes = ['NOT_INTERESTED'];
+
+    // Calculate totals
+    const totalConnected = connectedOutcomes.reduce((sum, o) => sum + (callsByOutcome[o] || 0), 0);
+    const totalUnconnected = unconnectedOutcomes.reduce((sum, o) => sum + (callsByOutcome[o] || 0), 0);
+    const totalLost = lostOutcomes.reduce((sum, o) => sum + (callsByOutcome[o] || 0), 0);
+
+    // Calculate today's totals
+    const todayConnected = connectedOutcomes.reduce((sum, o) => sum + (todayByOutcome[o] || 0), 0);
+    const todayUnconnected = unconnectedOutcomes.reduce((sum, o) => sum + (todayByOutcome[o] || 0), 0);
+    const todayLost = lostOutcomes.reduce((sum, o) => sum + (todayByOutcome[o] || 0), 0);
+    const todayInterested = (todayByOutcome['INTERESTED'] || 0) + (todayByOutcome['CONVERTED'] || 0);
+
+    // Calculate conversion rate - only count CONVERTED (won) calls
+    const converted = callsByOutcome['CONVERTED'] || 0;
+    const conversionRate = totalCalls > 0 ? Math.round((converted / totalCalls) * 100) : 0;
 
     ApiResponse.success(res, 'Stats retrieved', {
       assignedLeads,
@@ -1386,6 +1534,18 @@ router.get('/stats', async (req: TenantRequest, res: Response) => {
       conversionRate,
       averageCallDuration: avgDuration._avg.duration || 0,
       callsByOutcome,
+      // New summary stats
+      totalConnected,
+      totalUnconnected,
+      totalLost,
+      // Today's performance breakdown
+      todayPerformance: {
+        calls: todayCalls,
+        connected: todayConnected,
+        unconnected: todayUnconnected,
+        lost: todayLost,
+        interested: todayInterested,
+      },
     });
   } catch (error) {
     ApiResponse.error(res, (error as Error).message, 500);
@@ -1393,10 +1553,11 @@ router.get('/stats', async (req: TenantRequest, res: Response) => {
 });
 
 // ==================== COMPREHENSIVE DASHBOARD STATS ====================
-// Get detailed performance stats for telecaller dashboard
+// Get detailed performance stats for telecaller dashboard (role-aware)
 router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
+    const userRole = req.user!.role || req.user!.roleSlug;
     const organizationId = req.organization!.id;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1407,6 +1568,45 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
     startOfWeek.setHours(0, 0, 0, 0);
+
+    // ========== ROLE-BASED USER ID FILTERING ==========
+    // Build list of user IDs to filter by based on role
+    const normalizedRole = userRole?.toLowerCase().replace('_', '');
+    let targetUserIds: string[] = [userId]; // Default: just the current user
+
+    if (normalizedRole === 'teamlead') {
+      // Team Lead: include themselves + their team members
+      const teamMembers = await prisma.user.findMany({
+        where: { organizationId, managerId: userId, isActive: true },
+        select: { id: true },
+      });
+      targetUserIds = [userId, ...teamMembers.map(m => m.id)];
+    } else if (normalizedRole === 'manager') {
+      // Manager: include themselves + team leads + all telecallers under team leads
+      const teamLeads = await prisma.user.findMany({
+        where: { organizationId, managerId: userId, role: { slug: 'team_lead' }, isActive: true },
+        select: { id: true },
+      });
+      const teamLeadIds = teamLeads.map(tl => tl.id);
+
+      const allTeamMembers = await prisma.user.findMany({
+        where: {
+          organizationId,
+          OR: [{ managerId: { in: teamLeadIds } }, { managerId: userId }],
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      targetUserIds = [userId, ...teamLeadIds, ...allTeamMembers.map(m => m.id)];
+    } else if (normalizedRole === 'admin') {
+      // Admin: see all users in organization
+      const allUsers = await prisma.user.findMany({
+        where: { organizationId, isActive: true },
+        select: { id: true },
+      });
+      targetUserIds = allUsers.map(u => u.id);
+    }
+    // Telecaller/Counselor: just their own ID (default)
 
     // ========== DYNAMIC TARGETS FROM ASSIGNED DATA ==========
     // Daily Call Target = Assigned leads that need to be called
@@ -1419,32 +1619,32 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
     ] = await Promise.all([
       // Active lead assignments
       prisma.leadAssignment.count({
-        where: { assignedToId: userId, isActive: true },
+        where: { assignedToId: { in: targetUserIds }, isActive: true },
       }),
       // Assigned raw import records (pending/assigned status - to be called)
       prisma.rawImportRecord.count({
         where: {
-          assignedToId: userId,
+          assignedToId: { in: targetUserIds },
           status: { in: ['ASSIGNED', 'PENDING'] },
         },
       }),
       // Total raw import records assigned (all statuses - for showing total assigned)
       prisma.rawImportRecord.count({
         where: {
-          assignedToId: userId,
+          assignedToId: { in: targetUserIds },
         },
       }),
       // Telecaller queue items
       prisma.telecallerQueue.count({
         where: {
-          assignedToId: userId,
+          assignedToId: { in: targetUserIds },
           status: { in: ['PENDING', 'CLAIMED'] },
         },
       }),
       // Today's scheduled follow-ups
       prisma.followUp.count({
         where: {
-          assigneeId: userId,
+          assigneeId: { in: targetUserIds },
           status: 'UPCOMING',
           scheduledAt: { gte: today, lte: todayEnd },
         },
@@ -1473,7 +1673,7 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
 
       const callsOnDay = await prisma.telecallerCall.count({
         where: {
-          telecallerId: userId,
+          telecallerId: { in: targetUserIds },
           createdAt: { gte: dayStart, lte: dayEnd },
         },
       });
@@ -1494,7 +1694,7 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
     const leadsWithStages = await prisma.lead.findMany({
       where: {
         organizationId,
-        assignments: { some: { assignedToId: userId, isActive: true } },
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
       },
       select: { stage: { select: { name: true } } },
     });
@@ -1505,74 +1705,167 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
       leadsByStage[stageName] = (leadsByStage[stageName] || 0) + 1;
     });
 
-    // 3. Get today's stats
+    // 3. Get today's stats - All calls are now logged to telecallerCall table
     const [
       todayCalls,
       todayFollowUpsCompleted,
       pendingFollowUps,
       totalLeads,
     ] = await Promise.all([
+      // All calls (leads + raw imports) are logged to telecallerCall
       prisma.telecallerCall.count({
-        where: { telecallerId: userId, createdAt: { gte: today } },
+        where: { telecallerId: { in: targetUserIds }, createdAt: { gte: today } },
       }),
       prisma.followUp.count({
         where: {
-          assigneeId: userId,
+          assigneeId: { in: targetUserIds },
           status: 'COMPLETED',
           completedAt: { gte: today },
         },
       }),
       prisma.followUp.count({
         where: {
-          assigneeId: userId,
+          assigneeId: { in: targetUserIds },
           status: 'UPCOMING',
         },
       }),
       prisma.lead.count({
         where: {
           organizationId,
-          assignments: { some: { assignedToId: userId, isActive: true } },
+          assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
         },
       }),
     ]);
 
-    // 4. Get call outcomes distribution
-    const callOutcomes = await prisma.telecallerCall.groupBy({
-      by: ['outcome'],
-      where: { telecallerId: userId, outcome: { not: null } },
-      _count: { outcome: true },
-    });
-
-    const outcomes: Record<string, number> = {};
-    callOutcomes.forEach(o => {
-      if (o.outcome) outcomes[o.outcome] = o._count.outcome;
-    });
-
-    // 5. Get conversion stats (leads moved from New to other stages)
-    const convertedLeads = await prisma.lead.count({
+    // Count leads that need follow-up (in early/active stages, not completed stages)
+    // EXCLUDE leads that already have a pending FollowUp record to avoid double counting
+    const completedStages = ['Admitted', 'ADMITTED', 'Enrolled', 'ENROLLED', 'Won', 'WON', 'Dropped', 'DROPPED', 'Lost', 'LOST', 'Closed', 'CLOSED'];
+    const leadsNeedingFollowUp = await prisma.lead.count({
       where: {
         organizationId,
-        assignments: { some: { assignedToId: userId, isActive: true } },
-        stage: { name: { notIn: ['New', 'NEW', 'new'] } },
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
+        // Exclude leads that already have pending follow-ups (to avoid double counting)
+        followUps: { none: { status: 'UPCOMING', assigneeId: { in: targetUserIds } } },
+        OR: [
+          // Leads with nextFollowUpAt set for today or past
+          { nextFollowUpAt: { lte: todayEnd } },
+          // Leads in active stages (not completed) - these need follow-up
+          { stage: { name: { notIn: completedStages } } }
+        ]
       },
     });
 
+    // Total pending follow-ups = FollowUp table records + leads in active stages without scheduled follow-ups
+    const totalPendingFollowUps = pendingFollowUps + leadsNeedingFollowUp;
+
+    // Get follow-up details for display (scheduled follow-ups + leads needing attention)
+    const pendingFollowUpDetails = await prisma.followUp.findMany({
+      where: {
+        assigneeId: { in: targetUserIds },
+        status: 'UPCOMING',
+      },
+      select: {
+        id: true,
+        scheduledAt: true,
+        notes: true,
+        lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: 10,
+    });
+
+    // Also get leads in active stages without scheduled follow-ups
+    const leadsNeedingAttention = await prisma.lead.findMany({
+      where: {
+        organizationId,
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
+        followUps: { none: { status: 'UPCOMING', assigneeId: { in: targetUserIds } } },
+        OR: [
+          { nextFollowUpAt: { lte: todayEnd } },
+          { stage: { name: { notIn: completedStages } } }
+        ]
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        nextFollowUpAt: true,
+        stage: { select: { name: true } },
+      },
+      take: 10,
+    });
+
+    // 4. Get call outcomes distribution from telecallerCall table
+    // All calls (including raw import calls) are now logged to this table
+    const [callOutcomes, callTypeStats] = await Promise.all([
+      prisma.telecallerCall.groupBy({
+        by: ['outcome'],
+        where: { telecallerId: { in: targetUserIds }, outcome: { not: null } },
+        _count: { outcome: true },
+      }),
+      // Get call type breakdown (OUTBOUND vs INBOUND)
+      prisma.telecallerCall.groupBy({
+        by: ['callType'],
+        where: { telecallerId: { in: targetUserIds } },
+        _count: { callType: true },
+      }),
+    ]);
+
+    // Build outcomes object
+    const outcomes: Record<string, number> = {};
+    callOutcomes.forEach(o => {
+      if (o.outcome) {
+        outcomes[o.outcome] = o._count.outcome;
+        // Add CALLBACK_REQUESTED as alias for CALLBACK for frontend compatibility
+        if (o.outcome === 'CALLBACK') {
+          outcomes['CALLBACK_REQUESTED'] = o._count.outcome;
+        }
+      }
+    });
+
+    // Build call types object
+    const callTypes: Record<string, number> = { OUTBOUND: 0, INBOUND: 0 };
+    callTypeStats.forEach(ct => {
+      if (ct.callType) {
+        callTypes[ct.callType] = ct._count.callType;
+      }
+    });
+
+    // 5. Get conversion stats
+    // Won = leads in completed/success stages (Admitted, Enrolled, Won)
     const wonLeads = await prisma.lead.count({
       where: {
         organizationId,
-        assignments: { some: { assignedToId: userId, isActive: true } },
-        stage: { name: { in: ['Won', 'WON', 'Enrolled', 'ENROLLED'] } },
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
+        OR: [
+          { stage: { name: { in: ['Won', 'WON', 'Enrolled', 'ENROLLED', 'Admitted', 'ADMITTED'] } } },
+          { isConverted: true }, // Also count leads marked as converted
+        ],
+      },
+    });
+
+    // Converted = leads that progressed beyond initial stages (not New/Inquiry)
+    const initialStages = ['New', 'NEW', 'new', 'Inquiry', 'INQUIRY', 'inquiry'];
+    const convertedLeads = await prisma.lead.count({
+      where: {
+        organizationId,
+        assignments: { some: { assignedToId: { in: targetUserIds }, isActive: true } },
+        OR: [
+          { stage: { name: { notIn: initialStages } } },
+          { isConverted: true },
+        ],
       },
     });
 
     // 6. Get this week's activity summary
     const thisWeekCalls = await prisma.telecallerCall.count({
-      where: { telecallerId: userId, createdAt: { gte: startOfWeek } },
+      where: { telecallerId: { in: targetUserIds }, createdAt: { gte: startOfWeek } },
     });
 
     const thisWeekFollowUps = await prisma.followUp.count({
       where: {
-        assigneeId: userId,
+        assigneeId: { in: targetUserIds },
         status: 'COMPLETED',
         completedAt: { gte: startOfWeek },
       },
@@ -1580,7 +1873,7 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
 
     // 7. Recent activities
     const recentActivities = await prisma.leadActivity.findMany({
-      where: { userId },
+      where: { userId: { in: targetUserIds } },
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: {
@@ -1597,12 +1890,35 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
       today: {
         calls: todayCalls,
         followUpsCompleted: todayFollowUpsCompleted,
-        pendingFollowUps,
+        pendingFollowUps: totalPendingFollowUps, // Includes FollowUp table + leads needing attention
         target: {
           calls: dailyCallTarget || 1, // From assigned leads + raw records + queue
           followUps: dailyFollowUpTarget || 0, // From today's scheduled follow-ups
         },
       },
+      // Pending follow-up details for display
+      pendingFollowUpsList: [
+        // Scheduled follow-ups from FollowUp table
+        ...pendingFollowUpDetails.map(f => ({
+          id: f.id,
+          leadId: f.lead.id,
+          leadName: `${f.lead.firstName} ${f.lead.lastName || ''}`.trim(),
+          phone: f.lead.phone,
+          scheduledAt: f.scheduledAt,
+          notes: f.notes,
+          type: 'scheduled' as const,
+        })),
+        // Leads needing attention (no scheduled follow-up)
+        ...leadsNeedingAttention.map(l => ({
+          id: l.id,
+          leadId: l.id,
+          leadName: `${l.firstName} ${l.lastName || ''}`.trim(),
+          phone: l.phone,
+          scheduledAt: l.nextFollowUpAt,
+          notes: l.stage?.name ? `Stage: ${l.stage.name}` : null,
+          type: 'needs_attention' as const,
+        })),
+      ],
       // Assigned data breakdown (for transparency)
       assignedData: {
         leads: assignedLeadsCount,
@@ -1629,6 +1945,8 @@ router.get('/dashboard-stats', async (req: TenantRequest, res: Response) => {
       },
       // Call outcomes
       outcomes,
+      // Call types (OUTBOUND vs INBOUND)
+      callTypes,
       // Recent activities
       recentActivities: recentActivities.map(a => ({
         id: a.id,
@@ -1689,7 +2007,18 @@ router.get('/team-dashboard-stats', async (req: TenantRequest, res: Response) =>
         const totalAssigned = assignedCounts.reduce((sum, c) => sum + c._count, 0);
         const pending = assignedCounts.find(c => c.status === 'ASSIGNED' || c.status === 'PENDING')?._count || 0;
         const interested = assignedCounts.find(c => c.status === 'INTERESTED')?._count || 0;
-        const converted = assignedCounts.find(c => c.status === 'CONVERTED')?._count || 0;
+
+        // Count actual conversions: leads with isConverted=true OR in success stages
+        const converted = await prisma.lead.count({
+          where: {
+            organizationId,
+            assignments: { some: { assignedToId: member.id, isActive: true } },
+            OR: [
+              { isConverted: true },
+              { stage: { name: { in: ['Admitted', 'ADMITTED', 'Enrolled', 'ENROLLED', 'Won', 'WON'] } } },
+            ],
+          },
+        });
 
         // Count calls today
         const callsToday = await prisma.telecallerCall.count({
@@ -1700,7 +2029,14 @@ router.get('/team-dashboard-stats', async (req: TenantRequest, res: Response) =>
           },
         });
 
-        const conversionRate = totalAssigned > 0 ? Math.round((converted / totalAssigned) * 100 * 10) / 10 : 0;
+        // Calculate conversion rate based on total leads assigned
+        const totalLeads = await prisma.lead.count({
+          where: {
+            organizationId,
+            assignments: { some: { assignedToId: member.id, isActive: true } },
+          },
+        });
+        const conversionRate = totalLeads > 0 ? Math.round((converted / totalLeads) * 100 * 10) / 10 : 0;
 
         return {
           id: member.id,
@@ -2609,6 +2945,15 @@ router.post('/appointments/:id/cancel', async (req: TenantRequest, res: Response
     const { reason } = req.body;
     const organizationId = req.organizationId!;
 
+    // Get appointment with calendar event ID before updating
+    const existingAppointment = await prisma.appointment.findFirst({
+      where: { id, organizationId },
+    });
+
+    if (!existingAppointment) {
+      return ApiResponse.error(res, 'Appointment not found', 404);
+    }
+
     const appointment = await prisma.appointment.update({
       where: { id, organizationId },
       data: {
@@ -2618,7 +2963,23 @@ router.post('/appointments/:id/cancel', async (req: TenantRequest, res: Response
       },
     });
 
-    // TODO: Cancel calendar event if exists
+    // Cancel calendar event if exists
+    if (existingAppointment.calendarEventId) {
+      try {
+        const deleted = await calendarService.deleteEvent(organizationId, existingAppointment.calendarEventId);
+        if (deleted) {
+          console.log(`[Telecaller] Calendar event ${existingAppointment.calendarEventId} deleted for cancelled appointment`);
+          // Clear the calendar event ID
+          await prisma.appointment.update({
+            where: { id },
+            data: { calendarEventId: null },
+          });
+        }
+      } catch (calendarError) {
+        console.error('[Telecaller] Failed to delete calendar event:', calendarError);
+        // Don't fail the request if calendar deletion fails
+      }
+    }
 
     ApiResponse.success(res, 'Appointment cancelled', appointment);
   } catch (error) {
@@ -2633,14 +2994,27 @@ router.post('/appointments/:id/cancel', async (req: TenantRequest, res: Response
 router.post('/appointments/:id/reschedule', async (req: TenantRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { scheduledAt } = req.body;
+    const { scheduledAt, duration } = req.body;
     const organizationId = req.organizationId!;
+
+    // Get existing appointment first to check for calendar event
+    const existingAppointment = await prisma.appointment.findFirst({
+      where: { id, organizationId },
+    });
+
+    if (!existingAppointment) {
+      return ApiResponse.error(res, 'Appointment not found', 404);
+    }
+
+    const newScheduledAt = new Date(scheduledAt);
+    const appointmentDuration = duration || existingAppointment.duration || 30;
 
     const appointment = await prisma.appointment.update({
       where: { id, organizationId },
       data: {
-        scheduledAt: new Date(scheduledAt),
+        scheduledAt: newScheduledAt,
         status: 'RESCHEDULED',
+        duration: appointmentDuration,
       },
     });
 
@@ -2648,11 +3022,26 @@ router.post('/appointments/:id/reschedule', async (req: TenantRequest, res: Resp
     if (appointment.leadId) {
       await prisma.lead.update({
         where: { id: appointment.leadId },
-        data: { nextFollowUpAt: new Date(scheduledAt) },
+        data: { nextFollowUpAt: newScheduledAt },
       });
     }
 
-    // TODO: Update calendar event if exists
+    // Update calendar event if exists
+    if (existingAppointment.calendarEventId) {
+      try {
+        const endTime = new Date(newScheduledAt.getTime() + appointmentDuration * 60000);
+        const updated = await calendarService.updateEvent(organizationId, existingAppointment.calendarEventId, {
+          startTime: newScheduledAt,
+          endTime: endTime,
+        });
+        if (updated) {
+          console.log(`[Telecaller] Calendar event ${existingAppointment.calendarEventId} updated for rescheduled appointment`);
+        }
+      } catch (calendarError) {
+        console.error('[Telecaller] Failed to update calendar event:', calendarError);
+        // Don't fail the request if calendar update fails
+      }
+    }
 
     ApiResponse.success(res, 'Appointment rescheduled', appointment);
   } catch (error) {

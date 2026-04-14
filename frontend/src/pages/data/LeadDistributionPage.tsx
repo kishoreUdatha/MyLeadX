@@ -577,9 +577,10 @@ export default function LeadDistributionPage() {
                     ? ((tc.statusBreakdown.converted / tc.totalAssigned) * 100).toFixed(1)
                     : '0';
                   const telecallerUser = telecallers.find(t => t.id === tc.telecallerId) as any;
-                  const branchName = telecallerUser?.branchId
-                    ? branches.find(b => b.id === telecallerUser.branchId)?.name || '-'
-                    : '-';
+                  // Use branchName from API if available, fallback to lookup
+                  const branchName = telecallerUser?.branchName
+                    || (telecallerUser?.branchId ? branches.find(b => b.id === telecallerUser.branchId)?.name : null)
+                    || '-';
 
                   return (
                     <tr key={tc.telecallerId} className="hover:bg-gray-50">

@@ -34,6 +34,7 @@ export class AdmissionController {
         commissionStatus: req.query.commissionStatus as string,
         academicYear: req.query.academicYear as string,
         closedById: req.query.closedById as string,
+        branchId: req.query.branchId as string,
         fromDate: req.query.fromDate ? new Date(req.query.fromDate as string) : undefined,
         toDate: req.query.toDate ? new Date(req.query.toDate as string) : undefined,
         search: req.query.search as string,

@@ -5,6 +5,7 @@ import { ApiResponse } from '../utils/apiResponse';
 import { TenantRequest } from '../middlewares/tenant';
 import { LeadSource, LeadPriority } from '@prisma/client';
 import { hasElevatedAccess, getLeadAccessContext } from '../utils/leadAccess';
+import { prisma } from '../config/database';
 
 export class LeadController {
   async create(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
@@ -34,19 +35,73 @@ export class LeadController {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 20;
-      const userRole = req.user!.role;
+      const userRole = req.user!.role || req.user!.roleSlug;
       const userId = req.user!.id;
 
-      // For telecallers/counselors, force filter to only their assigned leads
+      // Only allow explicit assignedToId filter for admins
+      // Team-based filtering is handled by the service based on userRole
       let assignedToIdFilter = req.query.assignedToId as string | undefined;
-      if (!hasElevatedAccess(userRole)) {
-        // Non-elevated users can only see their own assigned leads
-        assignedToIdFilter = userId;
+      if (!hasElevatedAccess(userRole) && assignedToIdFilter && assignedToIdFilter !== userId) {
+        // Non-elevated users cannot filter by other users' leads
+        assignedToIdFilter = undefined;
+      }
+
+      // Support filtering by stage name (status) in addition to stageId
+      let stageId = req.query.stageId as string | undefined;
+      let pipelineStageId = req.query.pipelineStageId as string | undefined;
+      const statusName = req.query.status as string | undefined;
+      let filterUnassignedCounselor = false;
+
+      if (statusName && !stageId && !pipelineStageId) {
+        // Handle special case: "Unassigned" means leads with no counselor assigned
+        if (statusName.toLowerCase() === 'unassigned') {
+          filterUnassignedCounselor = true;
+        } else {
+          // First try to look up in PipelineStage (new unified system)
+          const pipelineStage = await prisma.pipelineStage.findFirst({
+            where: {
+              pipeline: {
+                organizationId: req.organizationId!,
+                entityType: 'LEAD',
+                isActive: true,
+              },
+              name: { equals: statusName, mode: 'insensitive' },
+              isActive: true,
+            },
+          });
+          if (pipelineStage) {
+            pipelineStageId = pipelineStage.id;
+          } else {
+            // Fallback: Look up in old LeadStage table
+            const stage = await prisma.leadStage.findFirst({
+              where: {
+                organizationId: req.organizationId!,
+                name: { equals: statusName, mode: 'insensitive' },
+                isActive: true,
+              },
+            });
+            if (stage) {
+              stageId = stage.id;
+            }
+          }
+        }
+      }
+
+      // Parse custom field filters if provided
+      let customFieldFilters: Record<string, any> | undefined;
+      if (req.query.customFields) {
+        try {
+          customFieldFilters = JSON.parse(req.query.customFields as string);
+        } catch (e) {
+          console.warn('Failed to parse customFields filter:', e);
+        }
       }
 
       const filter = {
         organizationId: req.organizationId!,
-        stageId: req.query.stageId as string | undefined,
+        stageId,
+        pipelineStageId,
+        filterUnassignedCounselor,
         source: req.query.source as LeadSource | undefined,
         priority: req.query.priority as LeadPriority | undefined,
         assignedToId: assignedToIdFilter,
@@ -54,6 +109,13 @@ export class LeadController {
         dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
         dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined,
         isConverted: req.query.isConverted === 'true' ? true : req.query.isConverted === 'false' ? false : undefined,
+        tagId: req.query.tag as string | undefined,
+        customFieldFilters,
+        // Pass role and userId for team-based filtering
+        userRole,
+        userId,
+        // Filter for leads with pending follow-ups
+        pendingFollowUp: req.query.pendingFollowUp === 'true',
       };
 
       const { leads, total } = await leadService.findAll(filter, page, limit);
@@ -66,7 +128,7 @@ export class LeadController {
 
   async update(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const lead = await leadService.update(req.params.id, req.organizationId!, req.body);
+      const lead = await leadService.update(req.params.id, req.organizationId!, req.body, req.user?.id);
 
       ApiResponse.success(res, 'Lead updated successfully', lead);
     } catch (error) {

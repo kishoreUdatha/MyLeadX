@@ -1,3 +1,17 @@
+// Settings Pages Exports
+export { default as SettingsPage } from './SettingsPage';
+export { default as ProfileSettingsPage } from './ProfileSettingsPage';
+export { default as PreferencesPage } from './PreferencesPage';
+export { default as AccessibilityPage } from './AccessibilityPage';
+export { default as AutomaticReportsPage } from './AutomaticReportsPage';
+export { default as ManageColumnsPage } from './ManageColumnsPage';
+export { default as RetrySettingsPage } from './RetrySettingsPage';
+export { default as LeadPriorityPage } from './LeadPriorityPage';
+export { default as CustomContactPropertyPage } from './CustomContactPropertyPage';
+export { default as NotificationPreferencesPage } from './NotificationPreferencesPage';
+export { default as RolesPermissionsPage } from './RolesPermissionsPage';
+
+// Existing exports
 export { default as AutoAssignSettingsPage } from './AutoAssignSettingsPage';
 export { default as AssignmentSchedulePage } from './AssignmentSchedulePage';
 export { default as SmsSettingsPage } from './SmsSettingsPage';
@@ -10,3 +24,20 @@ export { default as EmailSequencesPage } from './EmailSequencesPage';
 export { default as CRMIntegrationPage } from './CRMIntegrationPage';
 export { default as PostCallMessagingPage } from './PostCallMessagingPage';
 export { default as IntegrationCredentialsPage } from './IntegrationCredentialsPage';
+export { default as FieldPermissionsPage } from './FieldPermissionsPage';
+export { default as LeadSourcesSettingsPage } from './LeadSourcesSettingsPage';
+export { default as FollowUpConfigPage } from './FollowUpConfigPage';
+export { default as CustomFieldsConfigPage } from './CustomFieldsConfigPage';
+export { default as EmailTemplateBuilderPage } from './EmailTemplateBuilderPage';
+export { default as WhatsAppTemplateBuilderPage } from './WhatsAppTemplateBuilderPage';
+export { default as AIScriptBuilderPage } from './AIScriptBuilderPage';
+export { default as WorkflowConfigPage } from './WorkflowConfigPage';
+export { default as PaymentCategoriesPage } from './PaymentCategoriesPage';
+export { default as IndustryTemplatesPage } from './IndustryTemplatesPage';
+export { default as TenantLabelConfigPage } from './TenantLabelConfigPage';
+export { default as PipelineSettingsPage } from './PipelineSettingsPage';
+export { default as TagManagementPage } from './TagManagementPage';
+export { default as IndustrySettingsPage } from './IndustrySettingsPage';
+export { default as LeadManagementSettingsPage } from './LeadManagementSettingsPage';
+export { default as BranchesPage } from './BranchesPage';
+export { default as BranchFormPage } from './BranchFormPage';

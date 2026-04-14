@@ -134,6 +134,7 @@ export interface LeadStage {
   journeyOrder: number | null;
   icon: string | null;
   autoSyncStatus: string | null;
+  stageType: 'entry' | 'active' | 'won' | 'lost' | null;
   isSystemStage: boolean;
   isDefault: boolean;
   isActive: boolean;
@@ -157,14 +158,14 @@ export function getIndustryOptions(): IndustryConfig[] {
  * Check if a stage is a "lost" stage (negative journey order)
  */
 export function isLostStage(stage: LeadStage): boolean {
-  return (stage.journeyOrder || 0) < 0 || stage.autoSyncStatus === 'LOST';
+  return (stage.journeyOrder || 0) < 0 || stage.stageType === 'lost';
 }
 
 /**
  * Check if a stage is a "won" stage
  */
 export function isWonStage(stage: LeadStage): boolean {
-  return stage.autoSyncStatus === 'WON';
+  return stage.stageType === 'won';
 }
 
 /**

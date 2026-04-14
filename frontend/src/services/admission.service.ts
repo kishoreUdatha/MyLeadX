@@ -64,6 +64,7 @@ export interface AdmissionPayment {
   paymentMode?: 'CASH' | 'CHEQUE' | 'ONLINE' | 'UPI';
   referenceNumber?: string;
   paidAt?: string;
+  createdAt?: string;
   notes?: string;
   receiptUrl?: string;
   receivedBy?: {
@@ -100,6 +101,7 @@ export interface AdmissionFilters {
   commissionStatus?: string;
   academicYear?: string;
   closedById?: string;
+  branchId?: string;
   fromDate?: string;
   toDate?: string;
   search?: string;
@@ -135,6 +137,7 @@ export const admissionService = {
     if (filters.commissionStatus) params.append('commissionStatus', filters.commissionStatus);
     if (filters.academicYear) params.append('academicYear', filters.academicYear);
     if (filters.closedById) params.append('closedById', filters.closedById);
+    if (filters.branchId) params.append('branchId', filters.branchId);
     if (filters.fromDate) params.append('fromDate', filters.fromDate);
     if (filters.toDate) params.append('toDate', filters.toDate);
     if (filters.search) params.append('search', filters.search);

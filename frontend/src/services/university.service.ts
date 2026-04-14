@@ -67,7 +67,7 @@ export interface UniversityFilters {
 }
 
 export const universityService = {
-  async getAll(filters: UniversityFilters = {}) {
+  async getAll(filters: UniversityFilters = {}): Promise<{ universities: University[]; pagination: { page: number; limit: number; total: number; pages: number } }> {
     const params = new URLSearchParams();
     if (filters.search) params.append('search', filters.search);
     if (filters.type) params.append('type', filters.type);
@@ -77,7 +77,20 @@ export const universityService = {
     if (filters.limit) params.append('limit', String(filters.limit));
 
     const response = await api.get(`/universities?${params}`);
-    return response.data.data;
+    const data = response.data.data;
+
+    // Ensure we always return the expected structure
+    if (data && typeof data === 'object' && 'universities' in data) {
+      return data;
+    }
+
+    // Handle case where API returns array directly
+    if (Array.isArray(data)) {
+      return { universities: data, pagination: { page: 1, limit: data.length, total: data.length, pages: 1 } };
+    }
+
+    // Fallback to empty structure
+    return { universities: [], pagination: { page: 1, limit: 0, total: 0, pages: 0 } };
   },
 
   async getById(id: string) {

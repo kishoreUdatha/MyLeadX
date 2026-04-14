@@ -391,18 +391,21 @@ export default function AssignmentSchedulePage() {
                       <span>Next run: {formatDateTime(schedule.nextRunAt)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" style={{ opacity: 1, visibility: 'visible' }}>
                     <button
                       onClick={() => handleViewLogs(schedule.id)}
-                      className="btn btn-ghost btn-sm"
+                      className="px-3 py-1.5 text-sm font-medium rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300 flex items-center gap-1"
+                      style={{ opacity: 1, visibility: 'visible' }}
                       title="View Logs"
                     >
                       <ChartBarIcon className="w-4 h-4" />
+                      Logs
                     </button>
                     <button
                       onClick={() => handleRunNow(schedule.id)}
                       disabled={isRunning}
-                      className="btn btn-primary btn-sm"
+                      className="px-3 py-1.5 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 flex items-center gap-1"
+                      style={{ opacity: 1, visibility: 'visible' }}
                       title="Run Now"
                     >
                       {isRunning ? (
@@ -414,17 +417,21 @@ export default function AssignmentSchedulePage() {
                     </button>
                     <button
                       onClick={() => handleOpenModal(schedule)}
-                      className="btn btn-ghost btn-sm"
+                      className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
+                      style={{ opacity: 1, visibility: 'visible' }}
                       title="Edit"
                     >
                       <PencilIcon className="w-4 h-4" />
+                      Edit
                     </button>
                     <button
                       onClick={() => handleDelete(schedule.id)}
-                      className="btn btn-ghost btn-sm text-danger-600"
+                      className="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 flex items-center gap-1"
+                      style={{ opacity: 1, visibility: 'visible' }}
                       title="Delete"
                     >
                       <TrashIcon className="w-4 h-4" />
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -484,7 +491,7 @@ export default function AssignmentSchedulePage() {
               {/* Schedule Times */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Schedule Times
+                  Run Times <span className="text-xs text-slate-500 font-normal">(Click Add after entering time)</span>
                 </label>
                 <div className="flex gap-2 mb-2">
                   <input
@@ -493,11 +500,14 @@ export default function AssignmentSchedulePage() {
                     onChange={(e) => setNewTime(e.target.value)}
                     className="input"
                   />
-                  <button onClick={addScheduleTime} className="btn btn-secondary">
+                  <button onClick={addScheduleTime} className="btn btn-primary">
                     <PlusIcon className="w-4 h-4" />
                     Add
                   </button>
                 </div>
+                {formData.scheduleTimes.length === 0 && (
+                  <p className="text-sm text-amber-600 mb-2">No times scheduled. Add at least one time.</p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {formData.scheduleTimes.map((time) => (
                     <span
@@ -508,6 +518,7 @@ export default function AssignmentSchedulePage() {
                       <button
                         onClick={() => removeScheduleTime(time)}
                         className="hover:text-primary-900"
+                        title="Remove this time"
                       >
                         <XCircleIcon className="w-4 h-4" />
                       </button>
