@@ -12,6 +12,19 @@ interface ParsedLead {
   phone: string;
   alternatePhone?: string;
   notes?: string;
+  // Extended fields for proper data mapping
+  fatherName?: string;
+  motherName?: string;
+  fatherPhone?: string;
+  motherPhone?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  companyName?: string; // Used for college/institution name
   customFields?: Record<string, unknown>;
 }
 
@@ -35,6 +48,19 @@ interface LeadWithAssignment {
   source: LeadSource;
   priority: LeadPriority;
   notes?: string;
+  // Extended fields
+  fatherName?: string;
+  motherName?: string;
+  fatherPhone?: string;
+  motherPhone?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  company?: string;
   customFields: Record<string, unknown>;
   counselorId?: string;
 }
@@ -154,7 +180,7 @@ export class BulkUploadService {
         'applicant name', 'applicant_name', 'lead name', 'lead_name', 'customer name',
         'customer_name', 'person name', 'contact name', 'contact_name', 'naam',
         'student', 'candidate', 'applicant', 'person', 'user', 'user_name', 'username',
-        'stu_name', 'stuname', 'fname', 'f_name', 'f name'
+        'stu_name', 'stuname'
       ],
       lastName: ['last_name', 'lastname', 'last name', 'surname', 'family name', 'family_name'],
       email: [
@@ -169,18 +195,68 @@ export class BulkUploadService {
         'student phone', 'student_phone', 'student mobile', 'student_mobile',
         'whatsapp', 'whatsapp_number', 'whatsapp number', 'wa number', 'wa_number',
         'mobile no', 'mobile_no', 'phone no', 'phone_no', 'contact no', 'contact_no',
-        'mob', 'mob_no', 'mob no', 'ph', 'ph_no', 'ph no', 'number', 'no', 'mobile1', 'phone1',
+        'mob', 'mob_no', 'mob no', 'ph', 'ph_no', 'ph no', 'number', 'mobile1', 'phone1',
         'stu_mobileno', 'stumobileno', 'stu mobileno', 'stu_mobile', 'stumobile', 'stu mobile',
         'mobileno', 'mobile_no', 'phoneno'
       ],
       alternatePhone: [
         'alternate_phone', 'alternate phone', 'secondary phone', 'secondary_phone', 'alt_phone',
         'alternate mobile', 'alternate_mobile', 'phone2', 'mobile2', 'other phone', 'other_phone',
-        'parent phone', 'parent_phone', 'father phone', 'father_phone', 'mother phone', 'mother_phone',
         'guardian phone', 'guardian_phone', 'emergency contact', 'emergency_contact'
       ],
       notes: ['notes', 'comments', 'remarks', 'description', 'note', 'comment', 'remark'],
+      // Education-specific field mappings
+      fatherName: [
+        'fname', 'f_name', 'f name', 'father name', 'father_name', 'fathername',
+        'father', 'dad name', 'dad_name', 'parent name', 'parent_name'
+      ],
+      motherName: [
+        'mname', 'm_name', 'm name', 'mother name', 'mother_name', 'mothername',
+        'mother', 'mom name', 'mom_name'
+      ],
+      fatherPhone: [
+        'father phone', 'father_phone', 'fatherphone', 'father mobile', 'father_mobile',
+        'fathermobile', 'parent phone', 'parent_phone', 'parent mobile', 'parent_mobile'
+      ],
+      motherPhone: [
+        'mother phone', 'mother_phone', 'motherphone', 'mother mobile', 'mother_mobile',
+        'mothermobile'
+      ],
+      gender: ['gender', 'sex', 'male/female', 'm/f'],
+      dateOfBirth: [
+        'dob', 'date of birth', 'date_of_birth', 'dateofbirth', 'birth date', 'birth_date',
+        'birthdate', 'birthday'
+      ],
+      address: [
+        'address', 'full address', 'full_address', 'street address', 'street_address',
+        'stu_address', 'stuaddress', 'student address', 'student_address',
+        'hno', 'house no', 'house_no', 'houseno', 'street', 'locality', 'area'
+      ],
+      city: ['city', 'town', 'village', 'stu_dist_name', 'district', 'dist'],
+      state: ['state', 'province', 'region'],
+      pincode: [
+        'pincode', 'pin code', 'pin_code', 'zip', 'zipcode', 'zip code', 'zip_code',
+        'postal code', 'postal_code', 'postalcode'
+      ],
+      country: ['country', 'nation'],
+      companyName: [
+        'collegename', 'college name', 'college_name', 'institution', 'institution name',
+        'institution_name', 'school', 'school name', 'school_name', 'university',
+        'university name', 'university_name', 'company', 'company name', 'company_name',
+        'organization', 'org', 'org name', 'org_name'
+      ],
     };
+
+    // Fields to exclude from customFields (internal/technical codes)
+    const excludeFromCustomFields = new Set([
+      'college_code', 'collegecode', 'new_coll_code', 'newcollcode', 'new coll code',
+      'collegedistrict', 'college district', 'college_district',
+      'rollno', 'roll no', 'roll_no', 'roll number', 'roll_number',
+      'admission_no', 'admissionno', 'admission no', 'admission number',
+      'category', 'caste', 'religion', 'nationality', 'blood_group', 'bloodgroup',
+      'aadhar', 'aadhaar', 'aadhar_no', 'aadhaar_no', 'pan', 'pan_no',
+      'serial', 'sr_no', 'srno', 'sl_no', 'slno', 's_no', 'sno', 'id', 'row_id',
+    ]);
 
     // First pass: detect column types from values if headers don't match
     const detectedColumns = this.detectColumnTypes(data);
@@ -235,10 +311,14 @@ export class BulkUploadService {
         }
       }
 
-      // Collect remaining fields as custom fields
+      // Collect remaining fields as custom fields (excluding technical/internal codes)
       for (const [key, value] of Object.entries(row)) {
         if (!usedKeys.has(key) && value) {
-          customFields[key] = value;
+          const keyLower = key.toLowerCase().trim().replace(/[\s_-]+/g, '_');
+          // Skip technical/internal fields
+          if (!excludeFromCustomFields.has(keyLower) && !excludeFromCustomFields.has(key.toLowerCase().trim())) {
+            customFields[key] = value;
+          }
         }
       }
 
@@ -507,8 +587,21 @@ export class BulkUploadService {
         phone: lead.phone,
         alternatePhone: lead.alternatePhone,
         source: LeadSource.BULK_UPLOAD,
-                priority: LeadPriority.MEDIUM,
+        priority: LeadPriority.MEDIUM,
         notes: lead.notes,
+        // Extended fields
+        fatherName: lead.fatherName,
+        motherName: lead.motherName,
+        fatherPhone: lead.fatherPhone,
+        motherPhone: lead.motherPhone,
+        gender: lead.gender,
+        dateOfBirth: lead.dateOfBirth,
+        address: lead.address,
+        city: lead.city,
+        state: lead.state,
+        pincode: lead.pincode,
+        country: lead.country,
+        companyName: lead.companyName,
         customFields: lead.customFields || {},
       }));
     }
@@ -527,8 +620,21 @@ export class BulkUploadService {
         phone: lead.phone,
         alternatePhone: lead.alternatePhone,
         source: LeadSource.BULK_UPLOAD,
-                priority: LeadPriority.MEDIUM,
+        priority: LeadPriority.MEDIUM,
         notes: lead.notes,
+        // Extended fields
+        fatherName: lead.fatherName,
+        motherName: lead.motherName,
+        fatherPhone: lead.fatherPhone,
+        motherPhone: lead.motherPhone,
+        gender: lead.gender,
+        dateOfBirth: lead.dateOfBirth,
+        address: lead.address,
+        city: lead.city,
+        state: lead.state,
+        pincode: lead.pincode,
+        country: lead.country,
+        companyName: lead.companyName,
         customFields: lead.customFields || {},
         counselorId: counselors[counselorIndex].id,
       };

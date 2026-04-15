@@ -157,12 +157,34 @@ export function OverviewTab({ lead, onEdit }: OverviewTabProps) {
   };
 
   const excludedCustomKeys = new Set([
+    // Standard lead fields (already shown in other sections)
     'gender', 'dateOfBirth', 'firstName', 'lastName', 'fullName', 'name', 'email',
     'fatherName', 'fatherPhone', 'father_name', 'father_phone',
     'motherName', 'motherPhone', 'mother_name', 'mother_phone',
     'whatsapp', 'preferredContactMethod', 'preferredContactTime',
     'preferred_contact_method', 'preferred_contact_time',
     'lastTelecallerCall', 'lastCallSummary', 'callHistory',
+    // CSV import fields that should be mapped to standard fields
+    'FNAME', 'MNAME', 'HNO', 'STREET', 'PINCODE', 'GENDER',
+    'fname', 'mname', 'hno', 'street', 'pincode',
+    'STU_ADDRESS', 'stu_address', 'STU_DIST_NAME', 'stu_dist_name',
+    'COLLEGENAME', 'collegename', 'college_name',
+    // Technical/internal codes (not useful for telecallers)
+    'COLLEGE_CODE', 'college_code', 'collegecode',
+    'NEW_COLL_CODE', 'new_coll_code', 'newcollcode',
+    'COLLEGEDISTRICT', 'collegedistrict', 'college_district',
+    'ROLLNO', 'rollno', 'roll_no', 'ROLL_NO',
+    'CATEGORY', 'category', 'CASTE', 'caste',
+    'ADMISSION_NO', 'admission_no', 'admissionno',
+    'COURSE_NAME', 'course_name', 'COURSE_CODE', 'course_code',
+    'MEDIUM', 'medium', 'BATCH', 'batch', 'SECTION', 'section',
+    'YEAR', 'year', 'SEMESTER', 'semester',
+    'SERIAL', 'serial', 'SR_NO', 'sr_no', 'SL_NO', 'sl_no', 'S_NO', 's_no',
+    'AADHAR', 'aadhar', 'AADHAAR', 'aadhaar', 'PAN', 'pan',
+    'RELIGION', 'religion', 'NATIONALITY', 'nationality',
+    'BLOOD_GROUP', 'blood_group', 'bloodgroup',
+    'DOB', 'dob', 'AGE', 'age',
+    'DISTRICT', 'district', 'STATE', 'state', 'COUNTRY', 'country',
   ]);
 
   const formatCustomValue = (val: any): string => {
