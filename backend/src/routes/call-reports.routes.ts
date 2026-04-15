@@ -274,4 +274,23 @@ router.get(
   }
 );
 
+/**
+ * GET /call-reports/failure-analysis
+ * Get AI-powered failure analysis report for non-converted calls
+ */
+router.get(
+  '/failure-analysis',
+  validate(filterValidation),
+  async (req: TenantRequest, res: Response) => {
+    try {
+      const filters = parseFilters(req);
+      const data = await callReportsService.getFailureAnalysisReport(filters);
+      return ApiResponse.success(res, data);
+    } catch (error: any) {
+      console.error('[CallReports] Failure analysis error:', error);
+      return ApiResponse.error(res, error.message, 500);
+    }
+  }
+);
+
 export default router;

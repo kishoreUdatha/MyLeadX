@@ -19,7 +19,7 @@ import OpenAI from 'openai';
 import { CallOutcome } from '@prisma/client';
 import { prisma } from '../config/database';
 import { leadLifecycleService } from './lead-lifecycle.service';
-import { analyzeCallEnhanced, generateCoachingSuggestions, extractCallData, EnhancedCallAnalysisResult, CoachingSuggestions, ExtractedCallData } from './voicebot-ai.service';
+import { analyzeCallEnhanced, generateCoachingSuggestions, extractCallData, analyzeCallFailure, shouldAnalyzeFailure, EnhancedCallAnalysisResult, CoachingSuggestions, ExtractedCallData, CallFailureAnalysis } from './voicebot-ai.service';
 import { callAnalyticsService } from './call-analytics.service';
 import { postCallWhatsAppService } from './post-call-whatsapp.service';
 
@@ -97,7 +97,25 @@ class CallFinalizationService {
       callbackRequested: extractedData.callbackRequested,
     });
 
-    // Update call with all analysis results (basic + enhanced + coaching + extracted data)
+    // === FAILURE ANALYSIS (Isolated Feature) ===
+    // Only analyze non-won calls to understand why they didn't convert
+    let failureAnalysis: CallFailureAnalysis | null = null;
+    if (shouldAnalyzeFailure(enhancedAnalysis.outcome)) {
+      console.log(`[CallFinalization] Running failure analysis for non-won outcome: ${enhancedAnalysis.outcome}`);
+      failureAnalysis = await analyzeCallFailure(
+        transcript,
+        enhancedAnalysis.outcome,
+        enhancedAnalysis.sentiment
+      );
+      console.log(`[CallFinalization] Failure analysis complete:`, {
+        primaryReason: failureAnalysis.primaryReason,
+        confidence: failureAnalysis.primaryReasonConfidence,
+        recoveryProbability: failureAnalysis.recoveryProbability,
+        objectionsCount: failureAnalysis.customerObjections.length,
+      });
+    }
+
+    // Update call with all analysis results (basic + enhanced + coaching + extracted data + failure analysis)
     const updatedCall = await prisma.outboundCall.update({
       where: { id: callId },
       data: {
@@ -128,11 +146,25 @@ class CallFinalizationService {
 
         // Extracted structured data from conversation
         extractedData: extractedData as any,
+
+        // Failure Analysis fields (only populated for non-won calls)
+        ...(failureAnalysis && {
+          failurePrimaryReason: failureAnalysis.primaryReason,
+          failurePrimaryReasonConfidence: failureAnalysis.primaryReasonConfidence,
+          failureWhyNotConverted: failureAnalysis.whyNotConverted,
+          failureSecondaryReasons: failureAnalysis.secondaryReasons,
+          failureCustomerObjections: failureAnalysis.customerObjections,
+          failureKeyMoments: failureAnalysis.keyMoments as any,
+          failureMissedOpportunities: failureAnalysis.missedOpportunities as any,
+          failureRecoveryActions: failureAnalysis.recoveryActions as any,
+          failureRecoveryProbability: failureAnalysis.recoveryProbability,
+          failureSuggestedFollowUp: failureAnalysis.suggestedFollowUp,
+        }),
       },
       include: { agent: true },
     });
 
-    console.log(`[CallFinalization] Call ${callId} updated with enhanced analysis and coaching data`);
+    console.log(`[CallFinalization] Call ${callId} updated with enhanced analysis, coaching, and failure analysis data`);
 
     // Check if this call was for a RawImportRecord
     await this.updateRawImportRecordFromCall(updatedCall);

@@ -23,6 +23,7 @@ import {
   BoltIcon,
   ArrowTrendingUpIcon,
   Squares2X2Icon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 
 type Category = 'all' | 'analytics' | 'pipeline' | 'user' | 'campaign';
@@ -59,6 +60,16 @@ const reports: ReportItem[] = [
     path: '/reports/user-trends',
     color: 'text-indigo-600',
     bgColor: 'bg-indigo-50',
+  },
+  {
+    id: 'failure-analysis',
+    name: 'Call Failure Analysis',
+    description: 'AI-powered insights into why calls didn\'t convert',
+    category: 'analytics',
+    icon: ExclamationTriangleIcon,
+    path: '/reports/failure-analysis',
+    color: 'text-red-600',
+    bgColor: 'bg-red-50',
   },
   // Pipeline Reports
   {

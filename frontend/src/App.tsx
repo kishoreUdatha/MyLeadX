@@ -116,6 +116,8 @@ import {
   BusinessTrendsPage,
   // User Trends
   UserTrendsPage,
+  // Call Analysis Reports
+  FailureAnalysisReportPage,
 } from './pages/reports';
 import { RolesListPage } from './pages/roles';
 import { SocialMediaAdsPage, InstagramLeadSetupPage, AdIntegrationsPage, FacebookSetupPage, LinkedInSetupPage, GoogleAdsSetupPage, YouTubeSetupPage, TwitterSetupPage, TikTokSetupPage, WebhookUrlsPage } from './pages/ads';
@@ -587,6 +589,8 @@ function App() {
         <Route path="reports/business-trends" element={<BusinessTrendsPage />} />
         {/* User Trends */}
         <Route path="reports/user-trends" element={<UserTrendsPage />} />
+        {/* Call Analysis Reports */}
+        <Route path="reports/failure-analysis" element={<FailureAnalysisReportPage />} />
         <Route path="social-media-ads" element={<SocialMediaAdsPage />} />
         <Route path="ad-integrations" element={<AdIntegrationsPage />} />
         <Route path="webhook-urls" element={<WebhookUrlsPage />} />

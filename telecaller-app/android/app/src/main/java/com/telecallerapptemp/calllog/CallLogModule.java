@@ -54,7 +54,8 @@ public class CallLogModule extends ReactContextBaseJavaModule {
             // First try: Query for recent calls matching this number
             String selection = CallLog.Calls.NUMBER + " LIKE ?";
             String[] selectionArgs = { "%" + lastDigits };
-            String sortOrder = CallLog.Calls.DATE + " DESC LIMIT 1";
+            // Note: Don't use LIMIT in sortOrder - not supported on all Android versions
+            String sortOrder = CallLog.Calls.DATE + " DESC";
 
             Log.d(TAG, "Query selection: " + selection);
             Log.d(TAG, "Selection args: %" + lastDigits);
@@ -99,15 +100,17 @@ public class CallLogModule extends ReactContextBaseJavaModule {
                     projection,
                     null,
                     null,
-                    CallLog.Calls.DATE + " DESC LIMIT 5"
+                    CallLog.Calls.DATE + " DESC"
                 );
 
                 if (debugCursor != null) {
                     Log.d(TAG, "Recent calls in log:");
-                    while (debugCursor.moveToNext()) {
+                    int count = 0;
+                    while (debugCursor.moveToNext() && count < 5) {
                         Log.d(TAG, "  - " + debugCursor.getString(0) +
                             " duration=" + debugCursor.getInt(1) +
                             " type=" + debugCursor.getInt(2));
+                        count++;
                     }
                     debugCursor.close();
                 }

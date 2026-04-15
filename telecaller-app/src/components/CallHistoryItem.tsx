@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, NativeModules } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, NativeModules, NativeEventEmitter } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { Call, CallOutcome } from '../types';
@@ -41,14 +41,37 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
   const playerRef = useRef<any>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [playbackTime, setPlaybackTime] = useState(0);
+  const [totalDuration, setTotalDuration] = useState(call.duration || 0);
 
-  // Cleanup on unmount
+  // Cleanup on unmount and listen for playback completion
   useEffect(() => {
+    // Listen for playback completion from native
+    let completionListener: { remove: () => void } | null = null;
+    if (NativeModules.AudioPlayer) {
+      try {
+        const emitter = new NativeEventEmitter(NativeModules.AudioPlayer);
+        completionListener = emitter.addListener('onPlaybackComplete', () => {
+          console.log('[Audio] Playback completed');
+          setIsPlaying(false);
+          setPlaybackTime(0);
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          playerRef.current = null;
+        });
+      } catch (e) {
+        console.warn('[Audio] Could not set up completion listener:', e);
+      }
+    }
+
     return () => {
-      if (playerRef.current) {
+      if (completionListener) {
+        completionListener.remove();
+      }
+      if (playerRef.current && NativeModules.AudioPlayer) {
         try {
-          playerRef.current.stop();
-          playerRef.current.release();
+          NativeModules.AudioPlayer.stop();
         } catch (e) {}
         playerRef.current = null;
       }
@@ -66,16 +89,14 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
     if (isPlaying && playerRef.current) {
       // Pause
       try {
-        playerRef.current.pause();
+        if (NativeModules.AudioPlayer) {
+          await NativeModules.AudioPlayer.pause();
+        }
       } catch (e) {}
       setIsPlaying(false);
       if (timerRef.current) clearInterval(timerRef.current);
       return;
     }
-
-    // Use react-native's built-in fetch to download and play via native
-    // Since we don't have a dedicated audio library, use the AudioPlayer native module
-    // or fall back to downloading via RNFS and using Android intent
 
     try {
       setIsLoading(true);
@@ -84,18 +105,41 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
       if (NativeModules.AudioPlayer) {
         if (playerRef.current === 'loaded') {
           await NativeModules.AudioPlayer.resume();
-        } else {
-          await NativeModules.AudioPlayer.play(url);
-          playerRef.current = 'loaded';
-        }
-        setIsPlaying(true);
-        setIsLoading(false);
+          setIsPlaying(true);
+          setIsLoading(false);
 
-        // Track playback time
-        setPlaybackTime(0);
-        timerRef.current = setInterval(() => {
-          setPlaybackTime(prev => prev + 1);
-        }, 1000);
+          // Resume tracking playback time with actual position
+          timerRef.current = setInterval(async () => {
+            try {
+              const pos = await NativeModules.AudioPlayer.getCurrentPosition();
+              setPlaybackTime(Math.floor(pos));
+            } catch (e) {
+              setPlaybackTime(prev => prev + 1);
+            }
+          }, 1000);
+        } else {
+          // Play returns duration in seconds
+          const duration = await NativeModules.AudioPlayer.play(url);
+          playerRef.current = 'loaded';
+          setIsPlaying(true);
+          setIsLoading(false);
+
+          // Set total duration from audio file
+          if (duration > 0) {
+            setTotalDuration(Math.floor(duration));
+          }
+
+          // Track playback time with actual position
+          setPlaybackTime(0);
+          timerRef.current = setInterval(async () => {
+            try {
+              const pos = await NativeModules.AudioPlayer.getCurrentPosition();
+              setPlaybackTime(Math.floor(pos));
+            } catch (e) {
+              setPlaybackTime(prev => prev + 1);
+            }
+          }, 1000);
+        }
         return;
       }
 
@@ -118,7 +162,6 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
       const { Linking } = require('react-native');
 
       // Try to play using Android's built-in audio player
-      // For Android, we can use content:// URI or file:// URI
       const fileUri = `file://${localPath}`;
 
       // Use Android intent to play audio
@@ -136,10 +179,18 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
       setIsLoading(false);
       setIsPlaying(true);
 
-      // Auto-reset after estimated duration
-      setTimeout(() => {
-        setIsPlaying(false);
-      }, (call.duration || 30) * 1000);
+      // Track time with simple timer for external player
+      setPlaybackTime(0);
+      timerRef.current = setInterval(() => {
+        setPlaybackTime(prev => {
+          if (prev >= (call.duration || 30)) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            setIsPlaying(false);
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 1000);
 
     } catch (error) {
       console.error('[Audio] Playback error:', error);
@@ -156,13 +207,15 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
     }
   }, [call, isPlaying]);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
     if (NativeModules.AudioPlayer) {
-      try { NativeModules.AudioPlayer.stop(); } catch (e) {}
+      try {
+        await NativeModules.AudioPlayer.stop();
+      } catch (e) {
+        console.warn('[Audio] Stop error:', e);
+      }
     }
-    if (playerRef.current) {
-      playerRef.current = null;
-    }
+    playerRef.current = null;
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -251,7 +304,11 @@ const CallHistoryItem: React.FC<Props> = ({ call, onPress }) => {
                     color={isPlaying ? '#FFFFFF' : '#3B82F6'}
                   />
                   <Text style={[styles.playButtonText, isPlaying && styles.playButtonTextActive]}>
-                    {isPlaying ? `Playing ${formatTime(playbackTime)}` : 'Play Recording'}
+                    {isPlaying
+                      ? `${formatTime(playbackTime)} / ${formatTime(totalDuration)}`
+                      : totalDuration > 0
+                        ? `Play (${formatTime(totalDuration)})`
+                        : 'Play Recording'}
                   </Text>
                 </TouchableOpacity>
                 {isPlaying && (

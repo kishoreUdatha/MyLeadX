@@ -45,6 +45,95 @@ const LANGUAGE_ACKNOWLEDGMENTS: Record<string, string> = {
   'en': `Of course! I'll speak in English now. How can I help you?`,
 };
 
+/**
+ * Detect gender from Indian name
+ * Returns 'male', 'female', or 'unknown'
+ */
+export function detectGenderFromName(name: string | null | undefined): 'male' | 'female' | 'unknown' {
+  if (!name) return 'unknown';
+
+  const normalizedName = name.toLowerCase().trim();
+  const firstName = normalizedName.split(/\s+/)[0];
+
+  // Common Indian male name patterns and suffixes
+  const malePatterns = [
+    // Telugu/South Indian male names
+    /babu$/, /rao$/, /reddy$/, /naidu$/, /raju$/, /kumar$/, /prasad$/, /murthy$/, /swamy$/,
+    /appa$/, /anna$/, /garu$/, /aiah$/, /ayya$/,
+    // Hindi/North Indian male names
+    /singh$/, /raj$/, /dev$/, /nath$/, /pal$/, /ram$/, /lal$/, /chand$/,
+    // Common male first names
+    /^(ravi|srinivas|krishna|venkat|ramesh|suresh|mahesh|ganesh|naresh|rajesh|dinesh|mukesh)$/,
+    /^(anil|sunil|vijay|sanjay|ajay|vinay|pranay|akshay|uday|abhay)$/,
+    /^(mohan|rohan|sohan|kiran|charan|varun|arun|tarun)$/,
+    /^(baji|balu|venu|ramu|shyam|gopal|madhu|mani|hari|giri)$/,
+    /^(rahul|nikhil|akhil|sahil|vishal|kushal|kapil|vimal)$/,
+    /^(amit|sumit|rohit|mohit|ankit|nitin|sachin|hitesh|ritesh)$/,
+    /^(praveen|naveen|pawan|karan|arjun|varun|vikram|shivam)$/,
+  ];
+
+  // Common Indian female name patterns and suffixes
+  const femalePatterns = [
+    // Telugu/South Indian female names
+    /amma$/, /akka$/, /devi$/, /lakshmi$/, /sri$/, /kumari$/,
+    // Hindi/North Indian female names
+    /vati$/, /wati$/, /rani$/, /bai$/, /ben$/, /iben$/,
+    // Common female first names
+    /^(lakshmi|saraswati|parvati|durga|gayatri|savitri|sita|radha|gita)$/,
+    /^(priya|divya|kavya|shreya|sandhya|ramya|sowmya|lavanya|ananya)$/,
+    /^(anjali|sonali|swati|aarti|jyoti|preeti|smita|nita|sunita|anita)$/,
+    /^(pooja|neha|sneha|megha|diksha|nisha|asha|usha|shobha|rekha)$/,
+    /^(padma|kamala|pushpa|saroja|vijaya|jaya|sujata|mamta|kanta)$/,
+    /^(meena|seema|reema|neelam|poonam|sarita|geeta|suman|ritu)$/,
+    /^(bhavani|madhavi|radhika|chandrika|mallika|kalyani|vasantha)$/,
+  ];
+
+  // Check male patterns
+  for (const pattern of malePatterns) {
+    if (pattern.test(firstName) || pattern.test(normalizedName)) {
+      return 'male';
+    }
+  }
+
+  // Check female patterns
+  for (const pattern of femalePatterns) {
+    if (pattern.test(firstName) || pattern.test(normalizedName)) {
+      return 'female';
+    }
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Get gender-aware pronouns for the given language
+ */
+function getGenderContext(gender: 'male' | 'female' | 'unknown', language?: string): string {
+  if (gender === 'unknown') return '';
+
+  const lang = language?.toLowerCase()?.replace('-in', '') || 'en';
+
+  if (gender === 'male') {
+    const malePronouns: Record<string, string> = {
+      'te': 'Customer is MALE. Use అతను (atanu/he), అతని (atani/his), అతనికి (ataniki/him). NEVER use ఆమె (she).',
+      'hi': 'Customer is MALE. Use वह (vah/he), उसका (uska/his), उसे (use/him). NEVER use वह (she) with feminine context.',
+      'ta': 'Customer is MALE. Use அவன் (avan/he), அவனது (avanatu/his). NEVER use அவள் (she).',
+      'kn': 'Customer is MALE. Use ಅವನು (avanu/he), ಅವನ (avana/his). NEVER use ಅವಳು (she).',
+      'en': 'Customer is MALE. Use he/him/his pronouns. NEVER use she/her.',
+    };
+    return malePronouns[lang] || malePronouns['en'];
+  } else {
+    const femalePronouns: Record<string, string> = {
+      'te': 'Customer is FEMALE. Use ఆమె (aame/she), ఆమె (aame/her), ఆమెకు (aameku/her). NEVER use అతను (he).',
+      'hi': 'Customer is FEMALE. Use वह (vah/she), उसकी (uski/her), उसे (use/her). NEVER use masculine forms.',
+      'ta': 'Customer is FEMALE. Use அவள் (aval/she), அவளது (avalatu/her). NEVER use அவன் (he).',
+      'kn': 'Customer is FEMALE. Use ಅವಳು (avalu/she), ಅವಳ (avala/her). NEVER use ಅವನು (he).',
+      'en': 'Customer is FEMALE. Use she/her/hers pronouns. NEVER use he/him.',
+    };
+    return femalePronouns[lang] || femalePronouns['en'];
+  }
+}
+
 export interface LanguageSwitchResult {
   switchRequested: boolean;
   newLanguage: string | null;
@@ -109,6 +198,72 @@ export interface CoachingSuggestions {
   objectionHandlingScore: number;
   // Closing technique score (0-100)
   closingScore: number;
+}
+
+// =====================
+// Call Failure Analysis Types (Isolated Feature)
+// Analyzes why non-won calls didn't convert
+// =====================
+
+export type FailureReasonCategory =
+  | 'price'           // Too expensive, budget constraints
+  | 'timing'          // Not ready now, call back later
+  | 'authority'       // Need to consult decision maker
+  | 'competitor'      // Using/considering another solution
+  | 'no_need'         // Don't need the product/service
+  | 'trust'           // Need references, demos, more info
+  | 'missing_info'    // Unclear benefits, need details
+  | 'not_interested'  // Flat rejection
+  | 'unreachable'     // No answer, wrong number
+  | 'other';          // Uncategorized
+
+export interface KeyMoment {
+  timestamp: number;        // seconds into call
+  type: 'objection' | 'hesitation' | 'missed_opportunity' | 'positive' | 'negative';
+  quote: string;            // actual words from transcript
+  analysis: string;         // AI interpretation
+}
+
+export interface MissedOpportunity {
+  issue: string;            // What agent missed
+  betterResponse: string;   // Suggested alternative
+  timestamp?: number;
+}
+
+export interface RecoveryAction {
+  action: string;           // What to do
+  priority: 'high' | 'medium' | 'low';
+  timeframe: string;        // "within 24 hours", "in 3 days"
+}
+
+export interface CallFailureAnalysis {
+  // Primary failure reason
+  primaryReason: FailureReasonCategory;
+  primaryReasonConfidence: number;  // 0-100
+
+  // AI-generated explanation
+  whyNotConverted: string;
+
+  // Secondary factors
+  secondaryReasons: FailureReasonCategory[];
+
+  // Customer objections extracted from transcript
+  customerObjections: string[];
+
+  // Key moments in the call
+  keyMoments: KeyMoment[];
+
+  // What agent could have done better
+  missedOpportunities: MissedOpportunity[];
+
+  // Recommended recovery actions
+  recoveryActions: RecoveryAction[];
+
+  // Recovery probability (0-100)
+  recoveryProbability: number;
+
+  // Suggested follow-up timeframe
+  suggestedFollowUp: string;
 }
 
 // Smart Call Prep Types
@@ -574,7 +729,8 @@ export async function analyzeCall(
   transcript: Array<{ role: string; content: string }>,
   moodHistory: Array<{ mood: string; timestamp: string }>,
   userMood: string,
-  outputLanguage?: string
+  outputLanguage?: string,
+  customerName?: string | null
 ): Promise<CallAnalysisResult> {
   const defaultResult: CallAnalysisResult = {
     summary: '',
@@ -594,6 +750,11 @@ export async function analyzeCall(
   try {
     const transcriptText = transcript.map(t => `${t.role}: ${t.content}`).join('\n');
     const moodHistoryText = moodHistory.map(m => `${m.mood} at ${m.timestamp}`).join(' → ') || 'neutral throughout';
+
+    // Detect customer gender from name for correct pronouns
+    const customerGender = detectGenderFromName(customerName);
+    const genderContext = getGenderContext(customerGender, outputLanguage);
+    const genderDirective = genderContext ? `\n\nCRITICAL GENDER INSTRUCTION: ${genderContext}` : '';
 
     const response = await openai.chat.completions.create({
       model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
@@ -622,7 +783,7 @@ OUTCOME CLASSIFICATION RULES:
 - NEEDS_FOLLOWUP: ONLY when none of the above apply
 
 Mood history during call: ${moodHistoryText}
-Current mood: ${userMood}${languageDirective(outputLanguage)}`,
+Current mood: ${userMood}${genderDirective}${languageDirective(outputLanguage)}`,
         },
         {
           role: 'user',
@@ -697,10 +858,11 @@ export async function analyzeCallEnhanced(
   moodHistory: Array<{ mood: string; timestamp: string }>,
   userMood: string,
   totalDuration: number = 0,
-  outputLanguage?: string
+  outputLanguage?: string,
+  customerName?: string | null
 ): Promise<EnhancedCallAnalysisResult> {
-  // Get basic analysis first (also localized)
-  const basicAnalysis = await analyzeCall(transcript, moodHistory, userMood, outputLanguage);
+  // Get basic analysis first (also localized), pass customer name for gender-aware pronouns
+  const basicAnalysis = await analyzeCall(transcript, moodHistory, userMood, outputLanguage, customerName);
 
   // Calculate speaking times
   const speakingTimes = estimateSpeakingTimes(transcript, totalDuration || 120);
@@ -1257,6 +1419,176 @@ If no relevant data found, return empty items array.${languageDirective(outputLa
   }
 }
 
+// =====================
+// Call Failure Analysis (Isolated Feature)
+// Analyzes why non-won calls didn't convert
+// Only called for non-positive outcomes
+// =====================
+
+const NON_CONVERTIBLE_OUTCOMES = [
+  'NOT_INTERESTED',
+  'NEEDS_FOLLOWUP',
+  'CALLBACK_REQUESTED',
+  'NO_ANSWER',
+  'VOICEMAIL',
+  'WRONG_NUMBER',
+  'BUSY',
+  'DROPPED',
+  'DNC_REQUESTED',
+  'DO_NOT_CALL',
+];
+
+/**
+ * Analyze why a call didn't convert
+ * Only called for non-won calls to provide actionable insights
+ *
+ * @param transcript - Call transcript
+ * @param outcome - Call outcome (NOT_INTERESTED, NEEDS_FOLLOWUP, etc.)
+ * @param sentiment - Overall sentiment
+ * @param outputLanguage - Language for output
+ * @returns CallFailureAnalysis with reasons, objections, and recovery actions
+ */
+export async function analyzeCallFailure(
+  transcript: Array<{ role: string; content: string; startTimeSeconds?: number }>,
+  outcome: string,
+  sentiment: string,
+  outputLanguage?: string
+): Promise<CallFailureAnalysis> {
+  const defaultResult: CallFailureAnalysis = {
+    primaryReason: 'other',
+    primaryReasonConfidence: 50,
+    whyNotConverted: 'Unable to determine why the call did not convert.',
+    secondaryReasons: [],
+    customerObjections: [],
+    keyMoments: [],
+    missedOpportunities: [],
+    recoveryActions: [],
+    recoveryProbability: 50,
+    suggestedFollowUp: 'Follow up in 3-5 days',
+  };
+
+  // Skip analysis for positive outcomes
+  if (!NON_CONVERTIBLE_OUTCOMES.includes(outcome)) {
+    return defaultResult;
+  }
+
+  if (!openai || transcript.length === 0) {
+    return defaultResult;
+  }
+
+  try {
+    const transcriptText = transcript.map((t, i) => {
+      const time = t.startTimeSeconds ? `[${Math.floor(t.startTimeSeconds)}s]` : `[${i}]`;
+      return `${time} ${t.role === 'assistant' ? 'AGENT' : 'CUSTOMER'}: ${t.content}`;
+    }).join('\n');
+
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert sales analyst examining why a sales call didn't convert.
+Analyze the conversation to identify the root causes and provide actionable recovery insights.
+
+Call Outcome: ${outcome}
+Customer Sentiment: ${sentiment}
+
+FAILURE REASON CATEGORIES:
+- "price": Customer found it too expensive or has budget constraints
+- "timing": Customer not ready now, needs more time, asked to call back later
+- "authority": Customer needs to consult manager/spouse/team before deciding
+- "competitor": Customer using or considering another solution
+- "no_need": Customer doesn't need the product/service
+- "trust": Customer skeptical, needs references/demos/proof
+- "missing_info": Customer needs more details, unclear on benefits
+- "not_interested": Flat rejection, no specific reason given
+- "unreachable": No meaningful conversation (no answer, wrong number)
+- "other": Doesn't fit other categories
+
+Return JSON:
+{
+  "primaryReason": "one of the categories above",
+  "primaryReasonConfidence": 0-100,
+  "whyNotConverted": "2-3 sentence natural explanation of why the call didn't convert",
+  "secondaryReasons": ["additional factors if any"],
+  "customerObjections": ["exact or paraphrased objections the customer raised"],
+  "keyMoments": [
+    {
+      "timestamp": seconds_into_call,
+      "type": "objection|hesitation|missed_opportunity|positive|negative",
+      "quote": "what was said",
+      "analysis": "why this moment matters"
+    }
+  ],
+  "missedOpportunities": [
+    {
+      "issue": "what the agent missed or could have done better",
+      "betterResponse": "suggested alternative response",
+      "timestamp": seconds_if_known
+    }
+  ],
+  "recoveryActions": [
+    {
+      "action": "specific action to take",
+      "priority": "high|medium|low",
+      "timeframe": "when to do it"
+    }
+  ],
+  "recoveryProbability": 0-100,
+  "suggestedFollowUp": "when and how to follow up"
+}
+
+GUIDELINES:
+- Be specific and actionable, not generic
+- Quote actual customer words when possible
+- Focus on what can be changed/improved
+- Recovery probability: 70+ = good chance, 40-70 = possible, <40 = unlikely
+- If outcome is NO_ANSWER/WRONG_NUMBER, focus on contact issues not sales issues
+- Identify 2-4 key moments that shaped the call outcome${languageDirective(outputLanguage)}`,
+        },
+        {
+          role: 'user',
+          content: transcriptText,
+        },
+      ],
+      max_tokens: 1500,
+      response_format: { type: 'json_object' },
+    });
+
+    const analysis = JSON.parse(response.choices[0]?.message?.content || '{}');
+
+    console.log('[AIService] Call failure analysis generated:', {
+      primaryReason: analysis.primaryReason,
+      confidence: analysis.primaryReasonConfidence,
+      recoveryProbability: analysis.recoveryProbability,
+      objectionsCount: analysis.customerObjections?.length || 0,
+    });
+
+    return {
+      primaryReason: analysis.primaryReason || 'other',
+      primaryReasonConfidence: analysis.primaryReasonConfidence || 50,
+      whyNotConverted: analysis.whyNotConverted || defaultResult.whyNotConverted,
+      secondaryReasons: analysis.secondaryReasons || [],
+      customerObjections: analysis.customerObjections || [],
+      keyMoments: analysis.keyMoments || [],
+      missedOpportunities: analysis.missedOpportunities || [],
+      recoveryActions: analysis.recoveryActions || [],
+      recoveryProbability: analysis.recoveryProbability || 50,
+      suggestedFollowUp: analysis.suggestedFollowUp || 'Follow up in 3-5 days',
+    };
+  } catch (error) {
+    console.error('[AIService] Call failure analysis error:', error);
+    return defaultResult;
+  }
+}
+
+/**
+ * Check if an outcome is considered "non-won" and should trigger failure analysis
+ */
+export function shouldAnalyzeFailure(outcome: string): boolean {
+  return NON_CONVERTIBLE_OUTCOMES.includes(outcome);
+}
+
 export const voicebotAIService = {
   generateAIResponse,
   extractQualificationData,
@@ -1267,6 +1599,9 @@ export const voicebotAIService = {
   extractCallData,
   detectLanguageSwitch,
   getLanguageAcknowledgment,
+  // Failure Analysis (isolated feature)
+  analyzeCallFailure,
+  shouldAnalyzeFailure,
   LANGUAGE_NAMES,
   LANGUAGE_ACKNOWLEDGMENTS,
 };

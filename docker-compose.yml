@@ -51,6 +51,14 @@ services:
       VOICE_PROVIDER: ${VOICE_PROVIDER:-twilio}
       # OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      OPENAI_STT_MODEL: ${OPENAI_STT_MODEL:-whisper-1}
+      # Sarvam AI - Indian Language Support
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      SARVAM_API_URL: ${SARVAM_API_URL:-https://api.sarvam.ai}
+      # HuggingFace - Indian Language STT (AI4Bharat)
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
+      HUGGINGFACE_API_URL: ${HUGGINGFACE_API_URL:-https://api-inference.huggingface.co}
       # Razorpay
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}

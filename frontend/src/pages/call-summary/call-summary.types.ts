@@ -93,6 +93,8 @@ export interface EnhancedCallDetails {
   currentCallNumber?: number;
   totalCallsToLead?: number;
   isFollowUpCall?: boolean;
+  // Failure analysis (only for non-won calls)
+  failureAnalysis?: CallFailureAnalysis;
 }
 
 export interface SpeakingTimeBreakdown {
@@ -136,4 +138,53 @@ export interface LeadJourneyCall {
   followUpNumber: number;
   agentName: string;
   extractedData?: ExtractedCallData | null;
+}
+
+// =====================
+// Failure Analysis Types (Isolated Feature)
+// Only shown for non-won calls
+// =====================
+
+export type FailureReasonCategory =
+  | 'price'
+  | 'timing'
+  | 'authority'
+  | 'competitor'
+  | 'no_need'
+  | 'trust'
+  | 'missing_info'
+  | 'not_interested'
+  | 'unreachable'
+  | 'other';
+
+export interface KeyMoment {
+  timestamp: number;
+  type: 'objection' | 'hesitation' | 'missed_opportunity' | 'positive' | 'negative';
+  quote: string;
+  analysis: string;
+}
+
+export interface MissedOpportunity {
+  issue: string;
+  betterResponse: string;
+  timestamp?: number;
+}
+
+export interface RecoveryAction {
+  action: string;
+  priority: 'high' | 'medium' | 'low';
+  timeframe: string;
+}
+
+export interface CallFailureAnalysis {
+  primaryReason: FailureReasonCategory;
+  primaryReasonConfidence: number;
+  whyNotConverted: string;
+  secondaryReasons: FailureReasonCategory[];
+  customerObjections: string[];
+  keyMoments: KeyMoment[];
+  missedOpportunities: MissedOpportunity[];
+  recoveryActions: RecoveryAction[];
+  recoveryProbability: number;
+  suggestedFollowUp: string;
 }

@@ -14,6 +14,7 @@ import com.telecallerapptemp.calllog.CallLogPackage
 import com.telecallerapptemp.accessibility.AccessibilityPackage
 import com.telecallerapptemp.audioplayer.AudioPlayerPackage
 import com.telecallerapptemp.storage.StoragePermissionPackage
+import com.telecallerapptemp.upload.BackgroundUploadPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -27,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
           add(AccessibilityPackage())
           add(AudioPlayerPackage())
           add(StoragePermissionPackage())
+          add(BackgroundUploadPackage())
         }
 
       override fun getJSMainModuleName(): String = "index"

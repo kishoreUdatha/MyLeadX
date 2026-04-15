@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 // Get API URL from app config (can be overridden via environment variables)
 // For physical device testing, use PC's local IP
 // Hardcoding IP for physical device testing (phone must be on same WiFi)
-const API_BASE_URL = 'http://192.168.29.116:3001/api';
+const API_BASE_URL = 'http://localhost:3001/api';
 
 console.log('[API] Base URL:', API_BASE_URL);
 

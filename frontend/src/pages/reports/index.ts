@@ -35,3 +35,6 @@ export { default as BusinessTrendsPage } from './BusinessTrendsPage';
 
 // User Trends
 export { default as UserTrendsPage } from './UserTrendsPage';
+
+// Call Analysis Reports
+export { default as FailureAnalysisReportPage } from './FailureAnalysisReportPage';

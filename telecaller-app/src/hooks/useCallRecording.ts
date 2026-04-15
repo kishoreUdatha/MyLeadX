@@ -17,6 +17,7 @@ import { Lead, CallOutcome, StartCallPayload, UpdateCallPayload } from '../types
 
 // Offline services
 import { offlineQueue, recordingBackupService } from '../services';
+import { backgroundUploadService } from '../services/backgroundUpload';
 
 // Native module interface (will be implemented in Java)
 interface CallRecordingModuleType {
@@ -329,9 +330,9 @@ export const useCallRecording = (): UseCallRecordingReturn => {
       }
     }
 
-    // Auto-upload recording for AI analysis using offline queue
+    // Auto-upload recording for AI analysis
     if (finalRecordingPath && currentCall?.id) {
-      console.log('[useCallRecording] ========== QUEUING RECORDING UPLOAD ==========');
+      console.log('[useCallRecording] ========== UPLOADING RECORDING ==========');
       console.log('[useCallRecording] Call ID:', currentCall.id);
       console.log('[useCallRecording] Recording path:', finalRecordingPath);
       console.log('[useCallRecording] Duration:', finalDuration);
@@ -358,7 +359,37 @@ export const useCallRecording = (): UseCallRecordingReturn => {
         })
       );
 
-      // STEP 3: Add to offline queue (handles retries & offline sync)
+      // STEP 3: Try background upload service first (most reliable for background uploads)
+      if (backgroundUploadService.isAvailable()) {
+        console.log('[useCallRecording] Using background upload service');
+        const started = await backgroundUploadService.uploadRecording(
+          finalRecordingPath,
+          currentCall.id,
+          null, // No dataId for regular leads
+          finalDuration,
+          {
+            onSuccess: (callId, recordingUrl) => {
+              console.log('[useCallRecording] Background upload success:', recordingUrl);
+            },
+            onError: (callId, error) => {
+              console.warn('[useCallRecording] Background upload error:', error);
+              // Fallback to offline queue on error
+              offlineQueue.addRecordingUpload(currentCall.id, finalRecordingPath, finalDuration)
+                .catch(e => console.error('[useCallRecording] Queue fallback failed:', e));
+            },
+            onProgress: (callId, progress) => {
+              console.log('[useCallRecording] Background upload progress:', progress + '%');
+            }
+          }
+        );
+
+        if (started) {
+          console.log('[useCallRecording] Background upload started - AI analysis will begin soon');
+          return; // Exit early, upload is handled
+        }
+      }
+
+      // STEP 4: Fallback to offline queue (handles retries & offline sync)
       try {
         await offlineQueue.addRecordingUpload(
           currentCall.id,
@@ -369,7 +400,7 @@ export const useCallRecording = (): UseCallRecordingReturn => {
       } catch (queueError) {
         console.error('[useCallRecording] Failed to queue recording upload:', queueError);
 
-        // Fallback: try direct upload
+        // Final fallback: try direct upload via Redux thunk
         dispatch(
           uploadRecording({
             callId: currentCall.id,

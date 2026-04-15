@@ -250,8 +250,10 @@ export const OutboundCallsPage: React.FC = () => {
 
         // For admin - compute telecaller analytics from the calls data
         if (!isTelecaller) {
-          const connectedOutcomes = ['INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'CONVERTED', 'CONNECTED'];
+          // Connected = calls where customer answered and conversation happened (excluding NOT_INTERESTED which is "lost")
+          const connectedOutcomes = ['INTERESTED', 'CALLBACK_REQUESTED', 'CONVERTED', 'CONNECTED'];
           const unconnectedOutcomes = ['NO_ANSWER', 'BUSY', 'VOICEMAIL'];
+          const lostOutcomes = ['NOT_INTERESTED'];
 
           let connected = 0, unconnected = 0, lost = 0, totalDuration = 0, durationCount = 0;
 
@@ -259,7 +261,7 @@ export const OutboundCallsPage: React.FC = () => {
             const outcome = call.outcome?.toUpperCase().replace(/ /g, '_') || '';
             if (connectedOutcomes.includes(outcome)) connected++;
             if (unconnectedOutcomes.includes(outcome)) unconnected++;
-            if (outcome === 'NOT_INTERESTED') lost++;
+            if (lostOutcomes.includes(outcome)) lost++;
             if (call.duration) {
               totalDuration += call.duration;
               durationCount++;
@@ -377,8 +379,10 @@ export const OutboundCallsPage: React.FC = () => {
   // Recalculate telecaller analytics when telecallerCalls changes
   useEffect(() => {
     if (!isTelecaller && telecallerCalls.length >= 0) {
-      const connectedOutcomes = ['INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'CONVERTED', 'CONNECTED'];
+      // Connected = calls where customer answered and conversation happened (excluding NOT_INTERESTED which is "lost")
+      const connectedOutcomes = ['INTERESTED', 'CALLBACK_REQUESTED', 'CONVERTED', 'CONNECTED'];
       const unconnectedOutcomes = ['NO_ANSWER', 'BUSY', 'VOICEMAIL'];
+      const lostOutcomes = ['NOT_INTERESTED'];
 
       let connected = 0, unconnected = 0, lost = 0, totalDuration = 0, durationCount = 0;
 
@@ -386,7 +390,7 @@ export const OutboundCallsPage: React.FC = () => {
         const outcome = call.outcome?.toUpperCase().replace(/ /g, '_') || '';
         if (connectedOutcomes.includes(outcome)) connected++;
         if (unconnectedOutcomes.includes(outcome)) unconnected++;
-        if (outcome === 'NOT_INTERESTED') lost++;
+        if (lostOutcomes.includes(outcome)) lost++;
         if (call.duration) {
           totalDuration += call.duration;
           durationCount++;
@@ -604,9 +608,11 @@ export const OutboundCallsPage: React.FC = () => {
             }
           });
 
-          const connected = interested + notInterested + callback + converted;
+          // Connected = calls where customer answered and had conversation (excluding lost/not interested)
+          const connected = interested + callback + converted;
           const unconnected = noAnswer + busy + voicemail;
 
+          // Lost = Not Interested (customer answered but rejected)
           const lost = notInterested;
 
           return (

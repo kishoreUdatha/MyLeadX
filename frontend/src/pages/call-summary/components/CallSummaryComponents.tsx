@@ -3,7 +3,7 @@
  * Runo AI-style call summary page components
  */
 
-import React, { RefObject, useState } from 'react';
+import React, { RefObject, useState, useRef, useEffect } from 'react';
 import {
   EnhancedCallDetails,
   EnhancedTranscriptMessage,
@@ -748,6 +748,36 @@ export const TranscriptMessages: React.FC<TranscriptMessagesProps> = ({
   customerName = 'Customer',
   onTimestampClick,
 }) => {
+  // Refs for auto-scrolling to highlighted message
+  const containerRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Auto-scroll to highlighted message when it changes
+  useEffect(() => {
+    if (highlightedIndex !== null && highlightedIndex >= 0 && messageRefs.current[highlightedIndex]) {
+      const messageEl = messageRefs.current[highlightedIndex];
+      const containerEl = containerRef.current;
+
+      if (messageEl && containerEl) {
+        // Calculate if the message is visible
+        const containerRect = containerEl.getBoundingClientRect();
+        const messageRect = messageEl.getBoundingClientRect();
+
+        const isVisible =
+          messageRect.top >= containerRect.top &&
+          messageRect.bottom <= containerRect.bottom;
+
+        // Only scroll if message is not fully visible
+        if (!isVisible) {
+          messageEl.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        }
+      }
+    }
+  }, [highlightedIndex]);
+
   const highlightText = (text: string, query: string) => {
     if (!query) return text;
     const parts = text.split(new RegExp(`(${query})`, 'gi'));
@@ -776,7 +806,7 @@ export const TranscriptMessages: React.FC<TranscriptMessagesProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-b-lg max-h-[400px] overflow-y-auto">
+    <div ref={containerRef} className="bg-white rounded-b-lg max-h-[400px] overflow-y-auto">
       {messages.length > 0 ? (
         <div className="divide-y divide-gray-50">
           {messages.map((msg, idx) => {
@@ -787,7 +817,12 @@ export const TranscriptMessages: React.FC<TranscriptMessagesProps> = ({
             return (
               <div
                 key={idx}
-                className={`px-3 py-2.5 ${isHighlighted ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                ref={(el) => { messageRefs.current[idx] = el; }}
+                className={`px-3 py-2.5 transition-all duration-300 ${
+                  isHighlighted
+                    ? 'bg-yellow-100 border-l-4 border-yellow-500 shadow-md ring-1 ring-yellow-300'
+                    : 'hover:bg-gray-50'
+                }`}
               >
                 <div className="flex items-start gap-2">
                   {/* Avatar with ring */}

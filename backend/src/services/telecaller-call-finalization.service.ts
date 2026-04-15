@@ -17,6 +17,8 @@ import OpenAI from 'openai';
 import { CallOutcome, LeadGrade } from '@prisma/client';
 import { prisma } from '../config/database';
 import { sarvamService } from '../integrations/sarvam.service';
+import { ai4bharatService } from '../integrations/ai4bharat.service';
+import { deepgramService, DiarizedTranscript } from '../integrations/deepgram.service';
 import { leadLifecycleService } from './lead-lifecycle.service';
 import { leadScoringService } from './lead-scoring.service';
 import {
@@ -179,8 +181,9 @@ class TelecallerCallFinalizationService {
    */
   private async diarizeTranscriptWithGPT(
     transcript: string,
-    language?: string
-  ): Promise<Array<{ role: string; content: string }> | null> {
+    language?: string,
+    callDuration?: number
+  ): Promise<Array<{ role: string; content: string; sentiment: string; startTimeSeconds: number }> | null> {
     if (!openai || !transcript || transcript.trim().length < 20) return null;
 
     try {
@@ -189,9 +192,9 @@ class TelecallerCallFinalizationService {
         messages: [
           {
             role: 'system',
-            content: `You are a speaker diarization assistant for a phone sales call between a telecaller (agent) and a prospective student/parent (customer).
+            content: `You are a speaker diarization and sentiment analysis assistant for a phone sales call between a telecaller (agent) and a prospective student/parent (customer).
 
-You will receive a raw transcript that may be unlabeled or mislabeled. Split it into the actual back-and-forth turns.
+You will receive a raw transcript that may be unlabeled or mislabeled. Split it into the actual back-and-forth turns and analyze each turn's sentiment.
 
 Rules:
 - Agent typically: introduces themselves, explains courses/colleges/fees, asks qualifying questions, pitches admissions, handles objections, schedules callbacks.
@@ -200,13 +203,14 @@ Rules:
 - Break long monologues into multiple turns only where a speaker change clearly happens.
 - If a sentence is ambiguous, use surrounding context (questions → agent, answers → customer).
 - Never invent content. If the transcript only contains one side, return only that side's turns honestly.
+- Sentiment: "positive" for interest/agreement/enthusiasm, "negative" for rejection/concerns/frustration, "neutral" for factual/questions.
 ${language ? `- The transcript language is ${language}. Keep it in that language.` : ''}
 
 Return JSON:
 {
   "turns": [
-    { "role": "assistant", "content": "..." },
-    { "role": "user", "content": "..." }
+    { "role": "assistant", "content": "...", "sentiment": "neutral" },
+    { "role": "user", "content": "...", "sentiment": "positive" }
   ]
 }
 Use "assistant" for the telecaller/agent, and "user" for the customer/student/parent.`,
@@ -217,7 +221,7 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
           },
         ],
         temperature: 0,
-        max_tokens: 2500,
+        max_tokens: 3000,
         response_format: { type: 'json_object' },
       });
 
@@ -227,10 +231,13 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
       const parsed = JSON.parse(content);
       if (!Array.isArray(parsed?.turns)) return null;
 
+      const duration = callDuration || 60;
       const turns = parsed.turns
-        .map((t: any) => ({
+        .map((t: any, idx: number, arr: any[]) => ({
           role: t?.role === 'user' || t?.role === 'customer' ? 'user' : 'assistant',
           content: typeof t?.content === 'string' ? t.content.trim() : '',
+          sentiment: ['positive', 'negative', 'neutral'].includes(t?.sentiment) ? t.sentiment : 'neutral',
+          startTimeSeconds: Math.round((idx / arr.length) * duration),
         }))
         .filter((t: { role: string; content: string }) => t.content.length > 0);
 
@@ -247,26 +254,42 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
    * 1. If the transcript already has speaker labels — use them.
    * 2. Otherwise try GPT diarization for a real two-sided conversation.
    * 3. Fall back to the alternating-sentences heuristic.
+   * All messages include startTimeSeconds and sentiment for UI sync.
    */
   private async buildTranscriptMessages(
     transcript: string,
-    language?: string
-  ): Promise<Array<{ role: string; content: string }>> {
+    language?: string,
+    callDuration?: number
+  ): Promise<Array<{ role: string; content: string; sentiment: string; startTimeSeconds: number }>> {
     if (!transcript || transcript.trim().length === 0) return [];
 
+    const duration = callDuration || 60;
     const labelPattern = /^(Agent|Telecaller|Assistant|Rep|User|Customer|Caller|Lead):\s*/im;
+
     if (labelPattern.test(transcript)) {
-      return this.parseTranscriptToMessages(transcript);
+      // Parse labeled transcript and add timestamps/sentiment
+      const parsed = this.parseTranscriptToMessages(transcript);
+      return parsed.map((msg, idx, arr) => ({
+        ...msg,
+        sentiment: 'neutral',
+        startTimeSeconds: Math.round((idx / arr.length) * duration),
+      }));
     }
 
-    const diarized = await this.diarizeTranscriptWithGPT(transcript, language);
+    // GPT diarization now returns sentiment and timestamps
+    const diarized = await this.diarizeTranscriptWithGPT(transcript, language, duration);
     if (diarized && diarized.length > 0) {
-      console.log(`[TelecallerAI] GPT diarization produced ${diarized.length} turns`);
+      console.log(`[TelecallerAI] GPT diarization produced ${diarized.length} turns with sentiment`);
       return diarized;
     }
 
     console.log(`[TelecallerAI] Falling back to heuristic sentence-alternation parser`);
-    return this.parseTranscriptToMessages(transcript);
+    const parsed = this.parseTranscriptToMessages(transcript);
+    return parsed.map((msg, idx, arr) => ({
+      ...msg,
+      sentiment: 'neutral',
+      startTimeSeconds: Math.round((idx / arr.length) * duration),
+    }));
   }
 
   /**
@@ -349,18 +372,46 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
       }
 
       // Convert string transcript to message array format for AI analysis.
-      // Try GPT diarization first so we get a real two-sided conversation
-      // even when Sarvam/Whisper return an unlabeled blob.
-      const transcriptMessages = await this.buildTranscriptMessages(transcript, detectedLanguage);
+      // If Deepgram provided diarized transcript with multiple speakers, use it directly.
+      // If Deepgram only detected 1 speaker (common with mono phone recordings), fall back to GPT diarization.
+      // Otherwise try GPT diarization for a real two-sided conversation.
+      // All messages now include startTimeSeconds and sentiment for UI sync.
+      let transcriptMessages: Array<{ role: string; content: string; sentiment?: string; startTimeSeconds?: number }>;
+      const callDuration = call.duration || 60;
+
+      if (transcribed.diarized && transcribed.diarized.speakers.length > 1) {
+        // Use Deepgram's speaker-separated messages directly (multiple speakers detected)
+        // Deepgram provides timestamps, we just need to add default sentiment
+        const deepgramMessages = deepgramService.convertToMessages(transcribed.diarized);
+        transcriptMessages = deepgramMessages.map(msg => ({
+          ...msg,
+          sentiment: 'neutral', // Will be updated by AI analysis below
+        }));
+        console.log(`[TelecallerAI] Using Deepgram diarized messages: ${transcriptMessages.length} turns`);
+        const agentMsgs = transcriptMessages.filter(m => m.role === 'assistant').length;
+        const customerMsgs = transcriptMessages.filter(m => m.role === 'user').length;
+        console.log(`[TelecallerAI] Speaker breakdown - Agent: ${agentMsgs}, Customer: ${customerMsgs}`);
+      } else if (transcribed.diarized && transcribed.diarized.speakers.length === 1) {
+        // Deepgram transcribed but only detected 1 speaker - use GPT to split into Agent/Customer
+        // GPT diarization now returns sentiment and estimated timestamps
+        console.log(`[TelecallerAI] Deepgram detected only 1 speaker, using GPT to split transcript...`);
+        const rawText = transcribed.diarized.segments.map(s => s.text).join(' ');
+        transcriptMessages = await this.buildTranscriptMessages(rawText, detectedLanguage, callDuration);
+      } else {
+        transcriptMessages = await this.buildTranscriptMessages(transcript, detectedLanguage, callDuration);
+      }
 
       // Step 2: Run enhanced AI analysis (sentiment, outcome, summary, key questions, issues)
-      console.log(`[TelecallerAI] Step 2: Running enhanced AI analysis...`);
+      // Pass customer name for gender-aware pronouns in summary
+      const customerName = call.lead?.firstName || null;
+      console.log(`[TelecallerAI] Step 2: Running enhanced AI analysis... (customer: ${customerName || 'unknown'})`);
       const enhancedAnalysis: EnhancedCallAnalysisResult = await analyzeCallEnhanced(
         transcriptMessages,
         [], // mood history
         'neutral',
         call.duration || 0,
-        detectedLanguage
+        detectedLanguage,
+        customerName
       );
       console.log(`[TelecallerAI] Enhanced analysis complete:`, {
         callQualityScore: enhancedAnalysis.callQualityScore,
@@ -845,7 +896,7 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
   private async transcribeRecording(
     filePath: string,
     _language: string = 'te-IN'
-  ): Promise<{ text: string; detectedLanguage: string } | null> {
+  ): Promise<{ text: string; detectedLanguage: string; diarized?: DiarizedTranscript } | null> {
     let pcmPath: string | null = null;
     try {
       if (!fs.existsSync(filePath)) {
@@ -858,6 +909,28 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
       if (stats.size < 1000) {
         console.error(`[TelecallerAI] Recording file too small (${stats.size} bytes), likely empty`);
         return null;
+      }
+
+      // 0) Deepgram with speaker diarization (BEST for separating agent/customer voices)
+      if (deepgramService.isAvailable()) {
+        try {
+          console.log(`[TelecallerAI] Trying Deepgram with speaker diarization...`);
+          const diarized = await deepgramService.transcribeWithDiarization(filePath, _language);
+          if (diarized && diarized.segments.length > 0) {
+            // Get labeled transcript (Agent:/Customer: format)
+            const labeledText = deepgramService.getLabeledTranscript(diarized);
+            console.log(`[TelecallerAI] Deepgram OK: ${diarized.segments.length} segments, ${diarized.speakers.length} speakers`);
+            console.log(`[TelecallerAI] Deepgram transcript preview: ${labeledText.substring(0, 200)}...`);
+            return {
+              text: labeledText,
+              detectedLanguage: diarized.detectedLanguage || _language,
+              diarized,
+            };
+          }
+          console.log('[TelecallerAI] Deepgram returned empty, falling back to other STT...');
+        } catch (deepgramError: any) {
+          console.log(`[TelecallerAI] Deepgram failed: ${deepgramError?.message || 'Unknown'}, trying Sarvam...`);
+        }
       }
 
       // Convert any input format to 16kHz mono PCM WAV — this is what Sarvam expects and
@@ -896,14 +969,32 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
         }
         console.log('[TelecallerAI] Sarvam returned empty transcript, falling back to Whisper');
       } catch (sarvamError: any) {
-        console.log(`[TelecallerAI] Sarvam failed: ${sarvamError?.message || 'Unknown error'}, trying Whisper...`);
+        console.log(`[TelecallerAI] Sarvam failed: ${sarvamError?.message || 'Unknown error'}, trying AI4Bharat...`);
       } finally {
         if (chunkPaths.length > 1) {
           for (const c of chunkPaths) { try { fs.unlinkSync(c); } catch {} }
         }
       }
 
-      // 2) Whisper auto-detect via verbose_json
+      // 2) AI4Bharat via HuggingFace (better for Indian languages like Telugu)
+      if (ai4bharatService.isAvailable()) {
+        try {
+          const audioBuffer = fs.readFileSync(sttSourcePath);
+          console.log(`[TelecallerAI] Trying AI4Bharat (HuggingFace) for Indian language STT...`);
+          // Try Telugu first as it's the most common
+          const result = await ai4bharatService.transcribe(audioBuffer, 'te-IN', 16000);
+          if (result?.text && result.text.length > 5) {
+            console.log(`[TelecallerAI] AI4Bharat OK, lang=${result.language}: ${result.text.substring(0, 100)}...`);
+            const cleaned = await this.cleanupTranscript(result.text, result.language || 'telugu');
+            return { text: cleaned, detectedLanguage: result.language || 'telugu' };
+          }
+          console.log('[TelecallerAI] AI4Bharat returned empty transcript, falling back to Whisper');
+        } catch (ai4bharatError: any) {
+          console.log(`[TelecallerAI] AI4Bharat failed: ${ai4bharatError?.message || 'Unknown error'}, trying Whisper...`);
+        }
+      }
+
+      // 3) Whisper auto-detect via verbose_json
       if (openai) {
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Whisper transcription timeout (60s)')), 60000);
@@ -1924,18 +2015,46 @@ ${call.summary}
       }
 
       // Convert string transcript to message array format for AI analysis.
-      // Try GPT diarization first so we get a real two-sided conversation
-      // even when Sarvam/Whisper return an unlabeled blob.
-      const transcriptMessages = await this.buildTranscriptMessages(transcript, detectedLanguage);
+      // If Deepgram provided diarized transcript with multiple speakers, use it directly.
+      // If Deepgram only detected 1 speaker (common with mono phone recordings), fall back to GPT diarization.
+      // Otherwise try GPT diarization for a real two-sided conversation.
+      // All messages now include startTimeSeconds and sentiment for UI sync.
+      let transcriptMessages: Array<{ role: string; content: string; sentiment?: string; startTimeSeconds?: number }>;
+      const callDuration = call.duration || 60;
+
+      if (transcribed.diarized && transcribed.diarized.speakers.length > 1) {
+        // Use Deepgram's speaker-separated messages directly (multiple speakers detected)
+        // Deepgram provides timestamps, we just need to add default sentiment
+        const deepgramMessages = deepgramService.convertToMessages(transcribed.diarized);
+        transcriptMessages = deepgramMessages.map(msg => ({
+          ...msg,
+          sentiment: 'neutral', // Will be updated by AI analysis below
+        }));
+        console.log(`[TelecallerAI] Using Deepgram diarized messages: ${transcriptMessages.length} turns`);
+        const agentMsgs = transcriptMessages.filter(m => m.role === 'assistant').length;
+        const customerMsgs = transcriptMessages.filter(m => m.role === 'user').length;
+        console.log(`[TelecallerAI] Speaker breakdown - Agent: ${agentMsgs}, Customer: ${customerMsgs}`);
+      } else if (transcribed.diarized && transcribed.diarized.speakers.length === 1) {
+        // Deepgram transcribed but only detected 1 speaker - use GPT to split into Agent/Customer
+        // GPT diarization now returns sentiment and estimated timestamps
+        console.log(`[TelecallerAI] Deepgram detected only 1 speaker, using GPT to split transcript...`);
+        const rawText = transcribed.diarized.segments.map(s => s.text).join(' ');
+        transcriptMessages = await this.buildTranscriptMessages(rawText, detectedLanguage, callDuration);
+      } else {
+        transcriptMessages = await this.buildTranscriptMessages(transcript, detectedLanguage, callDuration);
+      }
 
       // Step 2: Run enhanced AI analysis (sentiment, outcome, summary, key questions, issues)
-      console.log(`[TelecallerAI] Step 2: Running enhanced AI analysis...`);
+      // Pass customer name for gender-aware pronouns in summary
+      const customerName = call.lead?.firstName || null;
+      console.log(`[TelecallerAI] Step 2: Running enhanced AI analysis... (customer: ${customerName || 'unknown'})`);
       const enhancedAnalysis: EnhancedCallAnalysisResult = await analyzeCallEnhanced(
         transcriptMessages,
         [], // mood history
         'neutral',
         call.duration || 0,
-        detectedLanguage
+        detectedLanguage,
+        customerName
       );
       console.log(`[TelecallerAI] Enhanced analysis complete:`, {
         callQualityScore: enhancedAnalysis.callQualityScore,

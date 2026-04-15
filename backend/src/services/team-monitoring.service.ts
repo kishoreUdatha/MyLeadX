@@ -842,10 +842,11 @@ class TeamMonitoringService {
     const normalizedRole = currentUserRole?.toLowerCase().replace(/[_-]/g, '');
 
     // Build where clause based on role
+    // Include all active team members including admins for accurate "Active Now" count
     let whereClause: any = {
       organizationId,
       isActive: true,
-      role: { slug: { in: ['telecaller', 'counselor', 'team_lead', 'team_leader', 'manager'] } },
+      role: { slug: { in: ['telecaller', 'counselor', 'team_lead', 'team_leader', 'manager', 'admin', 'super_admin'] } },
     };
 
     // Role-based filtering

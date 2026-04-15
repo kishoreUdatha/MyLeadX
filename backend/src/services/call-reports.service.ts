@@ -1030,6 +1030,134 @@ class CallReportsService {
   }
 
   /**
+   * Get AI-powered failure analysis report for non-converted calls
+   */
+  async getFailureAnalysisReport(filters: ReportFilters) {
+    const { organizationId, dateRange } = filters;
+
+    const whereClause: any = {
+      organizationId,
+      outcome: {
+        in: ['NOT_INTERESTED', 'NO_ANSWER', 'CALLBACK', 'WRONG_NUMBER', 'BUSY'],
+      },
+      failurePrimaryReason: { not: null },
+    };
+
+    if (dateRange) {
+      whereClause.startedAt = {
+        gte: dateRange.start,
+        lte: dateRange.end,
+      };
+    }
+
+    // Get all failed calls with analysis
+    const calls = await prisma.telecallerCall.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        contactName: true,
+        phoneNumber: true,
+        outcome: true,
+        duration: true,
+        startedAt: true,
+        endedAt: true,
+        callType: true,
+        sentiment: true,
+        callQualityScore: true,
+        summary: true,
+        notes: true,
+        recordingUrl: true,
+        failurePrimaryReason: true,
+        failurePrimaryReasonConfidence: true,
+        failureRecoveryProbability: true,
+        failureWhyNotConverted: true,
+        failureSuggestedFollowUp: true,
+        failureCustomerObjections: true,
+        failureSecondaryReasons: true,
+        telecaller: {
+          select: { firstName: true, lastName: true, email: true },
+        },
+        lead: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            stage: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    // Get call counts per phone number for "attempts" column
+    const phoneCounts = await prisma.telecallerCall.groupBy({
+      by: ['phoneNumber'],
+      where: { organizationId },
+      _count: { id: true },
+    });
+    const phoneCountMap = new Map(phoneCounts.map(p => [p.phoneNumber, p._count.id]));
+
+    // Calculate reason breakdown
+    const reasonCounts: Record<string, number> = {};
+    let totalRecoveryProb = 0;
+
+    calls.forEach((call) => {
+      const reason = call.failurePrimaryReason || 'other';
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+      totalRecoveryProb += call.failureRecoveryProbability || 0;
+    });
+
+    const totalCalls = calls.length;
+    const reasonBreakdown = Object.entries(reasonCounts)
+      .map(([reason, count]) => ({
+        reason,
+        count,
+        percentage: totalCalls > 0 ? Math.round((count / totalCalls) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const topReason = reasonBreakdown[0]?.reason || 'N/A';
+
+    return {
+      calls: calls.map((call) => ({
+        id: call.id,
+        contactName: call.contactName,
+        phoneNumber: call.phoneNumber,
+        outcome: call.outcome,
+        duration: call.duration,
+        startedAt: call.startedAt,
+        endedAt: call.endedAt,
+        callType: call.callType,
+        sentiment: call.sentiment,
+        callQualityScore: call.callQualityScore,
+        summary: call.summary,
+        notes: call.notes,
+        recordingUrl: call.recordingUrl,
+        totalAttempts: phoneCountMap.get(call.phoneNumber) || 1,
+        leadStage: call.lead?.stage?.name || null,
+        leadName: call.lead ? `${call.lead.firstName || ''} ${call.lead.lastName || ''}`.trim() : null,
+        telecallerName: call.telecaller
+          ? `${call.telecaller.firstName} ${call.telecaller.lastName || ''}`.trim()
+          : 'Unknown',
+        telecallerEmail: call.telecaller?.email,
+        failurePrimaryReason: call.failurePrimaryReason,
+        failureConfidence: call.failurePrimaryReasonConfidence,
+        failureRecoveryProbability: call.failureRecoveryProbability,
+        failureWhyNotConverted: call.failureWhyNotConverted,
+        failureSuggestedFollowUp: call.failureSuggestedFollowUp,
+        failureObjections: call.failureCustomerObjections,
+        failureSecondaryReasons: call.failureSecondaryReasons,
+      })),
+      summary: {
+        totalFailedCalls: totalCalls,
+        avgRecoveryProbability: totalCalls > 0 ? Math.round(totalRecoveryProb / totalCalls) : 0,
+        topFailureReason: topReason,
+        reasonBreakdown,
+      },
+    };
+  }
+
+  /**
    * Helper: Get interval key for time series
    */
   private getIntervalKey(date: Date, interval: string): string {

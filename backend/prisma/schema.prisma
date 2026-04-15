@@ -3454,6 +3454,19 @@ model OutboundCall {
   coachingObjectionScore     Int? // Objection handling 0-100
   coachingClosingScore       Int? // Closing technique 0-100
 
+  // Failure Analysis (only for non-won calls)
+  // Analyzes why calls didn't convert to help improve future calls
+  failurePrimaryReason           String? // price, timing, authority, competitor, no_need, trust, etc.
+  failurePrimaryReasonConfidence Int? // 0-100
+  failureWhyNotConverted         String? @db.Text // AI explanation of why call didn't convert
+  failureSecondaryReasons        Json?   @default("[]") // Additional factors
+  failureCustomerObjections      Json?   @default("[]") // Objections raised by customer
+  failureKeyMoments              Json?   @default("[]") // Key moments with timestamps
+  failureMissedOpportunities     Json?   @default("[]") // What agent could have done better
+  failureRecoveryActions         Json?   @default("[]") // Recommended next steps
+  failureRecoveryProbability     Int? // 0-100 chance of converting with follow-up
+  failureSuggestedFollowUp       String? // When/how to follow up
+
   // Outcome
   outcome      CallOutcome?
   outcomeNotes String?
@@ -6548,6 +6561,18 @@ model TelecallerCall {
   coachingEmpathyScore       Int? // 0-100
   coachingObjectionScore     Int? // Objection handling 0-100
   coachingClosingScore       Int? // Closing technique 0-100
+
+  // Failure Analysis (only for non-won calls)
+  failurePrimaryReason           String? // price, timing, authority, competitor, no_need, trust, etc.
+  failurePrimaryReasonConfidence Int? // 0-100
+  failureWhyNotConverted         String? @db.Text // AI explanation
+  failureSecondaryReasons        Json?   @default("[]")
+  failureCustomerObjections      Json?   @default("[]")
+  failureKeyMoments              Json?   @default("[]")
+  failureMissedOpportunities     Json?   @default("[]")
+  failureRecoveryActions         Json?   @default("[]")
+  failureRecoveryProbability     Int? // 0-100
+  failureSuggestedFollowUp       String?
 
   // Extracted Data from conversation
   extractedData Json? // Structured data extracted from call

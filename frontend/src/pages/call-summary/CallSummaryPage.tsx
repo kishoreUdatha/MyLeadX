@@ -24,6 +24,7 @@ import {
   TranscriptHeader,
   TranscriptMessages,
 } from './components';
+import { FailureAnalysisCard, shouldShowFailureAnalysis } from './components/FailureAnalysisCard';
 
 export const CallSummaryPage: React.FC = () => {
   const {
@@ -137,6 +138,27 @@ export const CallSummaryPage: React.FC = () => {
               isExpanded={expandedSections.coaching}
               onToggle={() => toggleSection('coaching')}
             />
+
+            {/* Failure Analysis - Only for non-won calls */}
+            {shouldShowFailureAnalysis(call.outcome) && call.failureAnalysis && (
+              <FailureAnalysisCard
+                analysis={call.failureAnalysis}
+                isExpanded={expandedSections.failureAnalysis ?? true}
+                onToggle={() => toggleSection('failureAnalysis')}
+                onScheduleFollowUp={() => {
+                  // TODO: Implement schedule follow-up action
+                  console.log('Schedule follow-up');
+                }}
+                onSendDocument={() => {
+                  // TODO: Implement send document action
+                  console.log('Send document');
+                }}
+                onAddNote={() => {
+                  // TODO: Implement add note action
+                  console.log('Add note');
+                }}
+              />
+            )}
 
             {/* Audio Player at bottom */}
             <AudioPlayer

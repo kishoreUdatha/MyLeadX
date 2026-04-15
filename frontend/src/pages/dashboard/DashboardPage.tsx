@@ -37,6 +37,13 @@ import {
   EyeIcon,
   PhoneIcon,
   CalendarDaysIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  LightBulbIcon,
+  FireIcon,
 } from '@heroicons/react/24/outline';
 
 const STAGE_COLORS: Record<string, string> = {
@@ -125,6 +132,13 @@ interface DashboardStats {
     followUpsCompleted: number;
     pendingFollowUps: number;
     target: { calls: number; followUps: number };
+  };
+  yesterday?: {
+    calls: number;
+    outcomes: Record<string, number>;
+    interested: number;
+    interestRate: number;
+    avgDuration: number;
   };
   assignedData: {
     leads: number;
@@ -470,40 +484,46 @@ function TelecallerDashboard({ user, getGreeting, currentTime, lastRefresh, setL
                   );
                 })()}
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold text-violet-700">{dashboardStats?.today?.calls || 0}</span>
+                  <span className="text-2xl font-bold text-violet-700">{
+                    dashboardStats?.today?.calls ||
+                    ((dashboardStats?.outcomes?.INTERESTED || 0) +
+                     (dashboardStats?.outcomes?.NOT_INTERESTED || 0) +
+                     (dashboardStats?.outcomes?.NO_ANSWER || 0) +
+                     (dashboardStats?.outcomes?.CALLBACK || dashboardStats?.outcomes?.CALLBACK_REQUESTED || 0))
+                  }</span>
                   <span className="text-[9px] text-violet-500 uppercase font-medium">Total Calls</span>
                 </div>
               </div>
 
               {/* Call Outcome Stats - 2x2 Grid */}
-              <div className="flex-1 grid grid-cols-2 gap-2">
-                <div className="bg-gradient-to-br from-emerald-400 to-green-500 rounded-xl p-3 shadow-lg shadow-emerald-200">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="w-2 h-2 rounded-full bg-white/80"></span>
-                    <span className="text-[10px] text-emerald-100 uppercase font-semibold">Interested</span>
+              <div className="flex-1 grid grid-cols-2 gap-1.5">
+                <div className="bg-gradient-to-br from-emerald-400 to-green-500 rounded-lg p-2 shadow-md shadow-emerald-200">
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/80"></span>
+                    <span className="text-[9px] text-emerald-100 uppercase font-semibold">Interested</span>
                   </div>
-                  <span className="text-2xl font-bold text-white">{dashboardStats?.outcomes?.INTERESTED || 0}</span>
+                  <span className="text-lg font-bold text-white">{dashboardStats?.outcomes?.INTERESTED || 0}</span>
                 </div>
-                <div className="bg-gradient-to-br from-rose-400 to-red-500 rounded-xl p-3 shadow-lg shadow-rose-200">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="w-2 h-2 rounded-full bg-white/80"></span>
-                    <span className="text-[10px] text-rose-100 uppercase font-semibold">Not Int.</span>
+                <div className="bg-gradient-to-br from-rose-400 to-red-500 rounded-lg p-2 shadow-md shadow-rose-200">
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/80"></span>
+                    <span className="text-[9px] text-rose-100 uppercase font-semibold">Not Int.</span>
                   </div>
-                  <span className="text-2xl font-bold text-white">{dashboardStats?.outcomes?.NOT_INTERESTED || 0}</span>
+                  <span className="text-lg font-bold text-white">{dashboardStats?.outcomes?.NOT_INTERESTED || 0}</span>
                 </div>
-                <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl p-3 shadow-lg shadow-amber-200">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="w-2 h-2 rounded-full bg-white/80"></span>
-                    <span className="text-[10px] text-amber-100 uppercase font-semibold">No Answer</span>
+                <div className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-lg p-2 shadow-md shadow-amber-200">
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/80"></span>
+                    <span className="text-[9px] text-amber-100 uppercase font-semibold">No Answer</span>
                   </div>
-                  <span className="text-2xl font-bold text-white">{dashboardStats?.outcomes?.NO_ANSWER || 0}</span>
+                  <span className="text-lg font-bold text-white">{dashboardStats?.outcomes?.NO_ANSWER || 0}</span>
                 </div>
-                <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl p-3 shadow-lg shadow-blue-200">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="w-2 h-2 rounded-full bg-white/80"></span>
-                    <span className="text-[10px] text-blue-100 uppercase font-semibold">Callbacks</span>
+                <div className="bg-gradient-to-br from-blue-400 to-indigo-500 rounded-lg p-2 shadow-md shadow-blue-200">
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/80"></span>
+                    <span className="text-[9px] text-blue-100 uppercase font-semibold">Callbacks</span>
                   </div>
-                  <span className="text-2xl font-bold text-white">{dashboardStats?.outcomes?.CALLBACK || dashboardStats?.outcomes?.CALLBACK_REQUESTED || 0}</span>
+                  <span className="text-lg font-bold text-white">{dashboardStats?.outcomes?.CALLBACK || dashboardStats?.outcomes?.CALLBACK_REQUESTED || 0}</span>
                 </div>
               </div>
             </div>
@@ -669,6 +689,107 @@ function TelecallerDashboard({ user, getGreeting, currentTime, lastRefresh, setL
               <Link to="/leads?pendingFollowUp=true" className="flex items-center gap-2 p-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 rounded-lg text-white text-sm font-bold shadow-lg shadow-amber-500/30 hover:shadow-xl hover:shadow-amber-500/40 hover:scale-[1.02] transition-all">
                 <ArrowPathIcon className="w-5 h-5" /> View All Follow-ups
               </Link>
+            </div>
+          </div>
+
+          {/* Performance Insights */}
+          <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-xl p-4 border border-emerald-200 shadow-md">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-1.5 h-5 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full shadow-sm shadow-emerald-500/50"></div>
+              <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Performance Insights</h3>
+            </div>
+            <div className="space-y-2">
+              {(() => {
+                const insights = [];
+                const todayCalls = dashboardStats?.today?.calls || 0;
+                const target = dashboardStats?.today?.target?.calls || 1;
+                const targetPercent = Math.round((todayCalls / target) * 100);
+                const interested = dashboardStats?.outcomes?.INTERESTED || 0;
+                const notInterested = dashboardStats?.outcomes?.NOT_INTERESTED || 0;
+                const noAnswer = dashboardStats?.outcomes?.NO_ANSWER || 0;
+                const callbacks = dashboardStats?.outcomes?.CALLBACK || dashboardStats?.outcomes?.CALLBACK_REQUESTED || 0;
+                const totalOutcomes = interested + notInterested + noAnswer + callbacks;
+                const interestRate = totalOutcomes > 0 ? Math.round((interested / totalOutcomes) * 100) : 0;
+                const conversionRate = dashboardStats?.leads?.conversionRate || 0;
+                const pendingFollowUps = dashboardStats?.today?.pendingFollowUps || 0;
+
+                // Target completion insight
+                if (targetPercent < 50) {
+                  insights.push({ type: 'warning', iconType: 'phone', text: `Call volume low (${targetPercent}% of target). Make more calls to increase leads.` });
+                } else if (targetPercent >= 100) {
+                  insights.push({ type: 'success', iconType: 'check', text: `Target achieved (${targetPercent}%). Keep up the momentum!` });
+                } else {
+                  insights.push({ type: 'info', iconType: 'bolt', text: `${100 - targetPercent}% more calls needed to hit today's target.` });
+                }
+
+                // Interest rate insight
+                if (totalOutcomes > 0) {
+                  if (interestRate < 20) {
+                    insights.push({ type: 'warning', iconType: 'warn', text: `Interest rate is ${interestRate}%. Try improving your pitch opening.` });
+                  } else if (interestRate >= 40) {
+                    insights.push({ type: 'success', iconType: 'sparkle', text: `Excellent interest rate (${interestRate}%)! Your pitch is working well.` });
+                  }
+                }
+
+                // No answer insight
+                if (noAnswer > 3 && totalOutcomes > 0) {
+                  const noAnswerRate = Math.round((noAnswer / totalOutcomes) * 100);
+                  if (noAnswerRate > 40) {
+                    insights.push({ type: 'tip', iconType: 'clock', text: `High no-answer rate (${noAnswerRate}%). Try calling between 10AM-12PM or 4PM-6PM.` });
+                  }
+                }
+
+                // Follow-up insight
+                if (pendingFollowUps > 5) {
+                  insights.push({ type: 'warning', iconType: 'warn', text: `${pendingFollowUps} pending follow-ups. Clear these for better conversion.` });
+                } else if (pendingFollowUps === 0 && todayCalls > 0) {
+                  insights.push({ type: 'success', iconType: 'check', text: 'All follow-ups done! Focus on new leads now.' });
+                }
+
+                // Callback insight
+                if (callbacks > 0 && callbacks > interested) {
+                  insights.push({ type: 'tip', iconType: 'refresh', text: `${callbacks} callbacks pending. Follow up within 24hrs for best results.` });
+                }
+
+                // Default insight if none
+                if (insights.length === 0) {
+                  insights.push({ type: 'info', iconType: 'chart', text: 'Start making calls to see personalized insights.' });
+                }
+
+                const getIcon = (iconType: string) => {
+                  const iconClass = "w-4 h-4 flex-shrink-0";
+                  switch (iconType) {
+                    case 'up': return <ArrowTrendingUpIcon className={iconClass} />;
+                    case 'down': return <ArrowTrendingDownIcon className={iconClass} />;
+                    case 'fire': return <FireIcon className={iconClass} />;
+                    case 'bulb': return <LightBulbIcon className={iconClass} />;
+                    case 'phone': return <PhoneIcon className={iconClass} />;
+                    case 'check': return <CheckCircleIcon className={iconClass} />;
+                    case 'bolt': return <BoltIcon className={iconClass} />;
+                    case 'warn': return <ExclamationTriangleIcon className={iconClass} />;
+                    case 'sparkle': return <SparklesIcon className={iconClass} />;
+                    case 'clock': return <ClockIcon className={iconClass} />;
+                    case 'refresh': return <ArrowPathIcon className={iconClass} />;
+                    case 'chart': return <ChartBarIcon className={iconClass} />;
+                    default: return <BoltIcon className={iconClass} />;
+                  }
+                };
+
+                return insights.slice(0, 4).map((insight, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-2.5 rounded-lg border text-xs flex items-start gap-2 ${
+                      insight.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' :
+                      insight.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                      insight.type === 'tip' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                      'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {getIcon(insight.iconType)}
+                    <span>{insight.text}</span>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -1846,7 +1967,7 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
           </div>
           {pipelineStages.length > 0 ? (
             <div className="flex items-center gap-4">
-              <div className="w-36 h-36 flex-shrink-0">
+              <div className="w-36 h-36 flex-shrink-0 relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -1868,6 +1989,15 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
                     />
                   </PieChart>
                 </ResponsiveContainer>
+                {/* Total number in center of donut */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                  <div className="text-center bg-white rounded-full w-16 h-16 flex flex-col items-center justify-center shadow-sm">
+                    <span className="text-xl font-bold text-gray-800 leading-none">
+                      {pipelineStages.reduce((sum, stage) => sum + stage.value, 0)}
+                    </span>
+                    <p className="text-[9px] text-gray-500 font-medium mt-0.5">Total</p>
+                  </div>
+                </div>
               </div>
               <div className="flex-1 space-y-2">
                 {pipelineStages.slice(0, 6).map((stage, index) => (
@@ -1942,10 +2072,10 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
               <p className="text-2xl font-bold text-emerald-600">{conversionRate}%</p>
               <p className="text-xs text-emerald-700 font-medium">Conversion Rate</p>
             </div>
-            <div className="p-3 bg-gradient-to-br from-violet-50 to-purple-100 rounded-xl border border-violet-200/50">
+            <Link to="/assigned-data" className="p-3 bg-gradient-to-br from-violet-50 to-purple-100 rounded-xl hover:from-violet-100 hover:to-purple-150 transition-all border border-violet-200/50 hover:shadow-md cursor-pointer">
               <p className="text-2xl font-bold text-violet-600">{rawImportStats?.assignedRecords || 0}</p>
               <p className="text-xs text-violet-700 font-medium">Assigned</p>
-            </div>
+            </Link>
           </div>
         </div>
       </div>

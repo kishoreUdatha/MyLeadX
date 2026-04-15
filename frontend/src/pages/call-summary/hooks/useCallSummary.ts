@@ -76,6 +76,7 @@ export function useCallSummary(): UseCallSummaryReturn {
     coaching: true,
     extractedData: true,
     leadJourney: true,
+    failureAnalysis: true, // Failure Analysis section (only shown for non-won calls)
   });
 
   // Fetch call data
@@ -182,6 +183,19 @@ export function useCallSummary(): UseCallSummaryReturn {
               // Additional flags for UI
               wasAnswered,
               hasConversation,
+              // Failure Analysis (only for non-won calls)
+              failureAnalysis: data.failurePrimaryReason ? {
+                primaryReason: data.failurePrimaryReason,
+                primaryReasonConfidence: data.failurePrimaryReasonConfidence ?? 50,
+                whyNotConverted: data.failureWhyNotConverted || '',
+                secondaryReasons: Array.isArray(data.failureSecondaryReasons) ? data.failureSecondaryReasons : [],
+                customerObjections: Array.isArray(data.failureCustomerObjections) ? data.failureCustomerObjections : [],
+                keyMoments: Array.isArray(data.failureKeyMoments) ? data.failureKeyMoments : [],
+                missedOpportunities: Array.isArray(data.failureMissedOpportunities) ? data.failureMissedOpportunities : [],
+                recoveryActions: Array.isArray(data.failureRecoveryActions) ? data.failureRecoveryActions : [],
+                recoveryProbability: data.failureRecoveryProbability ?? 50,
+                suggestedFollowUp: data.failureSuggestedFollowUp || 'Follow up in 3-5 days',
+              } : undefined,
             });
           } else {
             // AI call - existing logic
@@ -217,6 +231,19 @@ export function useCallSummary(): UseCallSummaryReturn {
               currentCallNumber: data.currentCallNumber || 1,
               totalCallsToLead: data.totalCallsToLead || 1,
               isFollowUpCall: data.isFollowUpCall || false,
+              // Failure Analysis (only for non-won calls)
+              failureAnalysis: data.failurePrimaryReason ? {
+                primaryReason: data.failurePrimaryReason,
+                primaryReasonConfidence: data.failurePrimaryReasonConfidence ?? 50,
+                whyNotConverted: data.failureWhyNotConverted || '',
+                secondaryReasons: Array.isArray(data.failureSecondaryReasons) ? data.failureSecondaryReasons : [],
+                customerObjections: Array.isArray(data.failureCustomerObjections) ? data.failureCustomerObjections : [],
+                keyMoments: Array.isArray(data.failureKeyMoments) ? data.failureKeyMoments : [],
+                missedOpportunities: Array.isArray(data.failureMissedOpportunities) ? data.failureMissedOpportunities : [],
+                recoveryActions: Array.isArray(data.failureRecoveryActions) ? data.failureRecoveryActions : [],
+                recoveryProbability: data.failureRecoveryProbability ?? 50,
+                suggestedFollowUp: data.failureSuggestedFollowUp || 'Follow up in 3-5 days',
+              } : undefined,
             });
           }
         } else {

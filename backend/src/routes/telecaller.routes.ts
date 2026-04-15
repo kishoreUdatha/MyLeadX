@@ -1191,6 +1191,17 @@ router.get('/calls/:id/summary', async (req: TenantRequest, res: Response) => {
       coachingClosingScore: call.coachingClosingScore,
       // Extracted data
       extractedData: call.extractedData,
+      // Failure Analysis fields (for non-won calls)
+      failurePrimaryReason: call.failurePrimaryReason,
+      failurePrimaryReasonConfidence: call.failurePrimaryReasonConfidence,
+      failureWhyNotConverted: call.failureWhyNotConverted,
+      failureSecondaryReasons: call.failureSecondaryReasons,
+      failureCustomerObjections: call.failureCustomerObjections,
+      failureKeyMoments: call.failureKeyMoments,
+      failureMissedOpportunities: call.failureMissedOpportunities,
+      failureRecoveryActions: call.failureRecoveryActions,
+      failureRecoveryProbability: call.failureRecoveryProbability,
+      failureSuggestedFollowUp: call.failureSuggestedFollowUp,
       // Lead journey - previous calls to this contact
       leadJourney,
       currentCallNumber,
