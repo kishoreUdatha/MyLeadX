@@ -287,8 +287,12 @@ function ProtectedRoute({ children, skipOnboardingCheck = false }: { children: R
     return <Navigate to="/login" replace />;
   }
 
-  // Redirect to onboarding if not completed (skip for onboarding page itself)
-  if (!skipOnboardingCheck && user && !user.onboardingCompleted) {
+  // Redirect to onboarding if not completed (skip for onboarding page itself).
+  // Only admin/owner roles can complete org onboarding — other roles (telecaller,
+  // agent, etc.) should go straight to the dashboard.
+  const roleSlug = (user?.role || '').toLowerCase();
+  const canCompleteOnboarding = ['admin', 'owner', 'super_admin', 'superadmin'].includes(roleSlug);
+  if (!skipOnboardingCheck && user && !user.onboardingCompleted && canCompleteOnboarding) {
     return <Navigate to="/onboarding" replace />;
   }
 

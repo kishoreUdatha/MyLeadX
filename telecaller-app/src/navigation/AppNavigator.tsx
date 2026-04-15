@@ -226,7 +226,7 @@ const MainTabNavigator: React.FC = () => {
       <Tab.Screen
         name="AssignedData"
         component={AssignedDataScreen}
-        options={{ title: 'To Call', headerTitle: 'Assigned Data' }}
+        options={{ title: 'Tasks', headerTitle: 'My Tasks' }}
       />
       <Tab.Screen
         name="Leads"

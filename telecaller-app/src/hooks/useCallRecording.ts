@@ -88,6 +88,22 @@ export const useCallRecording = (): UseCallRecordingReturn => {
     };
   }, []);
 
+  // Listen for "call answered" (OFFHOOK) event — start the duration timer only then.
+  // Prevents the timer from starting when the user taps the in-app dial button but
+  // before the call is actually placed/connected.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('onCallAnswered', () => {
+      console.log('[useCallRecording] onCallAnswered received — starting timer');
+      if (!timerRef.current) {
+        callStartTimeRef.current = Date.now();
+        timerRef.current = setInterval(() => {
+          dispatch(incrementCallDuration());
+        }, 1000);
+      }
+    });
+    return () => sub.remove();
+  }, [dispatch]);
+
   // Listen for auto-stop event (when call ends automatically)
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
@@ -195,10 +211,9 @@ export const useCallRecording = (): UseCallRecordingReturn => {
           console.warn('[useCallRecording] Recording service start failed:', recordingError?.message);
         }
 
-        // STEP 3: Start timer
-        console.log('[useCallRecording] Starting call duration timer...');
-        startTimer();
-        console.log('[useCallRecording] Timer started successfully');
+        // STEP 3: Timer is NOT started here — it starts when the native OFFHOOK
+        // (call-answered) event fires via the onCallAnswered listener above.
+        console.log('[useCallRecording] Timer will start on native OFFHOOK event');
 
         // STEP 4: Open phone dialer LAST (after recording is already running)
         const phoneUrl = Platform.select({

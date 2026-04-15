@@ -70,19 +70,21 @@ public class AudioPlayerModule extends ReactContextBaseJavaModule {
 
                 sMediaPlayer.setOnPreparedListener(mp -> {
                     Log.d(TAG, "Prepared, duration: " + mp.getDuration() + "ms");
-                    // Force speaker output and max media volume
+                    // Ensure media volume is audible. Do NOT touch AudioManager mode or
+                    // speakerphone — USAGE_MEDIA streams route to the loudspeaker by
+                    // default; forcing MODE_NORMAL + setSpeakerphoneOn(false) made the
+                    // audio route through the earpiece on some devices and appear silent.
                     try {
                         AudioManager am = (AudioManager) getReactApplicationContext()
                             .getSystemService(Context.AUDIO_SERVICE);
                         if (am != null) {
-                            am.setMode(AudioManager.MODE_NORMAL);
-                            am.setSpeakerphoneOn(false);
                             int maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                             int curVol = am.getStreamVolume(AudioManager.STREAM_MUSIC);
                             Log.d(TAG, "Media volume: " + curVol + "/" + maxVol);
-                            if (curVol < maxVol / 2) {
-                                am.setStreamVolume(AudioManager.STREAM_MUSIC, maxVol, 0);
-                                Log.d(TAG, "Raised media volume to max");
+                            int minAudible = (int) Math.ceil(maxVol * 0.6);
+                            if (curVol < minAudible) {
+                                am.setStreamVolume(AudioManager.STREAM_MUSIC, minAudible, AudioManager.FLAG_SHOW_UI);
+                                Log.d(TAG, "Raised media volume to " + minAudible + "/" + maxVol);
                             }
                         }
                     } catch (Exception e) {

@@ -81,8 +81,17 @@ router.get('/daily-report', authenticate, asyncHandler(async (req, res) => {
 router.get('/telecallers/:id', authenticate, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { days = '30' } = req.query;
+  const { organizationId, id: userId } = req.user!;
+  const roleSlug = (req.user as any).role?.slug || (req.user as any).roleSlug;
 
-  const data = await telecallerAnalyticsService.getTelecallerPerformance(id, parseInt(days as string));
+  // Telecallers / counselors can only see their own performance
+  if (roleSlug !== 'admin' && roleSlug !== 'owner' && roleSlug !== 'manager' && roleSlug !== 'team_lead' && roleSlug !== 'teamlead') {
+    if (id !== userId) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+  }
+
+  const data = await telecallerAnalyticsService.getTelecallerPerformance(id, parseInt(days as string), organizationId);
   res.json({ success: true, data });
 }));
 

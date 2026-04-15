@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,17 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
-  Animated,
-  Easing,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAppDispatch, useAppSelector } from '../store';
-import { fetchStats } from '../store/slices/callsSlice';
-import { MainTabParamList, RootStackParamList, CallOutcome } from '../types';
-import { APP_CONFIG } from '../config';
+import api from '../api';
+import { useAppSelector } from '../store';
+import { MainTabParamList, RootStackParamList } from '../types';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Dashboard'>,
@@ -27,462 +26,585 @@ type NavigationProp = CompositeNavigationProp<
 >;
 
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 24;
-const HORIZONTAL_PADDING = 24;
+const H_PAD = 16;
 
-/* ── monochrome palette ── */
-const BG = '#FFFFFF';
-const INK = '#0A0A0A';
-const INK_2 = '#1A1A1A';
-const MUTED = '#6B6B6B';
-const MUTED_2 = '#9A9A9A';
-const LINE = '#E8E8E8';
-const LINE_LIGHT = '#F2F2F2';
+interface PendingFollowUp {
+  id: string;
+  leadId: string;
+  leadName: string;
+  phone: string | null;
+  scheduledAt: string | null;
+  notes: string | null;
+  type: 'scheduled' | 'needs_attention';
+}
 
-const NAV_ITEMS = [
-  { key: 'leads', label: 'My Leads', target: 'Leads' as const },
-  { key: 'qualified', label: 'Qualified', target: 'QualifiedLeads' as const },
-  { key: 'followups', label: 'Follow-ups', target: 'FollowUps' as const },
-  { key: 'history', label: 'Call History', target: 'History' as const },
-  { key: 'performance', label: 'My Reports', target: 'Performance' as const },
-];
+interface DashboardStats {
+  today: {
+    calls: number;
+    followUpsCompleted: number;
+    pendingFollowUps: number;
+    target: { calls: number; followUps: number };
+  };
+  assignedData: {
+    leads: number;
+    rawRecords: number;
+    totalRawRecords: number;
+    queueItems: number;
+    total: number;
+  };
+  leads: {
+    total: number;
+    byStage: Record<string, number>;
+    converted: number;
+    won: number;
+    conversionRate: number;
+    winRate: number;
+  };
+  outcomes: Record<string, number>;
+  callTypes?: { OUTBOUND: number; INBOUND: number };
+  pendingFollowUpsList?: PendingFollowUp[];
+}
 
-const OUTCOME_LABELS: Record<CallOutcome, string> = {
-  CONVERTED: 'Converted',
-  INTERESTED: 'Interested',
-  CALLBACK: 'Callback',
-  NOT_INTERESTED: 'Not Interested',
-  NO_ANSWER: 'No Answer',
-  BUSY: 'Busy',
-  WRONG_NUMBER: 'Wrong Number',
-  VOICEMAIL: 'Voicemail',
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good Morning';
+  if (h < 17) return 'Good Afternoon';
+  return 'Good Evening';
 };
 
-const PressableScale: React.FC<any> = ({ children, onPress, style, scaleTo = 0.98 }) => {
-  const scale = useRef(new Animated.Value(1)).current;
-  const animate = (to: number) =>
-    Animated.spring(scale, {
-      toValue: to,
-      useNativeDriver: true,
-      friction: 6,
-      tension: 140,
-    }).start();
-  return (
-    <Pressable onPress={onPress} onPressIn={() => animate(scaleTo)} onPressOut={() => animate(1)}>
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
-    </Pressable>
-  );
+const formatDate = (d: Date) =>
+  d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+const formatScheduled = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
-/* ── Trend (7-day) sparkline-style bars ── */
-const TrendChart: React.FC<{ todayCalls: number; totalCalls: number }> = ({ todayCalls, totalCalls }) => {
-  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  const seedTotal = Math.max(totalCalls - todayCalls, 0);
-  const weights = [0.14, 0.18, 0.16, 0.20, 0.15, 0.17];
-  const series = weights.map((w) => Math.round(seedTotal * w));
-  series.push(todayCalls);
-  const max = Math.max(...series, 1);
+const KpiCard: React.FC<{
+  label: string;
+  value: React.ReactNode;
+  gradient: [string, string];
+  onPress?: () => void;
+  badge?: string;
+}> = ({ label, value, gradient, onPress, badge }) => (
+  <Pressable onPress={onPress} style={styles.kpiWrap}>
+    <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.kpiCard}>
+      <Text style={styles.kpiLabel}>{label}</Text>
+      <View style={styles.kpiValueRow}>
+        <Text style={styles.kpiValue}>{value}</Text>
+        {badge && (
+          <View style={styles.kpiBadge}>
+            <Text style={styles.kpiBadgeText}>{badge}</Text>
+          </View>
+        )}
+      </View>
+    </LinearGradient>
+  </Pressable>
+);
 
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHead}>
-        <Text style={styles.sectionLabel}>Calls this week</Text>
-        <Text style={styles.sectionMeta}>{series.reduce((a, b) => a + b, 0)}</Text>
-      </View>
-      <View style={styles.barChart}>
-        {series.map((v, i) => {
-          const heightPct = (v / max) * 100;
-          const isToday = i === series.length - 1;
-          return (
-            <View key={i} style={styles.barCol}>
-              <View style={styles.barTrack}>
-                <View
-                  style={[
-                    styles.barFill,
-                    { height: `${heightPct}%`, backgroundColor: isToday ? INK : MUTED_2 },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.barLabel, isToday && { color: INK, fontWeight: '600' }]}>{days[i]}</Text>
-            </View>
-          );
-        })}
-      </View>
+const OutcomeCell: React.FC<{
+  label: string;
+  value: number;
+  gradient: [string, string];
+}> = ({ label, value, gradient }) => (
+  <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.outcomeCell}>
+    <View style={styles.outcomeDotRow}>
+      <View style={styles.outcomeDot} />
+      <Text style={styles.outcomeLabel}>{label}</Text>
     </View>
-  );
-};
-
-/* ── Outcome breakdown — minimal rows ── */
-const OutcomeChart: React.FC<{ callsByOutcome?: Record<CallOutcome, number> }> = ({ callsByOutcome }) => {
-  const entries = (Object.keys(OUTCOME_LABELS) as CallOutcome[])
-    .map((k) => ({ key: k, count: callsByOutcome?.[k] ?? 0 }))
-    .filter((e) => e.count > 0)
-    .sort((a, b) => b.count - a.count);
-  const total = entries.reduce((s, e) => s + e.count, 0);
-
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHead}>
-        <Text style={styles.sectionLabel}>Call outcomes</Text>
-        <Text style={styles.sectionMeta}>{total}</Text>
-      </View>
-      {entries.length === 0 ? (
-        <Text style={styles.emptyText}>No outcomes recorded yet</Text>
-      ) : (
-        <View style={{ marginTop: 4 }}>
-          {entries.map((e) => {
-            const pct = total > 0 ? (e.count / total) * 100 : 0;
-            return (
-              <View key={e.key} style={styles.outcomeRow}>
-                <View style={styles.outcomeLine}>
-                  <Text style={styles.outcomeLabel}>{OUTCOME_LABELS[e.key]}</Text>
-                  <Text style={styles.outcomeCount}>{e.count}</Text>
-                </View>
-                <View style={styles.outcomeTrack}>
-                  <View style={[styles.outcomeFill, { width: `${pct}%` }]} />
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
-};
+    <Text style={styles.outcomeValue}>{value}</Text>
+  </LinearGradient>
+);
 
 const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
-  const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const { stats } = useAppSelector((state) => state.calls);
-  const hasInitializedRef = useRef(false);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(16)).current;
-
-  const loadStats = useCallback(() => {
-    dispatch(fetchStats());
-  }, [dispatch]);
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await api.get('/telecaller/dashboard-stats');
+      setStats(res.data?.data || null);
+    } catch (err) {
+      console.log('[Dashboard] Failed to fetch stats:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      loadStats();
-    }
-  }, [loadStats]);
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   useFocusEffect(
     useCallback(() => {
-      fadeAnim.setValue(0);
-      slideAnim.setValue(16);
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 450,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, [fadeAnim, slideAnim])
+      fetchData();
+    }, [fetchData])
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await dispatch(fetchStats());
+    await fetchData();
     setRefreshing(false);
-  }, [dispatch]);
+  }, [fetchData]);
 
-  const firstName = user?.firstName || 'there';
-  const todayCalls = stats?.todayCalls ?? 0;
-  const totalCalls = stats?.totalCalls ?? 0;
-  const conversionRate = stats?.conversionRate ?? 0;
-  const target = APP_CONFIG.dailyCallTarget || 30;
-  const targetProgress = Math.min((todayCalls / target) * 100, 100);
+  const firstName = user?.firstName
+    ? user.firstName.charAt(0).toUpperCase() + user.firstName.slice(1).toLowerCase()
+    : '';
+
+  const todayCalls = stats?.today?.calls || 0;
+  const dailyTarget = stats?.today?.target?.calls || stats?.assignedData?.total || 0;
+  const callsProgress = dailyTarget > 0 ? Math.min((todayCalls / dailyTarget) * 100, 100) : 0;
+
+  const interested = stats?.outcomes?.INTERESTED || 0;
+  const notInt = stats?.outcomes?.NOT_INTERESTED || 0;
+  const noAns = stats?.outcomes?.NO_ANSWER || 0;
+  const callbacks = stats?.outcomes?.CALLBACK || stats?.outcomes?.CALLBACK_REQUESTED || 0;
+
+  const pendingList = stats?.pendingFollowUpsList || [];
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={BG} translucent={false} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
 
       <ScrollView
-        style={styles.scrollView}
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[INK]} tintColor={INK} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366F1']} tintColor="#6366F1" />
         }
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.brand}>Dashboard</Text>
-            <Text style={styles.greeting}>Hello, {firstName}</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>
+              {getGreeting()}
+              {firstName ? `, ${firstName}` : ''}
+            </Text>
+            <View style={styles.headerMeta}>
+              <Text style={styles.headerDate}>{formatDate(new Date())}</Text>
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>Live</Text>
+              </View>
+            </View>
           </View>
-          <TouchableOpacity activeOpacity={0.6}>
-            <Icon name="bell-outline" size={22} color={INK} />
+          <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+            <Icon name="refresh" size={20} color="#6B7280" />
           </TouchableOpacity>
         </View>
 
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          {/* Hero KPI */}
-          <View style={styles.hero}>
-            <Text style={styles.heroNumber}>{todayCalls}</Text>
-            <Text style={styles.heroLabel}>Calls today</Text>
-            <View style={styles.heroBar}>
-              <View style={[styles.heroBarFill, { width: `${targetProgress}%` }]} />
-            </View>
-            <Text style={styles.heroMeta}>
-              {targetProgress.toFixed(0)}% of {target} target
-            </Text>
+        {loading && !stats ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#6366F1" />
           </View>
+        ) : (
+          <>
+            {/* KPI Grid (2 cols) */}
+            <View style={styles.kpiGrid}>
+              <KpiCard
+                label="Leads"
+                value={stats?.leads?.total || 0}
+                gradient={['#3B82F6', '#4F46E5']}
+                onPress={() => navigation.navigate('Leads' as any)}
+              />
+              <KpiCard
+                label="Calls Today"
+                value={
+                  <Text>
+                    {todayCalls}
+                    <Text style={styles.kpiValueSub}>/{dailyTarget}</Text>
+                  </Text>
+                }
+                badge={`${Math.round(callsProgress)}%`}
+                gradient={['#8B5CF6', '#7C3AED']}
+                onPress={() => navigation.navigate('History' as any)}
+              />
+              <KpiCard
+                label="Follow-ups"
+                value={
+                  <Text>
+                    {stats?.today?.followUpsCompleted || 0}
+                    <Text style={styles.kpiValueSub}> +{stats?.today?.pendingFollowUps || 0}</Text>
+                  </Text>
+                }
+                gradient={['#F59E0B', '#F97316']}
+                onPress={() => navigation.navigate('FollowUps' as any)}
+              />
+              <KpiCard
+                label="Conversion"
+                value={`${stats?.leads?.conversionRate || 0}%`}
+                gradient={['#10B981', '#14B8A6']}
+              />
+              <KpiCard
+                label="Win Rate"
+                value={`${stats?.leads?.winRate || 0}%`}
+                gradient={['#06B6D4', '#3B82F6']}
+              />
+              <KpiCard
+                label="Won"
+                value={stats?.leads?.won || 0}
+                gradient={['#22C55E', '#059669']}
+              />
+            </View>
 
-          {/* KPI row — minimal, divided */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiCell}>
-              <Text style={styles.kpiValue}>{totalCalls}</Text>
-              <Text style={styles.kpiLabel}>Total calls</Text>
-            </View>
-            <View style={styles.kpiDivider} />
-            <View style={styles.kpiCell}>
-              <Text style={styles.kpiValue}>{conversionRate.toFixed(0)}%</Text>
-              <Text style={styles.kpiLabel}>Conversion</Text>
-            </View>
-            <View style={styles.kpiDivider} />
-            <View style={styles.kpiCell}>
-              <Text style={styles.kpiValue}>{stats?.assignedLeads ?? 0}</Text>
-              <Text style={styles.kpiLabel}>Leads</Text>
-            </View>
-          </View>
+            {/* Today's Calls */}
+            <LinearGradient
+              colors={['#F5F3FF', '#FDF4FF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.panel}
+            >
+              <View style={styles.panelHead}>
+                <View style={styles.panelTitleRow}>
+                  <LinearGradient
+                    colors={['#8B5CF6', '#D946EF']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={styles.accentBar}
+                  />
+                  <Text style={styles.panelTitle}>Today's Calls</Text>
+                </View>
+                <View style={styles.pillViolet}>
+                  <Text style={styles.pillVioletText}>Raw List + Leads</Text>
+                </View>
+              </View>
 
-          {/* Performance graphs */}
-          <TrendChart todayCalls={todayCalls} totalCalls={totalCalls} />
-          <OutcomeChart callsByOutcome={stats?.callsByOutcome} />
+              {/* Donut-style total + 2x2 outcome grid */}
+              <View style={styles.donutRow}>
+                <View style={styles.donut}>
+                  <View style={styles.donutInner}>
+                    <Text style={styles.donutTotal}>{todayCalls}</Text>
+                    <Text style={styles.donutLabel}>TOTAL CALLS</Text>
+                  </View>
+                </View>
+                <View style={styles.outcomeGrid}>
+                  <OutcomeCell label="INTERESTED" value={interested} gradient={['#34D399', '#10B981']} />
+                  <OutcomeCell label="NOT INT." value={notInt} gradient={['#FB7185', '#EF4444']} />
+                  <OutcomeCell label="NO ANSWER" value={noAns} gradient={['#FBBF24', '#F97316']} />
+                  <OutcomeCell label="CALLBACKS" value={callbacks} gradient={['#60A5FA', '#6366F1']} />
+                </View>
+              </View>
 
-          {/* Navigation list */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Navigate</Text>
-            <View style={{ marginTop: 8 }}>
-              {NAV_ITEMS.map((item, i) => (
-                <Pressable
-                  key={item.key}
-                  onPress={() => navigation.navigate(item.target as any)}
-                  style={({ pressed }) => [
-                    styles.navRow,
-                    i === NAV_ITEMS.length - 1 && { borderBottomWidth: 0 },
-                    pressed && { backgroundColor: LINE_LIGHT },
-                  ]}
-                >
-                  <Text style={styles.navLabel}>{item.label}</Text>
-                  <Icon name="chevron-right" size={20} color={MUTED_2} />
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </Animated.View>
+              {/* Call Types */}
+              <View style={styles.callTypesWrap}>
+                <View style={styles.callTypesHead}>
+                  <Icon name="phone" size={14} color="#64748B" />
+                  <Text style={styles.callTypesTitle}>CALL TYPES</Text>
+                </View>
+                <View style={styles.callTypesRow}>
+                  <View style={[styles.callTypeCard, { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD' }]}>
+                    <View style={styles.callTypeLeft}>
+                      <View style={[styles.callTypeDot, { backgroundColor: '#0EA5E9' }]} />
+                      <Text style={[styles.callTypeLabel, { color: '#0369A1' }]}>Outbound</Text>
+                    </View>
+                    <Text style={[styles.callTypeValue, { color: '#0284C7' }]}>
+                      {stats?.callTypes?.OUTBOUND || 0}
+                    </Text>
+                  </View>
+                  <View style={[styles.callTypeCard, { backgroundColor: '#CCFBF1', borderColor: '#99F6E4' }]}>
+                    <View style={styles.callTypeLeft}>
+                      <View style={[styles.callTypeDot, { backgroundColor: '#14B8A6' }]} />
+                      <Text style={[styles.callTypeLabel, { color: '#0F766E' }]}>Inbound</Text>
+                    </View>
+                    <Text style={[styles.callTypeValue, { color: '#0D9488' }]}>
+                      {stats?.callTypes?.INBOUND || 0}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </LinearGradient>
+
+            {/* Pending Follow-ups */}
+            <LinearGradient
+              colors={['#FEF3C7', '#FFEDD5']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.panel}
+            >
+              <View style={styles.panelTitleRow}>
+                <LinearGradient
+                  colors={['#F59E0B', '#F97316']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.accentBar}
+                />
+                <Text style={[styles.panelTitle, { color: '#92400E' }]}>Pending Follow-ups</Text>
+              </View>
+              <View style={{ marginTop: 12 }}>
+                {pendingList.length > 0 ? (
+                  pendingList.map((f) => (
+                    <Pressable
+                      key={f.id}
+                      onPress={() =>
+                        navigation.navigate('LeadDetail' as any, { leadId: f.leadId } as any)
+                      }
+                      style={styles.followUpCard}
+                    >
+                      <View style={styles.followUpHead}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.followUpName}>{f.leadName}</Text>
+                          {f.phone && <Text style={styles.followUpPhone}>{f.phone}</Text>}
+                        </View>
+                        <LinearGradient
+                          colors={
+                            f.type === 'scheduled' ? ['#34D399', '#10B981'] : ['#FB7185', '#EF4444']
+                          }
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.followUpBadge}
+                        >
+                          <Text style={styles.followUpBadgeText}>
+                            {f.type === 'scheduled' ? 'Scheduled' : 'Overdue'}
+                          </Text>
+                        </LinearGradient>
+                      </View>
+                      {f.scheduledAt && (
+                        <Text style={styles.followUpTime}>{formatScheduled(f.scheduledAt)}</Text>
+                      )}
+                      {f.notes ? (
+                        <Text style={styles.followUpNotes} numberOfLines={1}>
+                          {f.notes}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>No pending follow-ups</Text>
+                )}
+              </View>
+            </LinearGradient>
+          </>
+        )}
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
-  scrollView: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  scroll: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: HORIZONTAL_PADDING,
-    paddingTop: STATUS_BAR_HEIGHT + 16,
+    paddingHorizontal: H_PAD,
+    paddingTop: STATUS_BAR_HEIGHT + 12,
     paddingBottom: 100,
   },
 
   /* Header */
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 32,
-  },
-  brand: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: MUTED,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  greeting: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: INK,
-    marginTop: 4,
-    letterSpacing: -0.3,
-  },
-
-  /* Hero */
-  hero: {
-    marginBottom: 32,
-  },
-  heroNumber: {
-    fontSize: 64,
-    fontWeight: '800',
-    color: INK,
-    letterSpacing: -2,
-    lineHeight: 70,
-  },
-  heroLabel: {
-    fontSize: 13,
-    color: MUTED,
-    marginTop: 4,
-    letterSpacing: 0.2,
-  },
-  heroBar: {
-    height: 3,
-    backgroundColor: LINE,
-    marginTop: 16,
-    overflow: 'hidden',
-  },
-  heroBarFill: {
-    height: '100%',
-    backgroundColor: INK,
-  },
-  heroMeta: {
-    fontSize: 11,
-    color: MUTED,
-    marginTop: 8,
-    letterSpacing: 0.2,
-  },
-
-  /* KPI row */
-  kpiRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: LINE,
-  },
-  kpiCell: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  kpiDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: LINE,
-  },
-  kpiValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: INK,
-    letterSpacing: -0.5,
-  },
-  kpiLabel: {
-    fontSize: 11,
-    color: MUTED,
-    marginTop: 2,
-    letterSpacing: 0.2,
-  },
-
-  /* Section */
-  section: {
-    marginTop: 36,
-  },
-  sectionHead: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 18,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: MUTED,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  sectionMeta: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: INK,
-  },
-
-  /* Bar chart */
-  barChart: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 120,
-  },
-  barCol: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  barTrack: {
-    width: 6,
-    height: 90,
-    justifyContent: 'flex-end',
-  },
-  barFill: {
-    width: '100%',
-  },
-  barLabel: {
-    fontSize: 11,
-    color: MUTED,
-    marginTop: 10,
-  },
-
-  /* Outcomes */
-  emptyText: {
-    fontSize: 13,
-    color: MUTED,
-    marginTop: 8,
-  },
-  outcomeRow: {
     marginBottom: 16,
   },
-  outcomeLine: {
+  headerLeft: { flex: 1 },
+  greeting: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  headerMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 },
+  headerDate: { fontSize: 12, color: '#6B7280' },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
+  liveText: { fontSize: 10, color: '#059669', fontWeight: '600' },
+  refreshBtn: { padding: 6, borderRadius: 8 },
+
+  loadingBox: { paddingVertical: 48, alignItems: 'center' },
+
+  /* KPI grid */
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -6,
+    marginBottom: 12,
+  },
+  kpiWrap: {
+    width: '50%',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  kpiCard: {
+    borderRadius: 14,
+    padding: 12,
+    minHeight: 78,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  kpiLabel: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  kpiValueRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  kpiValue: { color: '#FFFFFF', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  kpiValueSub: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '400' },
+  kpiBadge: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  kpiBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+
+  /* Panels */
+  panel: {
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+  },
+  panelHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 12,
+  },
+  panelTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  accentBar: { width: 4, height: 18, borderRadius: 2 },
+  panelTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#5B21B6',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  pillViolet: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  pillVioletText: { color: '#7C3AED', fontSize: 10, fontWeight: '600' },
+
+  /* Donut */
+  donutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  donut: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 12,
+    borderColor: '#C4B5FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopColor: '#34D399',
+    borderRightColor: '#60A5FA',
+  },
+  donutInner: { alignItems: 'center', justifyContent: 'center' },
+  donutTotal: { fontSize: 24, fontWeight: '800', color: '#6D28D9' },
+  donutLabel: { fontSize: 9, color: '#7C3AED', fontWeight: '600', letterSpacing: 0.6 },
+
+  outcomeGrid: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+  },
+  outcomeCell: {
+    width: '50%',
+    marginHorizontal: 4,
+    marginVertical: 4,
+    padding: 10,
+    borderRadius: 12,
+    flexBasis: '46%',
+    flexGrow: 0,
+    flexShrink: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  outcomeDotRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  outcomeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.8)',
   },
   outcomeLabel: {
-    fontSize: 13,
-    color: INK_2,
-    fontWeight: '500',
-  },
-  outcomeCount: {
-    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 9,
     fontWeight: '700',
-    color: INK,
+    letterSpacing: 0.5,
   },
-  outcomeTrack: {
-    height: 2,
-    backgroundColor: LINE,
-    overflow: 'hidden',
-  },
-  outcomeFill: {
-    height: '100%',
-    backgroundColor: INK,
-  },
+  outcomeValue: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
 
-  /* Nav rows */
-  navRow: {
+  /* Call types */
+  callTypesWrap: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  callTypesHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  callTypesTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  callTypesRow: { flexDirection: 'row', gap: 8 },
+  callTypeCard: {
+    flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: LINE,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
   },
-  navLabel: {
-    fontSize: 15,
-    color: INK,
-    fontWeight: '500',
+  callTypeLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  callTypeDot: { width: 8, height: 8, borderRadius: 4 },
+  callTypeLabel: { fontSize: 12, fontWeight: '600' },
+  callTypeValue: { fontSize: 18, fontWeight: '800' },
+
+  /* Follow-ups */
+  followUpCard: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
   },
+  followUpHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  followUpName: { fontSize: 14, fontWeight: '700', color: '#78350F' },
+  followUpPhone: { fontSize: 12, color: '#B45309', fontWeight: '500', marginTop: 2 },
+  followUpBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  followUpBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  followUpTime: { fontSize: 12, color: '#C2410C', fontWeight: '700', marginTop: 6 },
+  followUpNotes: { fontSize: 12, color: '#B45309', marginTop: 4 },
+
+  emptyText: { fontSize: 13, color: '#B45309', textAlign: 'center', paddingVertical: 16 },
 });
 
 export default DashboardScreen;

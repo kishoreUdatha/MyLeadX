@@ -66,6 +66,7 @@ public class CallRecordingService extends Service {
         void onRecordingStarted(String path);
         void onRecordingStopped(String path, long duration);
         void onRecordingError(String error);
+        default void onCallAnswered() {}
     }
 
     public static void setCallback(RecordingCallback cb) {
@@ -177,6 +178,9 @@ public class CallRecordingService extends Service {
                     callAnswered = true;
                     conversationStartTime = System.currentTimeMillis();
                     Log.d(TAG, "========== CALL IN PROGRESS - TRACKING STARTED ==========");
+                    if (callback != null) {
+                        try { callback.onCallAnswered(); } catch (Exception e) { Log.w(TAG, "onCallAnswered callback failed: " + e.getMessage()); }
+                    }
                 }
                 break;
             case TelephonyManager.CALL_STATE_IDLE:

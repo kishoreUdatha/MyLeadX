@@ -278,9 +278,26 @@ class TelecallerAnalyticsService {
     };
   }
 
-  async getTelecallerPerformance(telecallerId: string, days: number = 30) {
+  async getTelecallerPerformance(telecallerId: string, days: number = 30, organizationId?: string) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
+
+    // Enforce org scoping so cross-tenant IDs cannot be queried
+    if (organizationId) {
+      const telecaller = await prisma.user.findFirst({
+        where: { id: telecallerId, organizationId },
+        select: { id: true },
+      });
+      if (!telecaller) {
+        return {
+          telecallerId,
+          period: { days, startDate, endDate: new Date() },
+          totals: { totalCalls: 0, answeredCalls: 0, interestedCount: 0, convertedCount: 0, callbacksRequested: 0, totalTalkTime: 0 },
+          averages: { callsPerDay: 0, conversionRate: 0, answerRate: 0 },
+          dailyTrend: [],
+        };
+      }
+    }
 
     const dailyData = await prisma.telecallerPerformanceDaily.findMany({
       where: { telecallerId, date: { gte: startDate } },

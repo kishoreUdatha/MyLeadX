@@ -85,6 +85,12 @@ public class CallRecordingModule extends ReactContextBaseJavaModule {
                     stopPromise = null;
                 }
             }
+
+            @Override
+            public void onCallAnswered() {
+                Log.d(TAG, "Callback: Call answered (OFFHOOK) - emitting onCallAnswered");
+                sendEvent("onCallAnswered", Arguments.createMap());
+            }
         });
     }
 
