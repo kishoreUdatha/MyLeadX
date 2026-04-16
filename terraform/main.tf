@@ -14,7 +14,7 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Data source for Amazon Linux 2023 AMI (Docker-ready, more stable)
+# Data source for Amazon Linux 2023 AMI
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -88,43 +88,38 @@ resource "aws_security_group" "app" {
   description = "Security group for VoiceBridge application"
   vpc_id      = aws_vpc.main.id
 
-  # SSH
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "SSH access"
+    description = "SSH"
   }
 
-  # HTTP
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTP access"
+    description = "HTTP"
   }
 
-  # HTTPS
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTPS access"
+    description = "HTTPS"
   }
 
-  # Backend API
   ingress {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Backend API"
+    description = "API"
   }
 
-  # Frontend (Docker)
   ingress {
     from_port   = 8080
     to_port     = 8080
@@ -133,13 +128,11 @@ resource "aws_security_group" "app" {
     description = "Frontend"
   }
 
-  # Outbound
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow all outbound"
   }
 
   tags = {
@@ -172,11 +165,19 @@ resource "aws_instance" "app" {
 exec > /var/log/user-data.log 2>&1
 set -ex
 
-echo "Starting VoiceBridge setup..."
+echo "=== VoiceBridge Setup Starting ==="
+
+# Create swap space first (prevents OOM during build)
+echo "Creating swap space..."
+fallocate -l 4G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
 
 # Install Docker
 yum update -y
-yum install -y docker git
+yum install -y docker git nginx
 systemctl start docker
 systemctl enable docker
 usermod -aG docker ec2-user
@@ -242,11 +243,58 @@ EOF
 
 chown ec2-user:ec2-user /opt/voicebridge/.env.production
 
-# Start application
+# Configure Nginx as reverse proxy
+cat > /etc/nginx/conf.d/voicebridge.conf << 'NGINXCONF'
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /api {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /socket.io {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+NGINXCONF
+
+# Remove default nginx config
+rm -f /etc/nginx/conf.d/default.conf
+
+# Start nginx
+systemctl start nginx
+systemctl enable nginx
+
+# Build and start application
 cd /opt/voicebridge
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
-echo "Setup complete! Public IP: $PUBLIC_IP"
+echo "=== VoiceBridge Setup Complete! ==="
+echo "Public IP: $PUBLIC_IP"
+echo "Frontend: http://$PUBLIC_IP"
+echo "API: http://$PUBLIC_IP/api"
 USERDATA
   )
 
