@@ -1,48 +1,22 @@
-# ================================================================
-# VoiceBridge - DigitalOcean CI/CD Pipeline
-# ================================================================
-# Automated deployment to DigitalOcean App Platform
-# Triggers: Push to main, Manual dispatch
-# ================================================================
-
 name: CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
-      - staging
   pull_request:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
-      skip_tests:
-        description: 'Skip tests'
-        required: false
-        default: false
-        type: boolean
 
 env:
   NODE_VERSION: '20'
   APP_NAME: 'voicebridge'
 
 jobs:
-  # ================================
-  # Build & Test Job
-  # ================================
   build-test:
     name: Build & Test
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_tests }}
 
     steps:
       - name: Checkout code
@@ -52,12 +26,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: |
-            backend/package-lock.json
-            frontend/package-lock.json
 
-      # Backend
       - name: Install backend dependencies
         working-directory: ./backend
         run: npm ci
@@ -66,26 +35,13 @@ jobs:
         working-directory: ./backend
         run: npx prisma generate
 
-      - name: TypeScript check
-        working-directory: ./backend
-        run: npm run typecheck || true
-
-      - name: Lint backend
-        working-directory: ./backend
-        run: npm run lint || true
-
       - name: Build backend
         working-directory: ./backend
         run: npm run build
 
-      # Frontend
       - name: Install frontend dependencies
         working-directory: ./frontend
         run: npm ci
-
-      - name: Lint frontend
-        working-directory: ./frontend
-        run: npm run lint || true
 
       - name: Build frontend
         working-directory: ./frontend
@@ -93,29 +49,11 @@ jobs:
         env:
           VITE_API_URL: https://placeholder.com/api
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: |
-            backend/dist
-            frontend/dist
-          retention-days: 1
-
-  # ================================
-  # Deploy to Production
-  # ================================
-  deploy-production:
-    name: Deploy to Production
+  deploy:
+    name: Deploy to DigitalOcean
     runs-on: ubuntu-latest
     needs: build-test
-    if: |
-      always() &&
-      (needs.build-test.result == 'success' || needs.build-test.result == 'skipped') &&
-      (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production'))
-    environment:
-      name: production
-      url: ${{ steps.deploy.outputs.app_url }}
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout code
@@ -158,154 +96,14 @@ jobs:
         run: |
           APP_ID=$(doctl apps list --format ID,Spec.Name --no-header | grep ${{ env.APP_NAME }} | awk '{print $1}')
           echo "Deploying app: $APP_ID"
-
-          # Create deployment
           doctl apps create-deployment $APP_ID --wait
-
-          # Get app URL
           APP_URL=$(doctl apps get $APP_ID --format DefaultIngress --no-header)
           echo "app_url=https://$APP_URL" >> $GITHUB_OUTPUT
-          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
-
-      - name: Verify Deployment
-        run: |
-          echo "Verifying deployment..."
-          APP_URL="${{ steps.deploy.outputs.app_url }}"
-
-          # Wait for app to be ready
-          sleep 30
-
-          # Health check
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/api/health" || echo "000")
-
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "Health check passed!"
-          else
-            echo "Warning: Health check returned status $HTTP_STATUS"
-          fi
+          echo "Deployed to: https://$APP_URL"
 
       - name: Deployment Summary
         run: |
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | Production |" >> $GITHUB_STEP_SUMMARY
-          echo "| App ID | ${{ steps.deploy.outputs.app_id }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL | ${{ steps.deploy.outputs.app_url }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Deployed by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-
-  # ================================
-  # Deploy to Staging
-  # ================================
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: build-test
-    if: |
-      always() &&
-      (needs.build-test.result == 'success' || needs.build-test.result == 'skipped') &&
-      (github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging'))
-    environment:
-      name: staging
-      url: ${{ steps.deploy.outputs.app_url }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Deploy to Staging
-        id: deploy
-        run: |
-          APP_NAME="voicebridge-staging"
-          APP_ID=$(doctl apps list --format ID,Spec.Name --no-header 2>/dev/null | grep $APP_NAME | awk '{print $1}' || echo "")
-
-          if [ -z "$APP_ID" ]; then
-            echo "Creating staging app..."
-            # Would need a separate staging spec file
-            echo "Staging app not configured. Skipping."
-            exit 0
-          fi
-
-          doctl apps create-deployment $APP_ID --wait
-          APP_URL=$(doctl apps get $APP_ID --format DefaultIngress --no-header)
-          echo "app_url=https://$APP_URL" >> $GITHUB_OUTPUT
-
-  # ================================
-  # Notify Job
-  # ================================
-  notify:
-    name: Notify
-    runs-on: ubuntu-latest
-    needs: [build-test, deploy-production]
-    if: always()
-
-    steps:
-      - name: Set status
-        id: status
-        run: |
-          if [ "${{ needs.deploy-production.result }}" = "success" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "emoji=✅" >> $GITHUB_OUTPUT
-            echo "message=Deployment successful!" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.deploy-production.result }}" = "failure" ]; then
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "emoji=❌" >> $GITHUB_OUTPUT
-            echo "message=Deployment failed!" >> $GITHUB_OUTPUT
-          else
-            echo "status=skipped" >> $GITHUB_OUTPUT
-            echo "emoji=⏭️" >> $GITHUB_OUTPUT
-            echo "message=Deployment skipped" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Print Status
-        run: |
-          echo "${{ steps.status.outputs.emoji }} ${{ steps.status.outputs.message }}"
-          echo ""
-          echo "Build: ${{ needs.build-test.result }}"
-          echo "Deploy: ${{ needs.deploy-production.result }}"
-
-      # Optional: Slack notification
-      - name: Slack Notification
-        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ steps.status.outputs.status }}
-          fields: repo,message,commit,author,action,eventName,workflow
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-  # ================================
-  # Rollback Job (Manual)
-  # ================================
-  rollback:
-    name: Rollback Deployment
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && failure()
-    needs: deploy-production
-
-    steps:
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Get previous deployment
-        id: prev-deploy
-        run: |
-          APP_ID=$(doctl apps list --format ID,Spec.Name --no-header | grep ${{ env.APP_NAME }} | awk '{print $1}')
-          DEPLOYMENTS=$(doctl apps list-deployments $APP_ID --format ID --no-header | head -2 | tail -1)
-          echo "prev_deployment=$DEPLOYMENTS" >> $GITHUB_OUTPUT
-          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
-
-      - name: Rollback info
-        run: |
-          echo "To rollback manually, run:"
-          echo "doctl apps create-deployment ${{ steps.prev-deploy.outputs.app_id }} --wait"
+          echo "- URL: ${{ steps.deploy.outputs.app_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
