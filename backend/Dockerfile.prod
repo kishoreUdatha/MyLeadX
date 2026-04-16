@@ -6,13 +6,12 @@ RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Install dependencies
+# Copy package files AND prisma schema first (needed for postinstall)
 COPY package*.json ./
-RUN npm ci --only=production=false
-
-# Copy prisma schema and generate client
 COPY prisma ./prisma/
-RUN npx prisma generate
+
+# Install all dependencies (postinstall will run prisma generate)
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -28,14 +27,14 @@ RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files AND prisma schema first (needed for postinstall)
 COPY package*.json ./
+COPY prisma ./prisma/
 
-# Install production dependencies only
-RUN npm ci --only=production
+# Install production dependencies only (postinstall will run prisma generate)
+RUN npm ci --omit=dev
 
-# Copy prisma schema and generated client from builder
-COPY --from=builder /app/prisma ./prisma
+# Copy generated prisma client from builder (overwrite with pre-built)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
@@ -55,7 +54,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
 # Start production server
 CMD ["node", "dist/index.js"]
