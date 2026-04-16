@@ -98,6 +98,8 @@ services:
       DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
       # Sarvam AI
       SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      # Credentials Encryption
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-}
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
     depends_on:
