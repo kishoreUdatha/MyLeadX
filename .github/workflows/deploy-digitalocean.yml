@@ -50,7 +50,7 @@ jobs:
           VITE_API_URL: https://placeholder.com/api
 
   deploy:
-    name: Deploy to DigitalOcean
+    name: Deploy
     runs-on: ubuntu-latest
     needs: build-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -64,7 +64,7 @@ jobs:
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      - name: Check DigitalOcean authentication
+      - name: Check authentication
         run: doctl account get
 
       - name: Check if app exists
@@ -78,32 +78,62 @@ jobs:
             echo "app_exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create App (First deployment)
+      - name: Create App
         if: steps.check-app.outputs.app_exists == 'false'
         run: |
           echo "Creating new app..."
           doctl apps create --spec .do/app.yaml --wait
-          echo "App created successfully!"
 
-      - name: Update App Spec
+      - name: Update App
         if: steps.check-app.outputs.app_exists == 'true'
         run: |
-          echo "Updating app specification..."
           doctl apps update ${{ steps.check-app.outputs.app_id }} --spec .do/app.yaml
 
-      - name: Deploy Application
+      - name: Deploy
         id: deploy
         run: |
           APP_ID=$(doctl apps list --format ID,Spec.Name --no-header | grep ${{ env.APP_NAME }} | awk '{print $1}')
-          echo "Deploying app: $APP_ID"
           doctl apps create-deployment $APP_ID --wait
           APP_URL=$(doctl apps get $APP_ID --format DefaultIngress --no-header)
           echo "app_url=https://$APP_URL" >> $GITHUB_OUTPUT
-          echo "Deployed to: https://$APP_URL"
 
-      - name: Deployment Summary
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Wait for app to be ready
+        run: sleep 30
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Get app URL
+        id: get-url
         run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- URL: ${{ steps.deploy.outputs.app_url }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          APP_ID=$(doctl apps list --format ID,Spec.Name --no-header | grep voicebridge | awk '{print $1}')
+          APP_URL=$(doctl apps get $APP_ID --format DefaultIngress --no-header)
+          echo "app_url=https://$APP_URL" >> $GITHUB_OUTPUT
+
+      - name: Check API health
+        run: |
+          APP_URL="${{ steps.get-url.outputs.app_url }}"
+          echo "Checking health at: $APP_URL/api/health"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/api/health" || echo "000")
+          echo "HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Health check passed!"
+          else
+            echo "Health check failed with status: $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- URL: ${{ steps.get-url.outputs.app_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Healthy" >> $GITHUB_STEP_SUMMARY
