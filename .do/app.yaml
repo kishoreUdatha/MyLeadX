@@ -85,6 +85,51 @@ services:
         value: blr1
       - key: DO_SPACES_ENDPOINT
         value: https://blr1.digitaloceanspaces.com
+      # Telephony - Plivo
+      - key: PLIVO_AUTH_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: PLIVO_AUTH_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: PLIVO_PHONE_NUMBER
+        scope: RUN_TIME
+        type: SECRET
+      # Telephony - Exotel
+      - key: EXOTEL_SID
+        scope: RUN_TIME
+        type: SECRET
+      - key: EXOTEL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: EXOTEL_API_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      # WhatsApp
+      - key: WHATSAPP_ACCESS_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        scope: RUN_TIME
+        type: SECRET
+      # Email SMTP
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        scope: RUN_TIME
+        type: SECRET
+      - key: SMTP_PASS
+        scope: RUN_TIME
+        type: SECRET
+      # Razorpay Payments
+      - key: RAZORPAY_KEY_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: RAZORPAY_KEY_SECRET
+        scope: RUN_TIME
+        type: SECRET
 
     # Auto-scaling
     autoscaling:
@@ -128,6 +173,14 @@ databases:
     engine: PG
     version: "15"
     size: db-s-1vcpu-1gb  # Basic: 1 vCPU, 1GB RAM, 10GB storage
+    num_nodes: 1
+    production: true
+
+  # Redis (for Bull job queue and caching)
+  - name: redis
+    engine: REDIS
+    version: "7"
+    size: db-s-1vcpu-1gb
     num_nodes: 1
     production: true
 
