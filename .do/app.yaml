@@ -9,18 +9,17 @@ alerts:
   - rule: DEPLOYMENT_FAILED
   - rule: DOMAIN_FAILED
 
-# Backend API Service
+# Backend API Service (from Container Registry)
 services:
   - name: api
-    github:
-      repo: kishoreUdatha/VoiceBridge
-      branch: main
-      deploy_on_push: true
-    source_dir: backend
-    dockerfile_path: backend/Dockerfile
+    image:
+      registry_type: DOCR
+      registry: voicebridge
+      repository: api
+      tag: latest
 
     # Instance configuration
-    instance_count: 2
+    instance_count: 1
     instance_size_slug: professional-xs  # 1 vCPU, 1GB RAM
 
     # HTTP configuration
@@ -145,7 +144,7 @@ static_sites:
     github:
       repo: kishoreUdatha/VoiceBridge
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     source_dir: frontend
     build_command: npm ci && npm run build
     output_dir: dist
@@ -163,35 +162,16 @@ static_sites:
 
     # Error document for SPA routing
     error_document: index.html
-
-    # Caching
     catchall_document: index.html
 
-# Database (Managed PostgreSQL)
-databases:
-  - name: db
-    engine: PG
-    version: "15"
-    size: db-s-1vcpu-1gb  # Basic: 1 vCPU, 1GB RAM, 10GB storage
-    num_nodes: 1
-    production: true
-
-  # Redis (for Bull job queue and caching)
-  - name: redis
-    engine: REDIS
-    version: "7"
-    size: db-s-1vcpu-1gb
-    num_nodes: 1
-    production: true
-
-# Jobs (one-time tasks)
+# Jobs (database migration)
 jobs:
   - name: db-migrate
-    github:
-      repo: kishoreUdatha/VoiceBridge
-      branch: main
-    source_dir: backend
-    dockerfile_path: backend/Dockerfile
+    image:
+      registry_type: DOCR
+      registry: voicebridge
+      repository: api
+      tag: latest
     kind: PRE_DEPLOY
 
     envs:
@@ -199,5 +179,4 @@ jobs:
         scope: RUN_TIME
         type: SECRET
 
-    # Run migrations before deployment
     run_command: npx prisma migrate deploy

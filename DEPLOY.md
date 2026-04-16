@@ -4,9 +4,9 @@
 
 Deployment is fully automated via GitHub Actions. Every push to `main` triggers:
 1. Build & Test
-2. Deploy to DigitalOcean App Platform
-3. Health check verification
-4. Deployment notification
+2. Build Docker Images (pushed to DigitalOcean Container Registry)
+3. Deploy to DigitalOcean App Platform
+4. Health Check verification
 
 ## Setup (One-time)
 
@@ -14,7 +14,12 @@ Deployment is fully automated via GitHub Actions. Every push to `main` triggers:
 
 Before first deployment, create these resources in [DigitalOcean Console](https://cloud.digitalocean.com):
 
-#### 1.1 Create PostgreSQL Database
+#### 1.1 Create Container Registry
+- Go to **Container Registry > Create Registry**
+- Name: `voicebridge`
+- Plan: **Starter (Free - 500MB)**
+
+#### 1.2 Create PostgreSQL Database
 - Go to **Databases > Create Database**
 - Engine: **PostgreSQL 15**
 - Region: **Bangalore (BLR1)**
