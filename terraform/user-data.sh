@@ -11,41 +11,64 @@ echo "=========================================="
 echo "VoiceBridge EC2 Setup Starting..."
 echo "=========================================="
 
-# Update system
-apt-get update
+# Wait for network to be ready
+sleep 30
+
+# Retry apt update (handles mirror sync issues)
+for i in {1..5}; do
+    echo "Attempt $i: Running apt update..."
+    apt-get update && break
+    echo "apt update failed, retrying in 30 seconds..."
+    sleep 30
+done
+
+# Upgrade system
 apt-get upgrade -y
 
-# Install Docker
-curl -fsSL https://get.docker.com | sh
+# Install Docker with retry
+for i in {1..3}; do
+    echo "Attempt $i: Installing Docker..."
+    curl -fsSL https://get.docker.com | sh && break
+    echo "Docker install failed, retrying in 30 seconds..."
+    sleep 30
+done
+
+# Add ubuntu user to docker group
 usermod -aG docker ubuntu
 
-# Install Docker Compose
-apt-get install -y docker-compose-plugin
-
-# Install additional tools
-apt-get install -y git nginx certbot python3-certbot-nginx htop
+# Install Docker Compose and Git
+apt-get install -y docker-compose-plugin git
 
 # Create app directory
 mkdir -p /opt/voicebridge
-cd /opt/voicebridge
 
-# Clone repository
-git clone ${github_repo} .
+# Clone repository with retry
+for i in {1..3}; do
+    echo "Attempt $i: Cloning repository..."
+    git clone ${github_repo} /opt/voicebridge && break
+    echo "Git clone failed, retrying in 30 seconds..."
+    rm -rf /opt/voicebridge
+    mkdir -p /opt/voicebridge
+    sleep 30
+done
+
+# Set ownership
 chown -R ubuntu:ubuntu /opt/voicebridge
 
-# Copy environment template
+# Copy environment file
+cd /opt/voicebridge
 cp deploy/aws/env.aws.template .env.production
 chown ubuntu:ubuntu .env.production
 
-# Set permissions
-chmod +x deploy/aws/*.sh
+# Pull Docker images in advance
+cd /opt/voicebridge
+docker compose -f docker-compose.prod.yml pull || true
+
+# Build and start the application
+sudo -u ubuntu docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build || true
 
 echo "=========================================="
 echo "VoiceBridge EC2 Setup Complete!"
 echo "=========================================="
-echo ""
-echo "Next steps:"
-echo "1. SSH into the server"
-echo "2. Edit /opt/voicebridge/.env.production"
-echo "3. Run: cd /opt/voicebridge && docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build"
-echo ""
+echo "Check status: docker ps"
+echo "View logs: docker compose -f docker-compose.prod.yml logs -f"
