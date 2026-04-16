@@ -167,60 +167,52 @@ resource "aws_instance" "app" {
     encrypted   = true
   }
 
-  user_data = <<-EOF
-    #!/bin/bash
-    exec > /var/log/user-data.log 2>&1
-    set -x
+  user_data = base64encode(<<-USERDATA
+#!/bin/bash
+exec > /var/log/user-data.log 2>&1
+set -ex
 
-    # Install Docker
-    yum update -y
-    yum install -y docker git
-    systemctl start docker
-    systemctl enable docker
-    usermod -aG docker ec2-user
+echo "Starting VoiceBridge setup..."
 
-    # Install Docker Compose v2
-    mkdir -p /usr/local/lib/docker/cli-plugins
-    curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+# Install Docker
+yum update -y
+yum install -y docker git
+systemctl start docker
+systemctl enable docker
+usermod -aG docker ec2-user
 
-    # Install Docker Buildx
-    curl -SL "https://github.com/docker/buildx/releases/download/v0.12.1/buildx-v0.12.1.linux-amd64" -o /usr/local/lib/docker/cli-plugins/docker-buildx
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+# Install Docker Compose v2
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-    # Clone repo
-    git clone ${var.github_repo} /opt/voicebridge
-    chown -R ec2-user:ec2-user /opt/voicebridge
+# Install Docker Buildx
+curl -SL "https://github.com/docker/buildx/releases/download/v0.12.1/buildx-v0.12.1.linux-amd64" -o /usr/local/lib/docker/cli-plugins/docker-buildx
+chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
 
-    # Get instance public IP
-    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-    PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+# Clone repo
+git clone ${var.github_repo} /opt/voicebridge
+chown -R ec2-user:ec2-user /opt/voicebridge
 
-    # Create env file with correct IP
-    cd /opt/voicebridge
-    cat > .env.production << ENVFILE
-# Database
+# Get public IP
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+
+# Create env file
+cat > /opt/voicebridge/.env.production << EOF
 POSTGRES_USER=voicebridge
 POSTGRES_PASSWORD=VB_Prod_2024_Secure!
 POSTGRES_DB=voicebridge
-
-# JWT
 JWT_SECRET=xK9mPqR3vY7nBcD2fH5jL8wZ1aE4gT6uI0oS
 JWT_REFRESH_SECRET=mN3bV7cX1zL5kJ9hG2fD6sA0pO4iU8yT
-
-# Server
 PORT=3000
 FRONTEND_URL=http://$PUBLIC_IP
 BASE_URL=http://$PUBLIC_IP
 VITE_API_URL=http://$PUBLIC_IP/api
 CORS_ORIGINS=http://$PUBLIC_IP
-
-# AI
 OPENAI_API_KEY=
 DEEPGRAM_API_KEY=
 SARVAM_API_KEY=
-
-# Telephony
 PLIVO_AUTH_ID=
 PLIVO_AUTH_TOKEN=
 PLIVO_PHONE_NUMBER=
@@ -230,40 +222,33 @@ TWILIO_PHONE_NUMBER=
 TWILIO_WHATSAPP_NUMBER=
 SMS_PROVIDER=plivo
 VOICE_PROVIDER=plivo
-
-# AWS S3
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_BUCKET_NAME=voicebridge-uploads
 AWS_REGION=ap-south-1
-
-# Payments
 RAZORPAY_KEY_ID=
 RAZORPAY_KEY_SECRET=
-
-# Email
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=
-
-# Social
 FACEBOOK_APP_ID=
 FACEBOOK_APP_SECRET=
 FACEBOOK_VERIFY_TOKEN=
 LINKEDIN_CLIENT_ID=
 LINKEDIN_CLIENT_SECRET=
-ENVFILE
+EOF
 
-    chown ec2-user:ec2-user .env.production
+chown ec2-user:ec2-user /opt/voicebridge/.env.production
 
-    # Start application
-    cd /opt/voicebridge
-    docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# Start application
+cd /opt/voicebridge
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
-    echo "Setup complete!"
-  EOF
+echo "Setup complete! Public IP: $PUBLIC_IP"
+USERDATA
+  )
 
   tags = {
     Name = "${var.project_name}-server"
