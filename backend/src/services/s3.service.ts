@@ -2,7 +2,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 
-// Initialize S3 client
+// Initialize S3 client - will use IAM instance profile on EC2 or explicit credentials
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'ap-south-1',
   credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
@@ -10,12 +10,14 @@ const s3Client = new S3Client({
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
       }
-    : undefined,
+    : undefined, // Let SDK auto-detect credentials (IAM instance profile, etc.)
 });
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET || 'crm-lead-generation-files';
 const RECORDINGS_BUCKET = process.env.AWS_RECORDINGS_BUCKET || 'voicebridge-recordings-3e6c1oe0';
-const USE_LOCAL_STORAGE = !process.env.AWS_ACCESS_KEY_ID;
+// Use local storage only if no bucket is configured AND no explicit credentials
+// On EC2 with IAM role, AWS_RECORDINGS_BUCKET should be set to enable S3
+const USE_LOCAL_STORAGE = !process.env.AWS_ACCESS_KEY_ID && !process.env.AWS_RECORDINGS_BUCKET;
 
 // For local development without S3
 const localFileStore: Map<string, { buffer: Buffer; mimeType: string }> = new Map();
@@ -114,9 +116,10 @@ export function generateFileKey(folder: string, fileName: string): string {
 
 // Log initialization
 if (USE_LOCAL_STORAGE) {
-  console.log('S3 client initialized in LOCAL STORAGE mode (no AWS credentials found)');
+  console.log('[S3] Using LOCAL STORAGE mode (set AWS_RECORDINGS_BUCKET to enable S3)');
 } else {
-  console.log('S3 client initialized successfully');
+  console.log(`[S3] Client initialized for recordings bucket: ${RECORDINGS_BUCKET}`);
+  console.log(`[S3] Using ${process.env.AWS_ACCESS_KEY_ID ? 'explicit credentials' : 'IAM instance profile'}`);
 }
 
 /**
