@@ -565,6 +565,14 @@ export const getPipelineAnalytics = async (pipelineId: string) => {
     };
   });
 
+  // Build stageStats array for frontend compatibility
+  const stageStats = stages.map(stage => ({
+    stageId: stage.id,
+    stageName: stage.name,
+    count: stage.recordCount,
+    avgTimeMinutes: stage.avgTimeMinutes || 0,
+  }));
+
   return {
     pipeline,
     totalRecords: totalLeads,
@@ -573,6 +581,7 @@ export const getPipelineAnalytics = async (pipelineId: string) => {
     lostRecords: lostLeads,
     conversionRate: totalLeads > 0 ? (wonLeads / totalLeads) * 100 : 0,
     stages,
+    stageStats,
   };
 };
 

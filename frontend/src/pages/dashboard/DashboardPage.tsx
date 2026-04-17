@@ -7,6 +7,7 @@ import { fetchStats } from '../../store/slices/rawImportSlice';
 import subscriptionService, { Subscription } from '../../services/subscription.service';
 import api from '../../services/api';
 import { teamMonitoringService, LiveTeamStatus } from '../../services/team-monitoring.service';
+import pipelineSettingsService, { Pipeline, PipelineAnalytics } from '../../services/pipeline-settings.service';
 import {
   PieChart,
   Pie,
@@ -1739,12 +1740,15 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
   const [liveStatus, setLiveStatus] = useState<LiveTeamStatus | null>(null);
   const [followUpStats, setFollowUpStats] = useState<FollowUpStats>({ total: 0, overdue: 0, today: 0, upcoming: 0, completed: 0 });
   const [convertedCount, setConvertedCount] = useState(0);
+  const [pipelineAnalytics, setPipelineAnalytics] = useState<PipelineAnalytics | null>(null);
+  const [defaultPipeline, setDefaultPipeline] = useState<Pipeline | null>(null);
 
   useEffect(() => {
     fetchOrgStats();
     fetchLiveStatus();
     fetchFollowUpStats();
     fetchConvertedCount();
+    fetchPipelineData();
     const liveStatusInterval = setInterval(fetchLiveStatus, 30000);
     return () => clearInterval(liveStatusInterval);
   }, []);
@@ -1825,6 +1829,26 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
     }
   };
 
+  const fetchPipelineData = async () => {
+    try {
+      // Fetch pipelines for LEAD entity type
+      const pipelines = await pipelineSettingsService.getPipelines('LEAD');
+
+      // Find default pipeline or use first one
+      const defaultPipe = pipelines.find(p => p.isDefault) || pipelines[0];
+
+      if (defaultPipe) {
+        setDefaultPipeline(defaultPipe);
+
+        // Fetch analytics for the default pipeline
+        const analytics = await pipelineSettingsService.getPipelineAnalytics(defaultPipe.id);
+        setPipelineAnalytics(analytics);
+      }
+    } catch (error) {
+      console.error('Failed to fetch pipeline data:', error);
+    }
+  };
+
   const handleRefresh = () => {
     setLoading(true);
     dispatch(fetchLeadStats());
@@ -1833,12 +1857,23 @@ function AdminDashboard({ user, getGreeting, lastRefresh, setLastRefresh, stats,
     fetchLiveStatus();
     fetchFollowUpStats();
     fetchConvertedCount();
+    fetchPipelineData();
     setLastRefresh(new Date());
     setTimeout(() => setLoading(false), 500);
   };
 
-  // Pipeline stages data for chart - use lead stats if available, otherwise raw import stats
-  const pipelineStages = stats?.byStatus && Object.keys(stats.byStatus).length > 0
+  // Pipeline stages data for chart - prioritize Pipeline Stages from Settings
+  const pipelineStages = pipelineAnalytics?.stageStats && pipelineAnalytics.stageStats.length > 0
+    ? pipelineAnalytics.stageStats.map((stage, index) => {
+        // Find the stage in default pipeline to get color
+        const pipelineStage = defaultPipeline?.stages?.find(s => s.id === stage.stageId);
+        return {
+          name: stage.stageName,
+          value: stage.count,
+          color: pipelineStage?.color || STAGE_COLORS[stage.stageName.toUpperCase().replace(/\s+/g, '_')] || PIE_COLORS[index % PIE_COLORS.length],
+        };
+      }).sort((a, b) => b.value - a.value)
+    : stats?.byStatus && Object.keys(stats.byStatus).length > 0
     ? Object.entries(stats.byStatus)
         .map(([stage, count], index) => ({
           name: stage.replace(/_/g, ' '),
