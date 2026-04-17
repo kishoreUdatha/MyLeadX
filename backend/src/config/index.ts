@@ -106,8 +106,8 @@ export const config = {
   // Cookie settings for secure token storage
   cookie: {
     httpOnly: true,
-    secure: isProduction, // Only send over HTTPS in production
-    sameSite: (isProduction ? 'strict' : 'lax') as 'strict' | 'lax' | 'none',
+    secure: false, // Disabled for HTTP testing
+    sameSite: 'lax' as 'strict' | 'lax' | 'none',
     domain: process.env.COOKIE_DOMAIN || undefined,
     accessTokenMaxAge: 15 * 60 * 1000, // 15 minutes in ms
     refreshTokenMaxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
