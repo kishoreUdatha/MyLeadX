@@ -44,8 +44,8 @@ export function csrfTokenSetter(req: Request, res: Response, next: NextFunction)
     const token = generateCsrfToken();
     res.cookie(CSRF_COOKIE_NAME, token, {
       httpOnly: false, // Must be readable by JavaScript
-      secure: config.isProduction,
-      sameSite: config.isProduction ? 'strict' : 'lax',
+      secure: config.cookie.secure, // Use same setting as auth cookies
+      sameSite: config.cookie.sameSite,
       path: '/',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     });
@@ -133,8 +133,8 @@ export function csrfTokenEndpoint(req: Request, res: Response): void {
     token = generateCsrfToken();
     res.cookie(CSRF_COOKIE_NAME, token, {
       httpOnly: false,
-      secure: config.isProduction,
-      sameSite: config.isProduction ? 'strict' : 'lax',
+      secure: config.cookie.secure, // Use same setting as auth cookies
+      sameSite: config.cookie.sameSite,
       path: '/',
       maxAge: 24 * 60 * 60 * 1000,
     });
