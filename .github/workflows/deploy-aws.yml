@@ -33,7 +33,10 @@ jobs:
             cd /opt/voicebridge
 
             echo "=== Pulling latest code ==="
-            git fetch --all
+            git gc --prune=now || true
+            git remote prune origin || true
+            rm -f .git/refs/remotes/origin/main.lock || true
+            git fetch --all --prune
             git reset --hard origin/main
 
             echo "=== Updating environment file with current IP ==="
