@@ -34,3 +34,15 @@ variable "domain_name" {
   type        = string
   default     = "myleadx.ai"
 }
+
+variable "ssl_email" {
+  description = "Email for SSL certificate notifications"
+  type        = string
+  default     = "admin@myleadx.ai"
+}
+
+variable "ssh_private_key_path" {
+  description = "Path to SSH private key for provisioning"
+  type        = string
+  default     = "./voicebridge-key"
+}

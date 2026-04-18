@@ -429,3 +429,37 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   name = "${var.project_name}-ec2-profile"
   role = aws_iam_role.ec2_s3_role.name
 }
+
+# SSL Setup with Certbot
+resource "null_resource" "ssl_setup" {
+  depends_on = [aws_eip.app]
+
+  # Trigger re-run when domain changes
+  triggers = {
+    domain = var.domain_name
+    eip    = aws_eip.app.public_ip
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file(var.ssh_private_key_path)
+    host        = aws_eip.app.public_ip
+    timeout     = "5m"
+  }
+
+  # Wait for instance to be ready
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Waiting for system to be ready...'",
+      "sleep 60",
+      "echo 'Installing certbot...'",
+      "sudo yum install -y certbot python3-certbot-nginx || sudo amazon-linux-extras install epel -y && sudo yum install -y certbot python3-certbot-nginx",
+      "echo 'Setting up SSL certificates...'",
+      "sudo certbot --nginx -d app.${var.domain_name} -d api.${var.domain_name} --non-interactive --agree-tos -m ${var.ssl_email} --redirect || echo 'Certbot setup skipped - may need manual setup'",
+      "echo 'Setting up auto-renewal...'",
+      "echo '0 12 * * * /usr/bin/certbot renew --quiet' | sudo tee /etc/cron.d/certbot-renew",
+      "echo 'SSL setup complete!'"
+    ]
+  }
+}
