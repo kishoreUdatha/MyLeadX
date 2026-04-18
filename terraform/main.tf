@@ -66,6 +66,28 @@ resource "aws_subnet" "public" {
   }
 }
 
+# Private Subnet 1 (for RDS)
+resource "aws_subnet" "private_1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "${var.aws_region}a"
+
+  tags = {
+    Name = "${var.project_name}-private-subnet-1"
+  }
+}
+
+# Private Subnet 2 (for RDS - requires 2 AZs)
+resource "aws_subnet" "private_2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.3.0/24"
+  availability_zone = "${var.aws_region}b"
+
+  tags = {
+    Name = "${var.project_name}-private-subnet-2"
+  }
+}
+
 # Route Table
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
@@ -144,6 +166,84 @@ resource "aws_security_group" "app" {
   }
 }
 
+# Security Group for RDS
+resource "aws_security_group" "rds" {
+  name        = "${var.project_name}-rds-sg"
+  description = "Security group for RDS PostgreSQL"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app.id]
+    description     = "PostgreSQL from app"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-rds-sg"
+  }
+}
+
+# DB Subnet Group
+resource "aws_db_subnet_group" "main" {
+  name       = "${var.project_name}-db-subnet"
+  subnet_ids = [aws_subnet.private_1.id, aws_subnet.private_2.id]
+
+  tags = {
+    Name = "${var.project_name}-db-subnet"
+  }
+}
+
+# Random password for RDS
+resource "random_password" "db_password" {
+  length  = 24
+  special = false
+}
+
+# RDS PostgreSQL Instance
+resource "aws_db_instance" "main" {
+  identifier     = "${var.project_name}-db"
+  engine         = "postgres"
+  engine_version = "15.10"
+  instance_class = "db.t3.micro"
+
+  allocated_storage     = 20
+  max_allocated_storage = 100
+  storage_type          = "gp3"
+  storage_encrypted     = true
+
+  db_name  = "myleadx"
+  username = "myleadx"
+  password = random_password.db_password.result
+
+  vpc_security_group_ids = [aws_security_group.rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+
+  backup_retention_period = 7
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "Mon:04:00-Mon:05:00"
+
+  skip_final_snapshot       = false
+  final_snapshot_identifier = "${var.project_name}-final-snapshot"
+  deletion_protection       = false
+
+  performance_insights_enabled = false
+  publicly_accessible          = false
+  multi_az                     = false
+
+  tags = {
+    Name = "${var.project_name}-db"
+  }
+}
+
 # Key Pair
 resource "aws_key_pair" "deployer" {
   key_name   = "${var.project_name}-key"
@@ -204,11 +304,9 @@ chown -R ec2-user:ec2-user /opt/myleadx
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
-# Create env file
+# Create env file (DATABASE_URL will be set via provisioner after RDS is ready)
 cat > /opt/myleadx/.env.production << EOF
-POSTGRES_USER=myleadx
-POSTGRES_PASSWORD=MLX_Prod_2024_Secure!
-POSTGRES_DB=myleadx
+DATABASE_URL=placeholder
 JWT_SECRET=xK9mPqR3vY7nBcD2fH5jL8wZ1aE4gT6uI0oS
 JWT_REFRESH_SECRET=mN3bV7cX1zL5kJ9hG2fD6sA0pO4iU8yT
 PORT=8080
@@ -430,9 +528,43 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_s3_role.name
 }
 
+# Configure RDS connection after both EC2 and RDS are ready
+resource "null_resource" "configure_rds" {
+  depends_on = [aws_instance.app, aws_db_instance.main, aws_eip.app]
+
+  triggers = {
+    rds_endpoint = aws_db_instance.main.endpoint
+    instance_id  = aws_instance.app.id
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file(var.ssh_private_key_path)
+    host        = aws_eip.app.public_ip
+    timeout     = "5m"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Waiting for instance to be ready...'",
+      "sleep 30",
+      "echo 'Configuring RDS connection...'",
+      "sudo sed -i 's|DATABASE_URL=placeholder|DATABASE_URL=postgresql://myleadx:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/myleadx|g' /opt/myleadx/.env.production",
+      "echo 'Restarting application with RDS...'",
+      "cd /opt/myleadx && sudo docker compose -f docker-compose.prod.yml --env-file .env.production down || true",
+      "cd /opt/myleadx && sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d",
+      "echo 'Running database migrations...'",
+      "sleep 10",
+      "cd /opt/myleadx && sudo docker exec myleadx-backend npx prisma migrate deploy || echo 'Migration may need manual run'",
+      "echo 'RDS configuration complete!'"
+    ]
+  }
+}
+
 # SSL Setup with Certbot
 resource "null_resource" "ssl_setup" {
-  depends_on = [aws_eip.app]
+  depends_on = [aws_eip.app, null_resource.configure_rds]
 
   # Trigger re-run when domain changes
   triggers = {

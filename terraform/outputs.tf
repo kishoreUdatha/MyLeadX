@@ -74,3 +74,21 @@ output "s3_recordings_url" {
   description = "S3 bucket URL for recordings"
   value       = "https://${aws_s3_bucket.recordings.bucket_regional_domain_name}"
 }
+
+# RDS Outputs
+output "rds_endpoint" {
+  description = "RDS PostgreSQL endpoint"
+  value       = aws_db_instance.main.endpoint
+}
+
+output "rds_database_url" {
+  description = "Full DATABASE_URL for application"
+  value       = "postgresql://myleadx:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/myleadx"
+  sensitive   = true
+}
+
+output "rds_password" {
+  description = "RDS database password"
+  value       = random_password.db_password.result
+  sensitive   = true
+}

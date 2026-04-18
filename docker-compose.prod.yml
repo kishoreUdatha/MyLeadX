@@ -1,27 +1,9 @@
 version: '3.8'
 
-# MyLeadX Production Docker Compose for AWS EC2
+# MyLeadX Production Docker Compose for AWS EC2 with RDS
 # Usage: docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: myleadx-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-myleadx}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:-myleadx}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-myleadx}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - myleadx-network
-
   redis:
     image: redis:7-alpine
     container_name: myleadx-redis
@@ -44,8 +26,8 @@ services:
     container_name: myleadx-backend
     restart: always
     environment:
-      # Database
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-myleadx}
+      # Database (RDS)
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       # JWT
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
@@ -57,6 +39,8 @@ services:
       FRONTEND_URL: https://app.myleadx.ai
       BASE_URL: https://api.myleadx.ai
       CORS_ORIGINS: https://myleadx.ai,https://app.myleadx.ai,https://*.myleadx.ai
+      # Super Admin
+      SUPER_ADMIN_SETUP_KEY: ${SUPER_ADMIN_SETUP_KEY:-}
       # Exotel
       EXOTEL_API_KEY: ${EXOTEL_API_KEY:-}
       EXOTEL_API_TOKEN: ${EXOTEL_API_TOKEN:-}
@@ -93,8 +77,6 @@ services:
       # Credentials Encryption
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?CREDENTIALS_ENCRYPTION_KEY is required}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -143,7 +125,6 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
-  postgres_data:
   redis_data:
   uploads_data:
 
