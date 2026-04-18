@@ -23,4 +23,4 @@ instance_type = "t3.medium"
 ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ..."
 
 # GitHub Repository
-github_repo = "https://github.com/kishoreUdatha/VoiceBridge.git"
+github_repo = "https://github.com/kishoreUdatha/MyLeadX.git"

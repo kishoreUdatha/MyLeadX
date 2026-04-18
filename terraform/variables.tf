@@ -26,7 +26,7 @@ variable "ssh_public_key" {
 variable "github_repo" {
   description = "GitHub repository URL"
   type        = string
-  default     = "https://github.com/kishoreUdatha/VoiceBridge.git"
+  default     = "https://github.com/kishoreUdatha/MyLeadX.git"
 }
 
 variable "domain_name" {
