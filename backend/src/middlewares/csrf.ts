@@ -87,6 +87,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   const csrfExemptEndpoints = [
     '/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password',
     '/auth/refresh-token', '/auth/logout', '/super-admin/login', '/super-admin/logout',
+    '/super-admin/setup', // First-time setup endpoint
     // Onboarding endpoints - CSRF cookie may not be set yet after login
     '/lead-stages/industry', '/onboarding'
   ];
