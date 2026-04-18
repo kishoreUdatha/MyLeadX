@@ -39,8 +39,8 @@
     "minLength": "Min 2 characters"
   },
   "organizationSlug": {
-    "required": "Organization URL is required",
-    "pattern": "Only lowercase letters, numbers, and hyphens"
+    "required": "Workspace ID is required",
+    "pattern": "Only lowercase letters, numbers, and hyphens (no URLs or special characters)"
   },
   "confirmPassword": {
     "required": "Please confirm your password",

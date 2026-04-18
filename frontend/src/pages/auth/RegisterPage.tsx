@@ -335,7 +335,7 @@ export default function RegisterPage() {
               className={`input pl-11 ${errors.organizationSlug ? 'input-error' : ''}`}
             />
           </div>
-          <p className="helper-text">yoursite.com/{watch('organizationSlug') || 'your-org'}</p>
+          <p className="helper-text">Your workspace will be accessible at: <strong>app.myleadx.ai/{watch('organizationSlug') || 'my-company'}</strong></p>
           {errors.organizationSlug && (
             <p className="error-text">{errors.organizationSlug.message}</p>
           )}
