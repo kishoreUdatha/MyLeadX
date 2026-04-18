@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# VoiceBridge - EC2 User Data Script
+# MyLeadX - EC2 User Data Script
 # This runs automatically when the EC2 instance is first created
 
 set -e
@@ -8,7 +8,7 @@ set -e
 exec > /var/log/user-data.log 2>&1
 
 echo "=========================================="
-echo "VoiceBridge EC2 Setup Starting..."
+echo "MyLeadX EC2 Setup Starting..."
 echo "=========================================="
 
 # Wait for network to be ready
@@ -40,35 +40,35 @@ usermod -aG docker ubuntu
 apt-get install -y docker-compose-plugin git
 
 # Create app directory
-mkdir -p /opt/voicebridge
+mkdir -p /opt/myleadx
 
 # Clone repository with retry
 for i in {1..3}; do
     echo "Attempt $i: Cloning repository..."
-    git clone ${github_repo} /opt/voicebridge && break
+    git clone ${github_repo} /opt/myleadx && break
     echo "Git clone failed, retrying in 30 seconds..."
-    rm -rf /opt/voicebridge
-    mkdir -p /opt/voicebridge
+    rm -rf /opt/myleadx
+    mkdir -p /opt/myleadx
     sleep 30
 done
 
 # Set ownership
-chown -R ubuntu:ubuntu /opt/voicebridge
+chown -R ubuntu:ubuntu /opt/myleadx
 
 # Copy environment file
-cd /opt/voicebridge
+cd /opt/myleadx
 cp deploy/aws/env.aws.template .env.production
 chown ubuntu:ubuntu .env.production
 
 # Pull Docker images in advance
-cd /opt/voicebridge
+cd /opt/myleadx
 docker compose -f docker-compose.prod.yml pull || true
 
 # Build and start the application
 sudo -u ubuntu docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build || true
 
 echo "=========================================="
-echo "VoiceBridge EC2 Setup Complete!"
+echo "MyLeadX EC2 Setup Complete!"
 echo "=========================================="
 echo "Check status: docker ps"
 echo "View logs: docker compose -f docker-compose.prod.yml logs -f"

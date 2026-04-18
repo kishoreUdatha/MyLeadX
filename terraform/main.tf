@@ -1,4 +1,4 @@
-# VoiceBridge - AWS Infrastructure with Terraform
+# MyLeadX - AWS Infrastructure with Terraform
 
 terraform {
   required_version = ">= 1.0"
@@ -89,7 +89,7 @@ resource "aws_route_table_association" "public" {
 # Security Group
 resource "aws_security_group" "app" {
   name        = "${var.project_name}-sg"
-  description = "Security group for VoiceBridge application"
+  description = "Security group for MyLeadX application"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -170,7 +170,7 @@ resource "aws_instance" "app" {
 exec > /var/log/user-data.log 2>&1
 set -ex
 
-echo "=== VoiceBridge Setup Starting ==="
+echo "=== MyLeadX Setup Starting ==="
 
 # Create swap space first (prevents OOM during build)
 echo "Creating swap space..."
@@ -197,25 +197,25 @@ curl -SL "https://github.com/docker/buildx/releases/download/v0.12.1/buildx-v0.1
 chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
 
 # Clone repo
-git clone ${var.github_repo} /opt/voicebridge
-chown -R ec2-user:ec2-user /opt/voicebridge
+git clone ${var.github_repo} /opt/myleadx
+chown -R ec2-user:ec2-user /opt/myleadx
 
 # Get public IP
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
 # Create env file
-cat > /opt/voicebridge/.env.production << EOF
-POSTGRES_USER=voicebridge
-POSTGRES_PASSWORD=VB_Prod_2024_Secure!
-POSTGRES_DB=voicebridge
+cat > /opt/myleadx/.env.production << EOF
+POSTGRES_USER=myleadx
+POSTGRES_PASSWORD=MLX_Prod_2024_Secure!
+POSTGRES_DB=myleadx
 JWT_SECRET=xK9mPqR3vY7nBcD2fH5jL8wZ1aE4gT6uI0oS
 JWT_REFRESH_SECRET=mN3bV7cX1zL5kJ9hG2fD6sA0pO4iU8yT
-PORT=3000
-FRONTEND_URL=http://$PUBLIC_IP
-BASE_URL=http://$PUBLIC_IP
-VITE_API_URL=http://$PUBLIC_IP/api
-CORS_ORIGINS=http://$PUBLIC_IP
+PORT=8080
+FRONTEND_URL=https://app.myleadx.ai
+BASE_URL=https://api.myleadx.ai
+VITE_API_URL=https://api.myleadx.ai/api
+CORS_ORIGINS=https://app.myleadx.ai,https://*.myleadx.ai
 OPENAI_API_KEY=
 DEEPGRAM_API_KEY=
 SARVAM_API_KEY=
@@ -230,7 +230,7 @@ SMS_PROVIDER=plivo
 VOICE_PROVIDER=plivo
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
-AWS_BUCKET_NAME=voicebridge-uploads
+AWS_BUCKET_NAME=myleadx-uploads
 AWS_REGION=ap-south-1
 RAZORPAY_KEY_ID=
 RAZORPAY_KEY_SECRET=
@@ -246,25 +246,30 @@ LINKEDIN_CLIENT_ID=
 LINKEDIN_CLIENT_SECRET=
 EOF
 
-chown ec2-user:ec2-user /opt/voicebridge/.env.production
+chown ec2-user:ec2-user /opt/myleadx/.env.production
 
 # Configure Nginx as reverse proxy
-cat > /etc/nginx/conf.d/voicebridge.conf << 'NGINXCONF'
+cat > /etc/nginx/conf.d/myleadx.conf << 'NGINXCONF'
 server {
     listen 80;
-    server_name _;
+    server_name app.myleadx.ai *.myleadx.ai;
 
     location / {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
     }
+}
 
-    location /api {
-        proxy_pass http://localhost:3000;
+server {
+    listen 80;
+    server_name api.myleadx.ai;
+
+    location / {
+        proxy_pass http://localhost:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -275,7 +280,7 @@ server {
     }
 
     location /socket.io {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -293,13 +298,13 @@ systemctl start nginx
 systemctl enable nginx
 
 # Build and start application
-cd /opt/voicebridge
+cd /opt/myleadx
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
-echo "=== VoiceBridge Setup Complete! ==="
+echo "=== MyLeadX Setup Complete! ==="
 echo "Public IP: $PUBLIC_IP"
-echo "Frontend: http://$PUBLIC_IP"
-echo "API: http://$PUBLIC_IP/api"
+echo "Frontend: https://app.myleadx.ai"
+echo "API: https://api.myleadx.ai"
 USERDATA
   )
 

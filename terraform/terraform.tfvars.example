@@ -1,8 +1,14 @@
-# VoiceBridge - Terraform Variables
+# MyLeadX - Terraform Variables
 # Copy this file to terraform.tfvars and fill in your values
 
 # AWS Region (default: ap-south-1 Mumbai)
 aws_region = "ap-south-1"
+
+# Project Name
+project_name = "myleadx"
+
+# Domain Name
+domain_name = "myleadx.ai"
 
 # EC2 Instance Type
 # t3.micro  = 1 vCPU, 1GB RAM  (~$8/month)  - Testing only
@@ -12,8 +18,8 @@ aws_region = "ap-south-1"
 instance_type = "t3.medium"
 
 # SSH Public Key
-# Generate with: ssh-keygen -t rsa -b 4096 -f voicebridge-key
-# Then copy contents of voicebridge-key.pub here
+# Generate with: ssh-keygen -t rsa -b 4096 -f myleadx-key
+# Then copy contents of myleadx-key.pub here
 ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ..."
 
 # GitHub Repository

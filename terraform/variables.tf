@@ -1,4 +1,4 @@
-# VoiceBridge - Terraform Variables
+# MyLeadX - Terraform Variables
 
 variable "aws_region" {
   description = "AWS region to deploy resources"
@@ -9,7 +9,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Project name for resource naming"
   type        = string
-  default     = "voicebridge"
+  default     = "myleadx"
 }
 
 variable "instance_type" {
@@ -27,4 +27,10 @@ variable "github_repo" {
   description = "GitHub repository URL"
   type        = string
   default     = "https://github.com/kishoreUdatha/VoiceBridge.git"
+}
+
+variable "domain_name" {
+  description = "Primary domain name"
+  type        = string
+  default     = "myleadx.ai"
 }

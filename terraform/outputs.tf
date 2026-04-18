@@ -1,4 +1,4 @@
-# VoiceBridge - Terraform Outputs
+# MyLeadX - Terraform Outputs
 
 output "ec2_public_ip" {
   description = "Public IP address of the EC2 instance"
@@ -12,25 +12,40 @@ output "ec2_instance_id" {
 
 output "ssh_command" {
   description = "SSH command to connect to the server"
-  value       = "ssh -i voicebridge-key.pem ubuntu@${aws_eip.app.public_ip}"
+  value       = "ssh -i myleadx-key.pem ec2-user@${aws_eip.app.public_ip}"
 }
 
 output "frontend_url" {
   description = "Frontend URL"
-  value       = "http://${aws_eip.app.public_ip}"
+  value       = "https://app.myleadx.ai"
 }
 
 output "api_url" {
   description = "API URL"
-  value       = "http://${aws_eip.app.public_ip}:3000/api"
+  value       = "https://api.myleadx.ai/api"
 }
 
 output "github_secrets" {
   description = "Values to add as GitHub Secrets"
   value = {
     EC2_HOST     = aws_eip.app.public_ip
-    VITE_API_URL = "http://${aws_eip.app.public_ip}/api"
+    EC2_USERNAME = "ec2-user"
+    VITE_API_URL = "https://api.myleadx.ai/api"
   }
+}
+
+output "dns_records" {
+  description = "DNS records to configure for myleadx.ai"
+  value       = <<-EOT
+
+    ========================================
+    Configure these DNS records for myleadx.ai:
+    ========================================
+    A     app.myleadx.ai    → ${aws_eip.app.public_ip}
+    A     api.myleadx.ai    → ${aws_eip.app.public_ip}
+    A     *.myleadx.ai      → ${aws_eip.app.public_ip}
+    ========================================
+  EOT
 }
 
 output "env_production_values" {
@@ -40,10 +55,10 @@ output "env_production_values" {
     ========================================
     Update .env.production with these values:
     ========================================
-    FRONTEND_URL=http://${aws_eip.app.public_ip}
-    BASE_URL=http://${aws_eip.app.public_ip}
-    VITE_API_URL=http://${aws_eip.app.public_ip}/api
-    CORS_ORIGINS=http://${aws_eip.app.public_ip}
+    FRONTEND_URL=https://app.myleadx.ai
+    BASE_URL=https://api.myleadx.ai
+    VITE_API_URL=https://api.myleadx.ai/api
+    CORS_ORIGINS=https://app.myleadx.ai,https://*.myleadx.ai
     AWS_RECORDINGS_BUCKET=${aws_s3_bucket.recordings.id}
     AWS_REGION=ap-south-1
     ========================================
