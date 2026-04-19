@@ -36,7 +36,7 @@ services:
       # Server
       PORT: 8080
       NODE_ENV: production
-      FRONTEND_URL: https://app.myleadx.ai
+      FRONTEND_URL: https://myleadx.ai
       BASE_URL: https://api.myleadx.ai
       CORS_ORIGINS: https://myleadx.ai,https://app.myleadx.ai,https://*.myleadx.ai
       # Super Admin

@@ -46,6 +46,7 @@ export function csrfTokenSetter(req: Request, res: Response, next: NextFunction)
       httpOnly: false, // Must be readable by JavaScript
       secure: config.cookie.secure, // Use same setting as auth cookies
       sameSite: config.cookie.sameSite,
+      domain: config.cookie.domain, // Share across subdomains
       path: '/',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     });
@@ -142,6 +143,7 @@ export function csrfTokenEndpoint(req: Request, res: Response): void {
       httpOnly: false,
       secure: config.cookie.secure, // Use same setting as auth cookies
       sameSite: config.cookie.sameSite,
+      domain: config.cookie.domain, // Share across subdomains
       path: '/',
       maxAge: 24 * 60 * 60 * 1000,
     });
