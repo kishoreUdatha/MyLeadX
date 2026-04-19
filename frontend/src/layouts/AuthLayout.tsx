@@ -27,7 +27,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/25">
               <SparklesIcon className="w-7 h-7 text-white" />
             </div>
-            <span className="text-2xl font-bold text-white">CRM Pro</span>
+            <span className="text-2xl font-bold text-white">MyLeadX</span>
           </div>
 
           {/* Hero text */}
@@ -73,7 +73,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/25">
               <SparklesIcon className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-slate-900">CRM Pro</span>
+            <span className="text-xl font-bold text-slate-900">MyLeadX</span>
           </div>
 
           {/* Form card */}

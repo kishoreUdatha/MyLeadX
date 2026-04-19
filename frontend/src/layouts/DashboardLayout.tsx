@@ -777,7 +777,7 @@ export default function DashboardLayout() {
           {/* Logo */}
           <div className="flex h-14 items-center justify-between px-4 border-b border-slate-800">
             <span className="text-xl font-bold bg-gradient-to-r from-primary-400 to-primary-300 bg-clip-text text-transparent">
-              CRM Pro
+              MyLeadX
             </span>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -924,7 +924,7 @@ export default function DashboardLayout() {
                 <SparklesIcon className="w-5 h-5 text-white" />
               </div>
               {!sidebarCollapsed && (
-                <span className="text-lg font-bold text-white whitespace-nowrap">CRM Pro</span>
+                <span className="text-lg font-bold text-white whitespace-nowrap">MyLeadX</span>
               )}
             </div>
             {!sidebarCollapsed && (

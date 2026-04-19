@@ -143,7 +143,7 @@ We're excited to announce new features for {organizationName}!
 [Your message here]
 
 Best regards,
-CRM Pro Team`}
+MyLeadX Team`}
                 />
               </div>
 

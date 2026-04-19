@@ -216,7 +216,7 @@ class SubscriptionService {
       key: keyId,
       amount: order.amount,
       currency: order.currency,
-      name: 'CRM Pro',
+      name: 'MyLeadX',
       description: 'Subscription Payment',
       order_id: order.id,
       prefill,
