@@ -1,9 +1,11 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { AppDispatch, RootState } from '../../store';
 import { login, clearError } from '../../store/slices/authSlice';
+import { superAdminService } from '../../services/super-admin.service';
 import { EnvelopeIcon, LockClosedIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 
 interface LoginFormData {
@@ -13,7 +15,10 @@ interface LoginFormData {
 
 export default function LoginPage() {
   const dispatch = useDispatch<AppDispatch>();
-  const { isLoading, error } = useSelector((state: RootState) => state.auth);
+  const navigate = useNavigate();
+  const { isLoading: authLoading, error: authError } = useSelector((state: RootState) => state.auth);
+  const [superAdminLoading, setSuperAdminLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const { t } = useTranslation(['auth', 'validation']);
   const {
     register,
@@ -21,9 +26,31 @@ export default function LoginPage() {
     formState: { errors },
   } = useForm<LoginFormData>();
 
+  const isLoading = authLoading || superAdminLoading;
+  const error = localError || authError;
+
   const onSubmit = async (data: LoginFormData) => {
     dispatch(clearError());
-    await dispatch(login(data));
+    setLocalError(null);
+
+    // First try regular user login
+    const result = await dispatch(login(data));
+
+    // If regular login failed, try super admin login
+    if (login.rejected.match(result)) {
+      try {
+        setSuperAdminLoading(true);
+        await superAdminService.login(data.email, data.password);
+        // Super admin login successful, redirect to super admin dashboard
+        navigate('/super-admin/dashboard');
+      } catch (superAdminError: unknown) {
+        // Both logins failed, show the original error
+        const err = superAdminError as { response?: { data?: { message?: string } } };
+        setLocalError(err.response?.data?.message || 'Invalid email or password');
+      } finally {
+        setSuperAdminLoading(false);
+      }
+    }
   };
 
   return (

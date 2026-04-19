@@ -795,7 +795,8 @@ function App() {
       </Route>
 
       {/* Super Admin Routes */}
-      <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
+      {/* Super admin login is handled by the unified login page */}
+      <Route path="/super-admin/login" element={<Navigate to="/login" replace />} />
       <Route
         element={
           <SuperAdminProtectedRoute>
