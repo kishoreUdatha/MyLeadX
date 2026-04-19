@@ -36,15 +36,21 @@ export default function LoginPage() {
     // First try regular user login
     const result = await dispatch(login(data));
 
-    // If regular login failed, try super admin login
-    if (login.rejected.match(result)) {
+    // If regular login failed (rejected or no user), try super admin login
+    const loginFailed = login.rejected.match(result) || !result.payload;
+
+    if (loginFailed) {
       try {
         setSuperAdminLoading(true);
+        console.log('[Login] Regular login failed, trying super admin login...');
         await superAdminService.login(data.email, data.password);
+        console.log('[Login] Super admin login successful, redirecting...');
         // Super admin login successful, redirect to super admin dashboard
         navigate('/super-admin/dashboard');
+        return; // Exit early on success
       } catch (superAdminError: unknown) {
         // Both logins failed, show the original error
+        console.log('[Login] Super admin login also failed:', superAdminError);
         const err = superAdminError as { response?: { data?: { message?: string } } };
         setLocalError(err.response?.data?.message || 'Invalid email or password');
       } finally {
