@@ -294,25 +294,6 @@ const defaultSystemRoles: Array<{ name: string; slug: string; permissions: strin
     ],
   },
   {
-    name: 'Counselor',
-    slug: 'counselor',
-    permissions: [
-      'leads_view', 'leads_create', 'leads_edit',
-      'pipeline_view', 'pipeline_move_leads',
-      'calls_view', 'calls_make', 'calls_receive', 'calls_record',
-      'followups_view', 'followups_create', 'followups_edit',
-      'tasks_view', 'tasks_create', 'tasks_edit',
-      'admissions_view', 'admissions_create', 'admissions_edit',
-      'fees_view', 'fees_collect',
-      'courses_view',
-      'whatsapp_view', 'whatsapp_send',
-      'email_view', 'email_send',
-      'sms_view', 'sms_send',
-      'dashboard_view',
-      'gamification_view',
-    ],
-  },
-  {
     name: 'Accounts',
     slug: 'accounts',
     permissions: [
@@ -329,7 +310,7 @@ const defaultSystemRoles: Array<{ name: string; slug: string; permissions: strin
 // Industry-specific role configurations (additional roles based on industry)
 const industryRoles: Record<string, Array<{ name: string; slug: string; permissions: string[] }>> = {
   EDUCATION: [
-    { name: 'Teacher', slug: 'teacher', permissions: ['leads_view', 'courses_view', 'dashboard_view'] },
+    // No additional roles - default system roles are sufficient for education CRM
   ],
   REAL_ESTATE: [
     { name: 'Sales Agent', slug: 'sales_agent', permissions: ['leads_view', 'leads_edit', 'calls_view', 'calls_make', 'field_view', 'field_visits', 'quotations_view', 'quotations_create', 'dashboard_view'] },
