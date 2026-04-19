@@ -279,7 +279,7 @@ router.get('/me', verifySuperAdmin, async (req: Request, res: Response) => {
 
     // Dedicated super admin from SuperAdmin table
     const admin = await prisma.superAdmin.findUnique({
-      where: { id: superAdmin.superAdminId },
+      where: { id: superAdmin.id || superAdmin.superAdminId },
       select: {
         id: true,
         email: true,
