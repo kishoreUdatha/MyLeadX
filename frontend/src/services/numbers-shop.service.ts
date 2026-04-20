@@ -282,6 +282,72 @@ class NumbersShopService {
     const response = await api.delete(`/numbers-shop/my-numbers/${id}`);
     return response.data;
   }
+
+  // ==================== PLIVO ====================
+
+  /**
+   * Get Plivo account info
+   */
+  async getPlivoAccountInfo(): Promise<{
+    configured: boolean;
+    balance?: number;
+    accountType?: string;
+    name?: string;
+  }> {
+    const response = await api.get('/numbers-shop/plivo/account');
+    return response.data.data;
+  }
+
+  /**
+   * List available Plivo numbers for purchase
+   */
+  async listAvailablePlivoNumbers(params?: {
+    country?: string;
+    type?: 'local' | 'mobile' | 'tollfree';
+    region?: string;
+    pattern?: string;
+    limit?: number;
+  }): Promise<{
+    numbers: AvailableNumber[];
+    account: { configured: boolean; balance?: number };
+  }> {
+    const response = await api.get('/numbers-shop/plivo/available', { params });
+    return response.data.data;
+  }
+
+  /**
+   * Get owned Plivo numbers
+   */
+  async getOwnedPlivoNumbers(): Promise<any[]> {
+    const response = await api.get('/numbers-shop/plivo/owned');
+    return response.data.data;
+  }
+
+  /**
+   * Purchase a Plivo number
+   */
+  async purchasePlivoNumber(params: {
+    phoneNumber: string;
+    friendlyName?: string;
+    assignToUserId?: string;
+  }): Promise<{
+    success: boolean;
+    phoneNumber: PurchasedNumber;
+  }> {
+    const response = await api.post('/numbers-shop/plivo/purchase', params);
+    return response.data.data;
+  }
+
+  /**
+   * Sync all Plivo owned numbers to database
+   */
+  async syncPlivoNumbers(): Promise<{
+    synced: number;
+    skipped: number;
+  }> {
+    const response = await api.post('/numbers-shop/plivo/sync');
+    return response.data.data;
+  }
 }
 
 export const numbersShopService = new NumbersShopService();

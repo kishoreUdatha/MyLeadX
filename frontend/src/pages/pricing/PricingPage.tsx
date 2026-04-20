@@ -11,19 +11,23 @@ import {
   TrustBadges,
   ComparisonToggle,
   CategoryComparisonTable,
+  WalletRatesSection,
   AddOnsSection,
   FAQSection,
   CTASection,
   Footer,
 } from './components';
-import { PLANS, FEATURE_CATEGORIES, FAQ_ITEMS, TRUST_BADGES, ADD_ONS } from './pricing.constants';
+import { FEATURE_CATEGORIES, FAQ_ITEMS, TRUST_BADGES, ADD_ONS, WALLET_RATES } from './pricing.constants';
 
 export default function PricingPage() {
   const {
     isAnnual,
     showComparison,
+    planCategory,
+    currentPlans,
     toggleBilling,
     toggleComparison,
+    toggleCategory,
     handleSelectPlan,
   } = usePricing();
 
@@ -31,15 +35,22 @@ export default function PricingPage() {
     <div className="min-h-screen bg-slate-50">
       <Navigation />
 
-      <HeroSection isAnnual={isAnnual} onToggleBilling={toggleBilling} />
+      <HeroSection
+        isAnnual={isAnnual}
+        onToggleBilling={toggleBilling}
+        planCategory={planCategory}
+        onToggleCategory={toggleCategory}
+      />
 
       <PricingCards
-        plans={PLANS}
+        plans={currentPlans}
         isAnnual={isAnnual}
         onSelectPlan={handleSelectPlan}
       />
 
       <TrustBadges badges={TRUST_BADGES} />
+
+      <WalletRatesSection rates={WALLET_RATES} />
 
       <ComparisonToggle
         showComparison={showComparison}

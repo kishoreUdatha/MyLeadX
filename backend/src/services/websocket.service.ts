@@ -5,6 +5,7 @@ import { config } from '../config';
 import { prisma } from '../config/database';
 import { realtimeVoiceService } from './realtime-voice.service';
 import { webrtcSignalingService } from './webrtc-signaling.service';
+import { softphoneService } from './softphone.service';
 import {
   RealtimeStartPayload,
   RealtimeAudioPayload,
@@ -291,6 +292,47 @@ class WebSocketService {
         });
       });
 
+      // ==================== SOFTPHONE EVENTS ====================
+
+      // Register softphone session (telecaller connects to make browser calls)
+      socket.on('softphone:register', async (data: { userName?: string }) => {
+        try {
+          if (!socket.organizationId || !socket.userId) {
+            socket.emit('softphone:error', { message: 'Authentication required' });
+            return;
+          }
+
+          // Get user name from database if not provided
+          let userName = data.userName;
+          if (!userName) {
+            const user = await prisma.user.findUnique({
+              where: { id: socket.userId },
+              select: { firstName: true, lastName: true },
+            });
+            userName = user ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Telecaller';
+          }
+
+          const sessionId = softphoneService.registerSession(
+            socket,
+            socket.organizationId,
+            socket.userId,
+            userName
+          );
+
+          console.log(`[WebSocket] Softphone registered: ${sessionId} for ${userName}`);
+        } catch (error) {
+          console.error('[WebSocket] Softphone register error:', error);
+          socket.emit('softphone:error', {
+            message: error instanceof Error ? error.message : 'Failed to register softphone',
+          });
+        }
+      });
+
+      // Unregister softphone session
+      socket.on('softphone:unregister', () => {
+        softphoneService.unregisterSession(socket.id);
+      });
+
       // Handle disconnect
       socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.userId}`);
@@ -300,6 +342,9 @@ class WebSocketService {
 
         // Clean up WebRTC peers
         webrtcSignalingService.handleDisconnect(socket.id);
+
+        // Clean up softphone sessions
+        softphoneService.unregisterSession(socket.id);
 
         // Clean up agent subscriptions
         for (const [agentId, subscribers] of this.agentSubscriptions.entries()) {
@@ -322,6 +367,9 @@ class WebSocketService {
         }
       });
     });
+
+    // Initialize softphone service with Socket.IO
+    softphoneService.initialize(this.io);
 
     console.log('WebSocket server initialized');
   }

@@ -1,0 +1,56 @@
+# VoiceBridge Backend - Self-Hosted Edition
+FROM node:20-alpine AS builder
+
+RUN apk add --no-cache openssl python3 make g++ curl
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY prisma ./prisma/
+
+RUN npm ci
+RUN npx prisma generate
+
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS production
+
+ARG VERSION=latest
+ARG BUILD_DATE
+
+LABEL org.opencontainers.image.title="VoiceBridge Backend"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL com.voicebridge.edition="self-hosted"
+
+RUN apk add --no-cache openssl curl wget
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY prisma ./prisma/
+
+RUN npm ci --only=production && npm cache clean --force
+
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+
+RUN mkdir -p /app/public /app/uploads /app/recordings /app/logs /app/temp
+
+RUN addgroup -g 1001 -S voicebridge && \
+    adduser -S voicebridge -u 1001 -G voicebridge && \
+    chown -R voicebridge:voicebridge /app
+
+ENV NODE_ENV=production
+ENV PORT=8080
+
+USER voicebridge
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
+
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

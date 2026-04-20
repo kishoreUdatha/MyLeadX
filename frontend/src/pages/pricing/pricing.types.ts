@@ -4,6 +4,8 @@
 
 import { ComponentType } from 'react';
 
+export type PlanCategory = 'crm-only' | 'crm-ai-voice';
+
 export interface PlanMetrics {
   minutes: string;
   numbers: string;
@@ -27,6 +29,16 @@ export interface Plan {
   metrics: PlanMetrics;
   features: string[];
   extraRate: number;
+  category: PlanCategory;
+}
+
+export interface WalletRate {
+  id: string;
+  name: string;
+  description: string;
+  rate: number;
+  unit: string;
+  icon: ComponentType<{ className?: string }>;
 }
 
 export interface SimplePlanFeature {

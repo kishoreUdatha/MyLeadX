@@ -1,0 +1,258 @@
+# VoiceBridge Self-Hosted Edition
+# Complete deployment for white-label partners
+#
+# Usage:
+#   1. Copy .env.example to .env and configure
+#   2. Run: docker-compose up -d
+#   3. Access: https://your-domain.com
+#
+# Documentation: https://docs.voicebridge.com/self-hosted
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # DATABASE - PostgreSQL with pgvector
+  # ===========================================
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: ${COMPOSE_PROJECT_NAME:-voicebridge}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-voicebridge}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:-voicebridge}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-voicebridge} -d ${DB_NAME:-voicebridge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - voicebridge-network
+
+  # ===========================================
+  # CACHE & QUEUE - Redis
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-voicebridge}-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voicebridge-network
+
+  # ===========================================
+  # BACKEND - Node.js API Server
+  # ===========================================
+  backend:
+    image: voicebridge/backend:${VERSION:-latest}
+    build:
+      context: ../backend
+      dockerfile: ../self-hosted/Dockerfile.backend
+    container_name: ${COMPOSE_PROJECT_NAME:-voicebridge}-backend
+    restart: unless-stopped
+    environment:
+      # License (Required)
+      LICENSE_KEY: ${LICENSE_KEY:?LICENSE_KEY is required}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-https://license.voicebridge.com}
+
+      # Instance Info
+      INSTANCE_ID: ${INSTANCE_ID:-}
+      APP_NAME: ${APP_NAME:-VoiceBridge}
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+
+      # Database
+      DATABASE_URL: postgresql://${DB_USER:-voicebridge}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-voicebridge}
+
+      # Redis
+      REDIS_URL: redis://redis:6379
+
+      # JWT Security
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_EXPIRY: ${JWT_EXPIRY:-15m}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
+
+      # Server
+      PORT: 8080
+      NODE_ENV: production
+      FRONTEND_URL: https://${APP_DOMAIN}
+      BASE_URL: https://${APP_DOMAIN}/api
+      CORS_ORIGINS: https://${APP_DOMAIN}
+
+      # Encryption
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:?CREDENTIALS_ENCRYPTION_KEY is required}
+
+      # Telephony - Twilio (Optional)
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+
+      # Telephony - Plivo (Optional)
+      PLIVO_AUTH_ID: ${PLIVO_AUTH_ID:-}
+      PLIVO_AUTH_TOKEN: ${PLIVO_AUTH_TOKEN:-}
+      PLIVO_PHONE_NUMBER: ${PLIVO_PHONE_NUMBER:-}
+
+      # Telephony - Exotel (Optional, India)
+      EXOTEL_API_KEY: ${EXOTEL_API_KEY:-}
+      EXOTEL_API_TOKEN: ${EXOTEL_API_TOKEN:-}
+      EXOTEL_SID: ${EXOTEL_SID:-}
+      EXOTEL_SUBDOMAIN: ${EXOTEL_SUBDOMAIN:-}
+      EXOTEL_CALLER_ID: ${EXOTEL_CALLER_ID:-}
+
+      # AI - OpenAI (Required for Voice AI)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+
+      # AI - Anthropic (Optional)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+      # AI - Deepgram (Speech-to-Text)
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+
+      # AI - ElevenLabs (Text-to-Speech)
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+
+      # AI - Sarvam (Indian Languages)
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+
+      # Email SMTP
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@${APP_DOMAIN}}
+
+      # Payment - Razorpay (Optional)
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+
+      # Storage - AWS S3 (Optional, falls back to local)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_BUCKET_NAME: ${AWS_BUCKET_NAME:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+
+      # Storage - Local fallback
+      LOCAL_STORAGE_PATH: /app/uploads
+
+      # WhatsApp Business API (Optional)
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_BUSINESS_ACCOUNT_ID: ${WHATSAPP_BUSINESS_ACCOUNT_ID:-}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+      - recordings_data:/app/recordings
+      - ./logs/backend:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - voicebridge-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api`, `/socket.io`)"
+      - "traefik.http.services.backend.loadbalancer.server.port=8080"
+
+  # ===========================================
+  # FRONTEND - React App via Nginx
+  # ===========================================
+  frontend:
+    image: voicebridge/frontend:${VERSION:-latest}
+    build:
+      context: ../frontend
+      dockerfile: ../self-hosted/Dockerfile.frontend
+      args:
+        VITE_API_URL: https://${APP_DOMAIN}/api
+        VITE_WS_URL: wss://${APP_DOMAIN}
+        VITE_APP_NAME: ${APP_NAME:-VoiceBridge}
+    container_name: ${COMPOSE_PROJECT_NAME:-voicebridge}-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - voicebridge-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+  # ===========================================
+  # REVERSE PROXY - Traefik (with auto SSL)
+  # ===========================================
+  traefik:
+    image: traefik:v2.10
+    container_name: ${COMPOSE_PROJECT_NAME:-voicebridge}-traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=voicebridge-network"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ADMIN_EMAIL:?ADMIN_EMAIL is required}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--log.level=${TRAEFIK_LOG_LEVEL:-INFO}"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/logs/access.log"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+      - ./logs/traefik:/logs
+    networks:
+      - voicebridge-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${APP_DOMAIN}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH:-}"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  recordings_data:
+  traefik_letsencrypt:
+
+networks:
+  voicebridge-network:
+    driver: bridge
+    name: ${COMPOSE_PROJECT_NAME:-voicebridge}-network

@@ -16,6 +16,7 @@ export interface PhoneNumber {
   };
   status: 'AVAILABLE' | 'ASSIGNED' | 'DISABLED' | 'PENDING';
   assignedToAgentId?: string;
+  assignedToUserId?: string;
   assignedAt?: string;
   monthlyRent: number;
   perMinuteRate: number;
@@ -29,6 +30,12 @@ export interface PhoneNumber {
     id: string;
     name: string;
     industry?: string;
+  };
+  assignedUser?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
   };
   _count?: {
     callLogs: number;
@@ -140,6 +147,24 @@ class PhoneNumberService {
   // Unassign phone number from agent
   async unassignFromAgent(phoneNumberId: string): Promise<PhoneNumber> {
     const response = await api.post(`/phone-numbers/${phoneNumberId}/unassign`);
+    return response.data.data;
+  }
+
+  // Assign phone number to user (telecaller)
+  async assignToUser(phoneNumberId: string, userId: string): Promise<PhoneNumber> {
+    const response = await api.post(`/phone-numbers/${phoneNumberId}/assign-user`, { userId });
+    return response.data.data;
+  }
+
+  // Unassign phone number from user
+  async unassignFromUser(phoneNumberId: string): Promise<PhoneNumber> {
+    const response = await api.post(`/phone-numbers/${phoneNumberId}/unassign-user`);
+    return response.data.data;
+  }
+
+  // Get phone numbers for a specific user
+  async getUserPhoneNumbers(userId: string): Promise<PhoneNumber[]> {
+    const response = await api.get(`/phone-numbers/user/${userId}`);
     return response.data.data;
   }
 

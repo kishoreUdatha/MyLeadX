@@ -1,6 +1,7 @@
 /**
  * Telecaller Queue Page
  * AI-qualified leads ready for telecaller follow-up
+ * Now with browser-based softphone calling
  */
 
 import { useTelecallerQueue } from './hooks';
@@ -11,6 +12,7 @@ import {
   LeadDetailsPanel,
   CompleteModal,
 } from './components';
+import { Softphone } from '../../components/Softphone';
 
 export default function TelecallerQueuePage() {
   const {
@@ -75,6 +77,24 @@ export default function TelecallerQueuePage() {
           onFormChange={updateCompleteForm}
           onComplete={handleComplete}
           onClose={closeCompleteModal}
+        />
+      )}
+
+      {/* Softphone Widget - Browser-based calling */}
+      {selectedItem && selectedItem.assignedToId === user?.id && (
+        <Softphone
+          phoneNumber={selectedItem.phoneNumber}
+          contactName={selectedItem.contactName || undefined}
+          leadId={selectedItem.leadId || undefined}
+          onCallStart={(callId) => console.log('[Telecaller] Call started:', callId)}
+          onCallEnd={(callId, duration) => {
+            console.log('[Telecaller] Call ended:', callId, duration);
+            // Refresh queue after call
+            loadData();
+          }}
+          showAsWidget={true}
+          position="bottom-right"
+          minimizable={true}
         />
       )}
     </div>

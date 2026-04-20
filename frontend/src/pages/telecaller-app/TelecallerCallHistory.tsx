@@ -12,6 +12,7 @@ interface Call {
   duration?: number;
   sentiment?: string;
   summary?: string;
+  recordingUrl?: string;
   createdAt: string;
   lead?: {
     id: string;
@@ -139,7 +140,14 @@ const TelecallerCallHistory: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-mono text-gray-700">{formatDuration(call.duration)}</div>
+                    <div className="flex items-center justify-end gap-2">
+                      {call.recordingUrl && (
+                        <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" />
+                        </svg>
+                      )}
+                      <span className="text-lg font-mono text-gray-700">{formatDuration(call.duration)}</span>
+                    </div>
                     <div className="text-xs text-gray-400">{formatDate(call.createdAt)}</div>
                   </div>
                 </div>
@@ -206,6 +214,22 @@ const TelecallerCallHistory: React.FC = () => {
                   <div className="text-xs text-gray-500">Sentiment</div>
                 </div>
               </div>
+
+              {/* Call Recording */}
+              {selectedCall.recordingUrl && (
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-2">Call Recording</h4>
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <audio
+                      controls
+                      className="w-full"
+                      src={selectedCall.recordingUrl}
+                    >
+                      Your browser does not support the audio element.
+                    </audio>
+                  </div>
+                </div>
+              )}
 
               {/* Summary/Transcript */}
               {selectedCall.summary && (

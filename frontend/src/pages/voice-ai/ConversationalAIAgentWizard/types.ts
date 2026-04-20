@@ -61,6 +61,15 @@ export interface Tool {
   config?: Record<string, any>;
 }
 
+export interface PhoneNumberOption {
+  id: string;
+  number: string;
+  displayNumber: string;
+  friendlyName?: string;
+  provider: string;
+  status: string;
+}
+
 export interface AgentFormData {
   // Step 1
   agentType: AgentType;
@@ -80,6 +89,7 @@ export interface AgentFormData {
   website?: string;
   mainGoal: string;
   chatOnly: boolean;
+  phoneNumberId?: string; // Selected phone number for outbound calls
 
   // Agent Config
   systemPrompt: string;
@@ -226,6 +236,7 @@ export const INITIAL_FORM_DATA: AgentFormData = {
   website: '',
   mainGoal: '',
   chatOnly: false,
+  phoneNumberId: '',
   systemPrompt: '',
   firstMessage: '',
   primaryVoice: null,

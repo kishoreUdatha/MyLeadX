@@ -469,6 +469,125 @@ router.post(
   })
 );
 
+// ==================== PLIVO ENDPOINTS ====================
+
+/**
+ * Get Plivo account info
+ * GET /api/numbers-shop/plivo/account
+ */
+router.get(
+  '/plivo/account',
+  authorize('admin', 'manager'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const accountInfo = await numbersShopService.getPlivoAccountInfo();
+
+    res.json({
+      success: true,
+      data: accountInfo,
+    });
+  })
+);
+
+/**
+ * List available Plivo numbers for purchase
+ * GET /api/numbers-shop/plivo/available
+ */
+router.get(
+  '/plivo/available',
+  authorize('admin', 'manager'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { country, type, region, pattern, limit } = req.query;
+
+    const numbers = await numbersShopService.listAvailablePlivoNumbers({
+      country: country as string,
+      type: type as 'local' | 'mobile' | 'tollfree',
+      region: region as string,
+      pattern: pattern as string,
+      limit: limit ? parseInt(limit as string) : undefined,
+    });
+
+    const accountInfo = await numbersShopService.getPlivoAccountInfo();
+
+    res.json({
+      success: true,
+      data: {
+        numbers,
+        account: accountInfo,
+      },
+    });
+  })
+);
+
+/**
+ * Get owned Plivo numbers
+ * GET /api/numbers-shop/plivo/owned
+ */
+router.get(
+  '/plivo/owned',
+  authorize('admin', 'manager'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const numbers = await numbersShopService.getOwnedPlivoNumbers();
+
+    res.json({
+      success: true,
+      data: numbers,
+    });
+  })
+);
+
+/**
+ * Purchase a Plivo number
+ * POST /api/numbers-shop/plivo/purchase
+ */
+router.post(
+  '/plivo/purchase',
+  authorize('admin'),
+  validate([
+    body('phoneNumber')
+      .notEmpty()
+      .withMessage('Phone number is required'),
+    body('friendlyName')
+      .optional()
+      .isLength({ max: 100 }),
+    body('assignToUserId')
+      .optional()
+      .isUUID(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { phoneNumber, friendlyName, assignToUserId } = req.body;
+
+    const result = await numbersShopService.purchasePlivoNumber(
+      req.user!.organizationId,
+      phoneNumber,
+      { friendlyName, assignToUserId }
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: `Plivo number ${phoneNumber} purchased successfully`,
+    });
+  })
+);
+
+/**
+ * Sync all owned Plivo numbers to database
+ * POST /api/numbers-shop/plivo/sync
+ */
+router.post(
+  '/plivo/sync',
+  authorize('admin'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await numbersShopService.syncPlivoNumbers(req.user!.organizationId);
+
+    res.json({
+      success: true,
+      data: result,
+      message: `Synced ${result.synced} numbers to database`,
+    });
+  })
+);
+
 // ==================== MY NUMBERS ====================
 
 /**

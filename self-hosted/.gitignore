@@ -1,0 +1,7 @@
+.env
+.env.local
+backups/
+logs/
+.license-cache
+*.pem
+*.key

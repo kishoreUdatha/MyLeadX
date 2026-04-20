@@ -696,4 +696,306 @@ router.get('/export/audit-logs', verifySuperAdmin, async (req: Request, res: Res
 // Mount advanced routes (all require super admin auth)
 router.use('/', verifySuperAdmin, advancedRoutes);
 
+// ==================== BILLING DASHBOARD ====================
+
+/**
+ * GET /super-admin/billing/dashboard
+ * Comprehensive billing dashboard with MRR, ARR, subscription stats
+ */
+router.get('/billing/dashboard', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getBillingDashboard();
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/transactions
+ * All wallet transactions across tenants
+ */
+router.get('/billing/transactions', verifySuperAdmin, validate([
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('type').optional().isIn(['CREDIT', 'DEBIT', 'REFUND']),
+  query('organizationId').optional().isUUID(),
+  query('startDate').optional().isISO8601(),
+  query('endDate').optional().isISO8601(),
+]), async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getAllWalletTransactions({
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 50,
+      type: req.query.type as string,
+      organizationId: req.query.organizationId as string,
+      startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+      endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+    });
+    res.json({ success: true, ...data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/subscriptions
+ * All subscriptions across tenants
+ */
+router.get('/billing/subscriptions', verifySuperAdmin, validate([
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('status').optional().isIn(['PENDING', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED', 'TRIAL']),
+  query('planId').optional(),
+  query('billingCycle').optional().isIn(['monthly', 'annual']),
+]), async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getAllSubscriptions({
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 50,
+      status: req.query.status as string,
+      planId: req.query.planId as string,
+      billingCycle: req.query.billingCycle as string,
+    });
+    res.json({ success: true, ...data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/promo-analytics
+ * Promo code usage analytics
+ */
+router.get('/billing/promo-analytics', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getPromoCodeAnalytics();
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/churn
+ * Subscription churn analytics
+ */
+router.get('/billing/churn', verifySuperAdmin, validate([
+  query('months').optional().isInt({ min: 1, max: 24 }),
+]), async (req: Request, res: Response) => {
+  try {
+    const months = parseInt(req.query.months as string) || 6;
+    const data = await superAdminService.getChurnAnalytics(months);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /super-admin/billing/wallet-adjust
+ * Manually credit or debit a tenant's wallet
+ */
+router.post('/billing/wallet-adjust', verifySuperAdmin, validate([
+  body('organizationId').isUUID().withMessage('Valid organization ID is required'),
+  body('amount').isFloat({ min: 1 }).withMessage('Amount must be at least 1'),
+  body('type').isIn(['CREDIT', 'DEBIT']).withMessage('Type must be CREDIT or DEBIT'),
+  body('reason').trim().notEmpty().withMessage('Reason is required'),
+]), async (req: Request, res: Response) => {
+  try {
+    const { organizationId, amount, type, reason } = req.body;
+    const adminId = (req as any).superAdmin?.id || 'super-admin';
+
+    const result = await superAdminService.adjustWalletBalance({
+      organizationId,
+      amount: parseFloat(amount),
+      type,
+      reason,
+      adminId,
+    });
+
+    res.json({ success: true, data: result, message: `Wallet ${type.toLowerCase()}ed successfully` });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/invoices
+ * Get all invoices across tenants
+ */
+router.get('/billing/invoices', verifySuperAdmin, validate([
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('status').optional().isString(),
+  query('organizationId').optional().isUUID(),
+  query('startDate').optional().isISO8601(),
+  query('endDate').optional().isISO8601(),
+]), async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getAllInvoices({
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 20,
+      status: req.query.status as string,
+      organizationId: req.query.organizationId as string,
+      startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+      endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+    });
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/failed-payments
+ * Get failed/pending payments
+ */
+router.get('/billing/failed-payments', verifySuperAdmin, validate([
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('startDate').optional().isISO8601(),
+  query('endDate').optional().isISO8601(),
+]), async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getFailedPayments({
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 20,
+      startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+      endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+    });
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /super-admin/billing/refund
+ * Issue a refund to a tenant
+ */
+router.post('/billing/refund', verifySuperAdmin, validate([
+  body('organizationId').isUUID().withMessage('Valid organization ID is required'),
+  body('amount').isFloat({ min: 1 }).withMessage('Amount must be at least 1'),
+  body('reason').trim().notEmpty().withMessage('Reason is required'),
+  body('originalTransactionId').optional().isUUID(),
+]), async (req: Request, res: Response) => {
+  try {
+    const { organizationId, amount, reason, originalTransactionId } = req.body;
+    const adminId = (req as any).superAdmin?.id || 'super-admin';
+
+    const result = await superAdminService.issueRefund({
+      organizationId,
+      amount: parseFloat(amount),
+      reason,
+      originalTransactionId,
+      adminId,
+    });
+
+    res.json({ success: true, data: result, message: 'Refund issued successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/export
+ * Export billing data to Excel
+ */
+router.get('/billing/export', verifySuperAdmin, validate([
+  query('type').isIn(['transactions', 'subscriptions', 'invoices']).withMessage('Type must be transactions, subscriptions, or invoices'),
+  query('startDate').optional().isISO8601(),
+  query('endDate').optional().isISO8601(),
+]), async (req: Request, res: Response) => {
+  try {
+    const type = req.query.type as 'transactions' | 'subscriptions' | 'invoices';
+    const workbook = await superAdminService.exportBillingData({
+      type,
+      startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+      endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+    });
+
+    const filename = `${type}-export-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/billing/forecast
+ * Revenue forecast
+ */
+router.get('/billing/forecast', verifySuperAdmin, validate([
+  query('months').optional().isInt({ min: 1, max: 12 }),
+]), async (req: Request, res: Response) => {
+  try {
+    const months = parseInt(req.query.months as string) || 3;
+    const data = await superAdminService.getRevenueForecast(months);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================
+// Phone Number Tracking Routes
+// ============================================
+
+/**
+ * GET /super-admin/phone-numbers/analytics
+ * Get phone number analytics across all tenants
+ */
+router.get('/phone-numbers/analytics', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getPhoneNumberAnalytics();
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/phone-numbers
+ * Get all phone numbers with filters
+ */
+router.get('/phone-numbers', verifySuperAdmin, validate([
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('provider').optional().isString(),
+  query('status').optional().isString(),
+  query('organizationId').optional().isUUID(),
+]), async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getAllPhoneNumbers({
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 20,
+      provider: req.query.provider as string,
+      status: req.query.status as string,
+      organizationId: req.query.organizationId as string,
+    });
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET /super-admin/phone-numbers/provider-usage
+ * Get provider usage breakdown by tenant
+ */
+router.get('/phone-numbers/provider-usage', verifySuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const data = await superAdminService.getProviderUsageByTenant();
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;

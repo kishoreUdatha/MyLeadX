@@ -133,6 +133,7 @@ router.post(
       }
       return true;
     }),
+    body('phoneNumberId').optional().isUUID().withMessage('Invalid phone number ID'),
   ]),
   async (req: TenantRequest, res: Response) => {
     try {
@@ -148,6 +149,7 @@ router.post(
         website,
         mainGoal,
         knowledgeBase,
+        phoneNumberId,
       } = req.body;
 
     // Generate system prompt if not provided
@@ -205,6 +207,39 @@ router.post(
         });
       } catch (syncError) {
         console.warn('[ConversationalAI] Failed to sync agent:', (syncError as Error).message);
+      }
+    }
+
+    // Assign phone number to agent if provided
+    if (phoneNumberId) {
+      try {
+        // Verify phone number belongs to the organization and is available
+        const phoneNumber = await prisma.phoneNumber.findFirst({
+          where: {
+            id: phoneNumberId,
+            organizationId: req.organizationId!,
+            OR: [
+              { status: 'AVAILABLE' },
+              { assignedToAgentId: null },
+            ],
+          },
+        });
+
+        if (phoneNumber) {
+          await prisma.phoneNumber.update({
+            where: { id: phoneNumberId },
+            data: {
+              assignedToAgentId: voiceBridgeAgent.id,
+              status: 'ASSIGNED',
+              assignedAt: new Date(),
+            },
+          });
+          console.log(`[ConversationalAI] Phone number ${phoneNumber.number} assigned to agent ${voiceBridgeAgent.id}`);
+        } else {
+          console.warn(`[ConversationalAI] Phone number ${phoneNumberId} not available for assignment`);
+        }
+      } catch (phoneError) {
+        console.warn('[ConversationalAI] Failed to assign phone number:', (phoneError as Error).message);
       }
     }
 

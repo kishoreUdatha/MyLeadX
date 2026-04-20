@@ -231,6 +231,66 @@ router.post(
   })
 );
 
+// Assign phone number to user (telecaller)
+router.post(
+  '/:id/assign-user',
+  authorize('admin', 'manager'),
+  validate([
+    body('userId')
+      .notEmpty()
+      .withMessage('User ID is required')
+      .isUUID()
+      .withMessage('Invalid user ID'),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const phoneNumber = await phoneNumberService.assignToUser(
+      req.params.id,
+      req.body.userId,
+      req.user!.organizationId
+    );
+
+    res.json({
+      success: true,
+      data: phoneNumber,
+      message: 'Phone number assigned to user successfully',
+    });
+  })
+);
+
+// Unassign phone number from user
+router.post(
+  '/:id/unassign-user',
+  authorize('admin', 'manager'),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const phoneNumber = await phoneNumberService.unassignFromUser(
+      req.params.id,
+      req.user!.organizationId
+    );
+
+    res.json({
+      success: true,
+      data: phoneNumber,
+      message: 'Phone number unassigned from user successfully',
+    });
+  })
+);
+
+// Get phone numbers for a specific user
+router.get(
+  '/user/:userId',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const phoneNumbers = await phoneNumberService.getUserPhoneNumbers(
+      req.params.userId,
+      req.user!.organizationId
+    );
+
+    res.json({
+      success: true,
+      data: phoneNumbers,
+    });
+  })
+);
+
 // Get phone numbers for a specific agent
 router.get(
   '/agent/:agentId',

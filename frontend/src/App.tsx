@@ -79,12 +79,14 @@ import {
 } from './pages/settings';
 import BranchesPage from './pages/settings/BranchesPage';
 import BranchFormPage from './pages/settings/BranchFormPage';
+import TelecallerPhoneNumbersPage from './pages/settings/PhoneNumbersPage';
 import BrandingSettingsPage from './pages/settings/BrandingSettingsPage';
 import IntegrationSettingsPage from './pages/settings/IntegrationSettingsPage';
 import EmailSettingsPage from './pages/settings/EmailSettingsPage';
 import RazorpaySettingsPage from './pages/settings/RazorpaySettingsPage';
 import IndustrySettingsPage from './pages/settings/IndustrySettingsPage';
 import LeadManagementSettingsPage from './pages/settings/LeadManagementSettingsPage';
+import { BillingDashboardPage, WalletTransactionsPage } from './pages/billing';
 import {
   ReportsPage,
   ReportsListingPage,
@@ -262,6 +264,8 @@ import {
   SupportToolsPage as SuperAdminSupportToolsPage,
   CompliancePage as SuperAdminCompliancePage,
   SystemPage as SuperAdminSystemPage,
+  BillingPage as SuperAdminBillingPage,
+  PhoneNumbersPage as SuperAdminPhoneNumbersPage,
 } from './pages/super-admin';
 import { superAdminService } from './services/super-admin.service';
 
@@ -544,6 +548,8 @@ function App() {
         <Route path="settings/whatsapp" element={<WhatsAppSettingsPage />} />
         <Route path="settings/integrations" element={<IntegrationCredentialsPage />} />
         <Route path="settings/voice-minutes" element={<VoiceMinutesPage />} />
+        <Route path="settings/phone-numbers" element={<PhoneNumbersPage />} />
+        <Route path="settings/telecaller-numbers" element={<TelecallerPhoneNumbersPage />} />
         <Route path="settings/notifications" element={<NotificationChannelsPage />} />
         <Route path="settings/calendar" element={<CalendarSettingsPage />} />
         <Route path="settings/email-sequences" element={<EmailSequencesPage />} />
@@ -567,6 +573,8 @@ function App() {
         <Route path="settings/notification-preferences" element={<NotificationPreferencesPage />} />
         <Route path="settings/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="settings/pipeline" element={<PipelineSettingsPage />} />
+        <Route path="settings/billing" element={<BillingDashboardPage />} />
+        <Route path="settings/billing/transactions" element={<WalletTransactionsPage />} />
         <Route path="reports" element={<ReportsListingPage />} />
         <Route path="reports/old" element={<ReportsPage />} />
         <Route path="reports/payments" element={<PaymentReportsPage />} />
@@ -820,6 +828,8 @@ function App() {
         <Route path="/super-admin/realtime" element={<SuperAdminRealtimePage />} />
         <Route path="/super-admin/intelligence" element={<SuperAdminIntelligencePage />} />
         <Route path="/super-admin/financial" element={<SuperAdminFinancialPage />} />
+        <Route path="/super-admin/billing" element={<SuperAdminBillingPage />} />
+        <Route path="/super-admin/phone-numbers" element={<SuperAdminPhoneNumbersPage />} />
         <Route path="/super-admin/feature-flags" element={<SuperAdminFeatureFlagsPage />} />
         <Route path="/super-admin/white-label" element={<SuperAdminWhiteLabelPage />} />
         <Route path="/super-admin/support" element={<SuperAdminSupportToolsPage />} />

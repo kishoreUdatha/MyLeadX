@@ -19,6 +19,7 @@ export default function PhoneNumbersPage() {
     stats,
     loading,
     agents,
+    users,
     searchTerm,
     setSearchTerm,
     statusFilter,
@@ -34,6 +35,7 @@ export default function PhoneNumbersPage() {
     loadData,
     handleDelete,
     handleAssign,
+    handleAssignToUser,
     handleUnassign,
   } = usePhoneNumbers();
 
@@ -88,8 +90,10 @@ export default function PhoneNumbersPage() {
         <AssignAgentModal
           phoneNumber={selectedNumber}
           agents={agents}
+          users={users}
           onClose={closeAssignModal}
-          onAssign={handleAssign}
+          onAssignAgent={handleAssign}
+          onAssignUser={handleAssignToUser}
         />
       )}
     </div>

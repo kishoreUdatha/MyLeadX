@@ -41,3 +41,4 @@ export { default as IndustrySettingsPage } from './IndustrySettingsPage';
 export { default as LeadManagementSettingsPage } from './LeadManagementSettingsPage';
 export { default as BranchesPage } from './BranchesPage';
 export { default as BranchFormPage } from './BranchFormPage';
+export { default as PhoneNumbersPage } from './PhoneNumbersPage';

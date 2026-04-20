@@ -85,6 +85,7 @@ export function ConversationalAIAgentWizard() {
         website: formData.website,
         mainGoal: formData.mainGoal,
         knowledgeBase: formData.knowledgeBase,
+        phoneNumberId: formData.phoneNumberId || null, // Assign phone number to agent
       });
 
       setCreationProgress(prev => [...prev, 'Agent created successfully!']);

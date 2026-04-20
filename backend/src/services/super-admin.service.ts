@@ -1284,6 +1284,980 @@ class SuperAdminService {
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
   }
+
+  // ==================== BILLING DASHBOARD ====================
+
+  /**
+   * Get comprehensive billing dashboard stats
+   */
+  async getBillingDashboard() {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    // Get subscription stats
+    const [
+      activeSubscriptions,
+      trialSubscriptions,
+      cancelledSubscriptions,
+      totalOrganizations,
+    ] = await Promise.all([
+      prisma.subscription.count({ where: { status: 'ACTIVE' } }),
+      prisma.subscription.count({ where: { status: 'TRIAL' } }),
+      prisma.subscription.count({ where: { status: 'CANCELLED' } }),
+      prisma.organization.count(),
+    ]);
+
+    // Get MRR (Monthly Recurring Revenue)
+    const activeSubsWithAmount = await prisma.subscription.findMany({
+      where: { status: 'ACTIVE' },
+      select: { amount: true, billingCycle: true },
+    });
+
+    const mrr = activeSubsWithAmount.reduce((total, sub) => {
+      // If annual, divide by 12 to get monthly equivalent
+      const monthlyAmount = sub.billingCycle === 'annual' ? sub.amount / 12 : sub.amount;
+      return total + monthlyAmount;
+    }, 0);
+
+    const arr = mrr * 12;
+
+    // Get this month's revenue
+    const thisMonthRevenue = await prisma.invoice.aggregate({
+      where: {
+        status: 'PAID',
+        paidAt: { gte: startOfMonth },
+      },
+      _sum: { totalAmount: true },
+      _count: true,
+    });
+
+    // Get last month's revenue for comparison
+    const lastMonthRevenue = await prisma.invoice.aggregate({
+      where: {
+        status: 'PAID',
+        paidAt: { gte: startOfLastMonth, lte: endOfLastMonth },
+      },
+      _sum: { totalAmount: true },
+    });
+
+    // Get wallet stats
+    const walletStats = await prisma.organization.aggregate({
+      _sum: { subscriptionWalletBalance: true },
+      _avg: { subscriptionWalletBalance: true },
+    });
+
+    // Get this month's wallet top-ups
+    const thisMonthTopUps = await prisma.walletTransaction.aggregate({
+      where: {
+        type: 'CREDIT',
+        status: 'COMPLETED',
+        createdAt: { gte: startOfMonth },
+        referenceType: 'razorpay_topup',
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+
+    // Get promo code stats
+    const promoStats = await prisma.promoCode.aggregate({
+      where: { isActive: true },
+      _count: true,
+    });
+
+    const totalRedemptions = await prisma.promoCodeRedemption.aggregate({
+      _sum: { discountAmount: true },
+      _count: true,
+    });
+
+    // Plan distribution
+    const planDistribution = await prisma.organization.groupBy({
+      by: ['activePlanId'],
+      _count: true,
+    });
+
+    // Revenue growth
+    const currentRevenue = thisMonthRevenue._sum.totalAmount || 0;
+    const previousRevenue = lastMonthRevenue._sum.totalAmount || 0;
+    const revenueGrowth = previousRevenue > 0
+      ? ((currentRevenue - previousRevenue) / previousRevenue) * 100
+      : 0;
+
+    return {
+      overview: {
+        totalOrganizations,
+        activeSubscriptions,
+        trialSubscriptions,
+        cancelledSubscriptions,
+        conversionRate: totalOrganizations > 0
+          ? Math.round((activeSubscriptions / totalOrganizations) * 100)
+          : 0,
+      },
+      revenue: {
+        mrr: Math.round(mrr),
+        arr: Math.round(arr),
+        thisMonth: currentRevenue,
+        lastMonth: previousRevenue,
+        growth: Math.round(revenueGrowth * 100) / 100,
+        transactionsThisMonth: thisMonthRevenue._count,
+      },
+      wallet: {
+        totalBalance: walletStats._sum.subscriptionWalletBalance || 0,
+        averageBalance: Math.round(walletStats._avg.subscriptionWalletBalance || 0),
+        topUpsThisMonth: thisMonthTopUps._sum.amount || 0,
+        topUpCountThisMonth: thisMonthTopUps._count,
+      },
+      promoCodes: {
+        activeCount: promoStats._count,
+        totalRedemptions: totalRedemptions._count,
+        totalDiscountGiven: totalRedemptions._sum.discountAmount || 0,
+      },
+      planDistribution: planDistribution.map(p => ({
+        plan: p.activePlanId || 'free',
+        count: p._count,
+      })),
+    };
+  }
+
+  /**
+   * Get all wallet transactions across tenants
+   */
+  async getAllWalletTransactions(params: {
+    page?: number;
+    limit?: number;
+    type?: string;
+    organizationId?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }) {
+    const { page = 1, limit = 50, type, organizationId, startDate, endDate } = params;
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      status: 'COMPLETED',
+    };
+
+    if (type) {
+      where.type = type;
+    }
+
+    if (organizationId) {
+      where.organizationId = organizationId;
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (endDate) where.createdAt.lte = endDate;
+    }
+
+    const [transactions, total] = await Promise.all([
+      prisma.walletTransaction.findMany({
+        where,
+        include: {
+          organization: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.walletTransaction.count({ where }),
+    ]);
+
+    return {
+      transactions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Get all subscriptions across tenants
+   */
+  async getAllSubscriptions(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    planId?: string;
+    billingCycle?: string;
+  }) {
+    const { page = 1, limit = 50, status, planId, billingCycle } = params;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (planId) {
+      where.planId = planId;
+    }
+
+    if (billingCycle) {
+      where.billingCycle = billingCycle;
+    }
+
+    const [subscriptions, total] = await Promise.all([
+      prisma.subscription.findMany({
+        where,
+        include: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              subscriptionWalletBalance: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.subscription.count({ where }),
+    ]);
+
+    // Calculate summary
+    const summary = await prisma.subscription.groupBy({
+      by: ['status'],
+      _count: true,
+      _sum: { amount: true },
+    });
+
+    return {
+      subscriptions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      summary: summary.map(s => ({
+        status: s.status,
+        count: s._count,
+        totalAmount: s._sum.amount || 0,
+      })),
+    };
+  }
+
+  /**
+   * Get promo code analytics
+   */
+  async getPromoCodeAnalytics() {
+    // Get all promo codes with redemption stats
+    const promoCodes = await prisma.promoCode.findMany({
+      include: {
+        _count: {
+          select: { redemptions: true },
+        },
+        redemptions: {
+          select: {
+            discountAmount: true,
+            originalAmount: true,
+            finalAmount: true,
+            redeemedAt: true,
+          },
+          orderBy: { redeemedAt: 'desc' },
+          take: 5, // Last 5 redemptions per code
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Calculate totals
+    const totals = await prisma.promoCodeRedemption.aggregate({
+      _sum: {
+        discountAmount: true,
+        originalAmount: true,
+        finalAmount: true,
+      },
+      _count: true,
+    });
+
+    // Get redemptions by month (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const redemptionsByMonth = await prisma.promoCodeRedemption.groupBy({
+      by: ['redeemedAt'],
+      where: {
+        redeemedAt: { gte: sixMonthsAgo },
+      },
+      _sum: { discountAmount: true },
+      _count: true,
+    });
+
+    // Format promo codes with stats
+    const formattedCodes = promoCodes.map(code => {
+      const totalDiscount = code.redemptions.reduce((sum, r) => sum + r.discountAmount, 0);
+      const totalOriginal = code.redemptions.reduce((sum, r) => sum + r.originalAmount, 0);
+
+      return {
+        id: code.id,
+        code: code.code,
+        description: code.description,
+        discountType: code.discountType,
+        discountValue: code.discountValue,
+        isActive: code.isActive,
+        validUntil: code.validUntil,
+        maxUses: code.maxUses,
+        usedCount: code.usedCount,
+        redemptionCount: code._count.redemptions,
+        totalDiscountGiven: totalDiscount,
+        totalRevenueGenerated: totalOriginal - totalDiscount,
+        recentRedemptions: code.redemptions,
+      };
+    });
+
+    // Top performing codes
+    const topCodes = [...formattedCodes]
+      .sort((a, b) => b.redemptionCount - a.redemptionCount)
+      .slice(0, 5);
+
+    return {
+      promoCodes: formattedCodes,
+      totals: {
+        totalRedemptions: totals._count,
+        totalDiscountGiven: totals._sum.discountAmount || 0,
+        totalOriginalAmount: totals._sum.originalAmount || 0,
+        totalFinalAmount: totals._sum.finalAmount || 0,
+        averageDiscount: totals._count > 0
+          ? Math.round((totals._sum.discountAmount || 0) / totals._count)
+          : 0,
+      },
+      topCodes,
+      activeCodesCount: promoCodes.filter(c => c.isActive).length,
+      expiredCodesCount: promoCodes.filter(c => !c.isActive || (c.validUntil && c.validUntil < new Date())).length,
+    };
+  }
+
+  /**
+   * Get subscription churn analytics
+   */
+  async getChurnAnalytics(months: number = 6) {
+    const results = [];
+    const now = new Date();
+
+    for (let i = 0; i < months; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+      const [cancelled, newSubs, active] = await Promise.all([
+        prisma.subscription.count({
+          where: {
+            cancelledAt: { gte: startOfMonth, lte: endOfMonth },
+          },
+        }),
+        prisma.subscription.count({
+          where: {
+            createdAt: { gte: startOfMonth, lte: endOfMonth },
+          },
+        }),
+        prisma.subscription.count({
+          where: {
+            status: 'ACTIVE',
+            createdAt: { lte: endOfMonth },
+          },
+        }),
+      ]);
+
+      const churnRate = active > 0 ? (cancelled / active) * 100 : 0;
+
+      results.unshift({
+        month: date.toLocaleString('default', { month: 'short' }),
+        year: date.getFullYear(),
+        cancelled,
+        newSubscriptions: newSubs,
+        activeAtEnd: active,
+        churnRate: Math.round(churnRate * 100) / 100,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Manually credit or debit a tenant's subscription wallet
+   */
+  async adjustWalletBalance(params: {
+    organizationId: string;
+    amount: number;
+    type: 'CREDIT' | 'DEBIT';
+    reason: string;
+    adminId: string;
+  }) {
+    const { organizationId, amount, type, reason, adminId } = params;
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { subscriptionWalletBalance: true, name: true },
+    });
+
+    if (!organization) {
+      throw new Error('Organization not found');
+    }
+
+    const currentBalance = organization.subscriptionWalletBalance || 0;
+    const newBalance = type === 'CREDIT'
+      ? currentBalance + amount
+      : currentBalance - amount;
+
+    if (newBalance < 0) {
+      throw new Error('Insufficient balance for debit');
+    }
+
+    // Update balance and create transaction record
+    const [updatedOrg, transaction] = await prisma.$transaction([
+      prisma.organization.update({
+        where: { id: organizationId },
+        data: { subscriptionWalletBalance: newBalance },
+      }),
+      prisma.walletTransaction.create({
+        data: {
+          organizationId,
+          type: type === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+          amount,
+          currency: 'INR',
+          status: 'COMPLETED',
+          description: `Manual ${type.toLowerCase()} by admin: ${reason}`,
+          metadata: {
+            adminId,
+            reason,
+            previousBalance: currentBalance,
+            newBalance,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      organizationId,
+      organizationName: organization.name,
+      previousBalance: currentBalance,
+      adjustment: type === 'CREDIT' ? amount : -amount,
+      newBalance,
+      transactionId: transaction.id,
+    };
+  }
+
+  /**
+   * Get all invoices across all tenants
+   */
+  async getAllInvoices(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    organizationId?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }) {
+    const { page = 1, limit = 20, status, organizationId, startDate, endDate } = params;
+
+    const where: any = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (organizationId) {
+      where.organizationId = organizationId;
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (endDate) where.createdAt.lte = endDate;
+    }
+
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: {
+          organization: {
+            select: { name: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.invoice.count({ where }),
+    ]);
+
+    // Calculate totals
+    const totals = await prisma.invoice.aggregate({
+      where,
+      _sum: {
+        amount: true,
+        taxAmount: true,
+        totalAmount: true,
+      },
+      _count: true,
+    });
+
+    return {
+      invoices,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      summary: {
+        totalAmount: totals._sum.totalAmount || 0,
+        totalTax: totals._sum.taxAmount || 0,
+        count: totals._count,
+      },
+    };
+  }
+
+  /**
+   * Get failed or pending payments
+   */
+  async getFailedPayments(params: {
+    page?: number;
+    limit?: number;
+    startDate?: Date;
+    endDate?: Date;
+  }) {
+    const { page = 1, limit = 20, startDate, endDate } = params;
+
+    const where: any = {
+      status: { in: ['FAILED', 'PENDING'] },
+    };
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (endDate) where.createdAt.lte = endDate;
+    }
+
+    const [transactions, total] = await Promise.all([
+      prisma.walletTransaction.findMany({
+        where,
+        include: {
+          organization: {
+            select: { name: true, email: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.walletTransaction.count({ where }),
+    ]);
+
+    // Get failure summary
+    const failedCount = await prisma.walletTransaction.count({
+      where: { ...where, status: 'FAILED' },
+    });
+    const pendingCount = await prisma.walletTransaction.count({
+      where: { ...where, status: 'PENDING' },
+    });
+
+    const failedAmount = await prisma.walletTransaction.aggregate({
+      where: { ...where, status: 'FAILED' },
+      _sum: { amount: true },
+    });
+
+    return {
+      transactions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      summary: {
+        failedCount,
+        pendingCount,
+        totalFailedAmount: failedAmount._sum.amount || 0,
+      },
+    };
+  }
+
+  /**
+   * Issue a refund to a tenant
+   */
+  async issueRefund(params: {
+    organizationId: string;
+    amount: number;
+    reason: string;
+    originalTransactionId?: string;
+    adminId: string;
+  }) {
+    const { organizationId, amount, reason, originalTransactionId, adminId } = params;
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { subscriptionWalletBalance: true, name: true },
+    });
+
+    if (!organization) {
+      throw new Error('Organization not found');
+    }
+
+    // Credit the refund to wallet
+    const currentBalance = organization.subscriptionWalletBalance || 0;
+    const newBalance = currentBalance + amount;
+
+    const [updatedOrg, transaction] = await prisma.$transaction([
+      prisma.organization.update({
+        where: { id: organizationId },
+        data: { subscriptionWalletBalance: newBalance },
+      }),
+      prisma.walletTransaction.create({
+        data: {
+          organizationId,
+          type: 'REFUND',
+          amount,
+          currency: 'INR',
+          status: 'COMPLETED',
+          description: `Refund: ${reason}`,
+          metadata: {
+            adminId,
+            reason,
+            originalTransactionId,
+            previousBalance: currentBalance,
+            newBalance,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      organizationId,
+      organizationName: organization.name,
+      refundAmount: amount,
+      newBalance,
+      transactionId: transaction.id,
+    };
+  }
+
+  /**
+   * Export billing data to Excel
+   */
+  async exportBillingData(params: {
+    type: 'transactions' | 'subscriptions' | 'invoices';
+    startDate?: Date;
+    endDate?: Date;
+  }) {
+    const { type, startDate, endDate } = params;
+    const workbook = new ExcelJS.Workbook();
+
+    const dateFilter: any = {};
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.gte = startDate;
+      if (endDate) dateFilter.createdAt.lte = endDate;
+    }
+
+    if (type === 'transactions') {
+      const transactions = await prisma.walletTransaction.findMany({
+        where: dateFilter,
+        include: {
+          organization: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const sheet = workbook.addWorksheet('Wallet Transactions');
+      sheet.columns = [
+        { header: 'Date', key: 'date', width: 20 },
+        { header: 'Organization', key: 'organization', width: 30 },
+        { header: 'Type', key: 'type', width: 15 },
+        { header: 'Amount', key: 'amount', width: 15 },
+        { header: 'Currency', key: 'currency', width: 10 },
+        { header: 'Status', key: 'status', width: 15 },
+        { header: 'Description', key: 'description', width: 40 },
+      ];
+
+      transactions.forEach(t => {
+        sheet.addRow({
+          date: t.createdAt.toISOString(),
+          organization: t.organization?.name || 'N/A',
+          type: t.type,
+          amount: t.amount,
+          currency: t.currency,
+          status: t.status,
+          description: t.description,
+        });
+      });
+    } else if (type === 'subscriptions') {
+      const subscriptions = await prisma.subscription.findMany({
+        where: dateFilter,
+        include: {
+          organization: { select: { name: true } },
+          plan: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const sheet = workbook.addWorksheet('Subscriptions');
+      sheet.columns = [
+        { header: 'Organization', key: 'organization', width: 30 },
+        { header: 'Plan', key: 'plan', width: 20 },
+        { header: 'Status', key: 'status', width: 15 },
+        { header: 'Billing Cycle', key: 'billingCycle', width: 15 },
+        { header: 'Amount', key: 'amount', width: 15 },
+        { header: 'Start Date', key: 'startDate', width: 20 },
+        { header: 'End Date', key: 'endDate', width: 20 },
+        { header: 'Created', key: 'createdAt', width: 20 },
+      ];
+
+      subscriptions.forEach(s => {
+        sheet.addRow({
+          organization: s.organization?.name || 'N/A',
+          plan: s.plan?.name || 'N/A',
+          status: s.status,
+          billingCycle: s.billingCycle,
+          amount: s.amount,
+          startDate: s.startDate?.toISOString() || 'N/A',
+          endDate: s.endDate?.toISOString() || 'N/A',
+          createdAt: s.createdAt.toISOString(),
+        });
+      });
+    } else if (type === 'invoices') {
+      const invoices = await prisma.invoice.findMany({
+        where: dateFilter,
+        include: {
+          organization: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const sheet = workbook.addWorksheet('Invoices');
+      sheet.columns = [
+        { header: 'Invoice Number', key: 'invoiceNumber', width: 20 },
+        { header: 'Organization', key: 'organization', width: 30 },
+        { header: 'Amount', key: 'amount', width: 15 },
+        { header: 'Tax', key: 'tax', width: 15 },
+        { header: 'Total', key: 'total', width: 15 },
+        { header: 'Status', key: 'status', width: 15 },
+        { header: 'Due Date', key: 'dueDate', width: 20 },
+        { header: 'Paid Date', key: 'paidDate', width: 20 },
+        { header: 'Created', key: 'createdAt', width: 20 },
+      ];
+
+      invoices.forEach(i => {
+        sheet.addRow({
+          invoiceNumber: i.invoiceNumber,
+          organization: i.organization?.name || 'N/A',
+          amount: i.amount,
+          tax: i.taxAmount,
+          total: i.totalAmount,
+          status: i.status,
+          dueDate: i.dueDate?.toISOString() || 'N/A',
+          paidDate: i.paidAt?.toISOString() || 'N/A',
+          createdAt: i.createdAt.toISOString(),
+        });
+      });
+    }
+
+    return workbook;
+  }
+
+  /**
+   * Get revenue forecast based on active subscriptions
+   */
+  async getRevenueForecast(months: number = 3) {
+    const activeSubscriptions = await prisma.subscription.findMany({
+      where: {
+        status: 'ACTIVE',
+      },
+      select: {
+        amount: true,
+        billingCycle: true,
+        endDate: true,
+      },
+    });
+
+    const forecast = [];
+    const now = new Date();
+
+    for (let i = 0; i < months; i++) {
+      const forecastMonth = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+
+      let projectedRevenue = 0;
+      let activeCount = 0;
+
+      activeSubscriptions.forEach(sub => {
+        // Check if subscription will still be active
+        if (!sub.endDate || sub.endDate > forecastMonth) {
+          activeCount++;
+          if (sub.billingCycle === 'MONTHLY') {
+            projectedRevenue += sub.amount || 0;
+          } else if (sub.billingCycle === 'ANNUAL') {
+            projectedRevenue += (sub.amount || 0) / 12;
+          }
+        }
+      });
+
+      forecast.push({
+        month: forecastMonth.toISOString().substring(0, 7),
+        projectedMRR: Math.round(projectedRevenue),
+        activeSubscriptions: activeCount,
+      });
+    }
+
+    return forecast;
+  }
+
+  /**
+   * Get phone number analytics across all tenants
+   */
+  async getPhoneNumberAnalytics() {
+    // Get counts by provider
+    const providerCounts = await prisma.phoneNumber.groupBy({
+      by: ['provider'],
+      _count: true,
+    });
+
+    // Get counts by status
+    const statusCounts = await prisma.phoneNumber.groupBy({
+      by: ['status'],
+      _count: true,
+    });
+
+    // Get counts by source (PLATFORM vs BYOC)
+    const sourceCounts = await prisma.phoneNumber.groupBy({
+      by: ['source'],
+      _count: true,
+    });
+
+    // Get total numbers
+    const totalNumbers = await prisma.phoneNumber.count();
+
+    // Get top tenants by number count
+    const topTenants = await prisma.phoneNumber.groupBy({
+      by: ['organizationId'],
+      _count: true,
+      orderBy: {
+        _count: {
+          organizationId: 'desc',
+        },
+      },
+      take: 10,
+    });
+
+    // Get organization names for top tenants
+    const orgIds = topTenants.map(t => t.organizationId);
+    const organizations = await prisma.organization.findMany({
+      where: { id: { in: orgIds } },
+      select: { id: true, name: true },
+    });
+    const orgMap = new Map(organizations.map(o => [o.id, o.name]));
+
+    return {
+      totalNumbers,
+      byProvider: providerCounts.map(p => ({
+        provider: p.provider,
+        count: p._count,
+      })),
+      byStatus: statusCounts.map(s => ({
+        status: s.status,
+        count: s._count,
+      })),
+      bySource: sourceCounts.map(s => ({
+        source: s.source,
+        count: s._count,
+      })),
+      topTenants: topTenants.map(t => ({
+        organizationId: t.organizationId,
+        organizationName: orgMap.get(t.organizationId) || 'Unknown',
+        numberCount: t._count,
+      })),
+    };
+  }
+
+  /**
+   * Get all phone numbers across all tenants with filters
+   */
+  async getAllPhoneNumbers(params: {
+    page?: number;
+    limit?: number;
+    provider?: string;
+    status?: string;
+    organizationId?: string;
+  }) {
+    const { page = 1, limit = 20, provider, status, organizationId } = params;
+
+    const where: any = {};
+    if (provider) where.provider = provider;
+    if (status) where.status = status;
+    if (organizationId) where.organizationId = organizationId;
+
+    const [numbers, total] = await Promise.all([
+      prisma.phoneNumber.findMany({
+        where,
+        include: {
+          organization: {
+            select: { name: true },
+          },
+          assignedAgent: {
+            select: { name: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.phoneNumber.count({ where }),
+    ]);
+
+    return {
+      numbers,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Get provider usage by tenant
+   */
+  async getProviderUsageByTenant() {
+    const usage = await prisma.phoneNumber.groupBy({
+      by: ['organizationId', 'provider'],
+      _count: true,
+    });
+
+    // Get organization names
+    const orgIds = [...new Set(usage.map(u => u.organizationId))];
+    const organizations = await prisma.organization.findMany({
+      where: { id: { in: orgIds } },
+      select: { id: true, name: true },
+    });
+    const orgMap = new Map(organizations.map(o => [o.id, o.name]));
+
+    // Group by organization
+    const byTenant: Record<string, { name: string; providers: Record<string, number> }> = {};
+
+    usage.forEach(u => {
+      if (!byTenant[u.organizationId]) {
+        byTenant[u.organizationId] = {
+          name: orgMap.get(u.organizationId) || 'Unknown',
+          providers: {},
+        };
+      }
+      byTenant[u.organizationId].providers[u.provider] = u._count;
+    });
+
+    return Object.entries(byTenant).map(([orgId, data]) => ({
+      organizationId: orgId,
+      organizationName: data.name,
+      ...data.providers,
+      total: Object.values(data.providers).reduce((a, b) => a + b, 0),
+    }));
+  }
 }
 
 export const superAdminService = new SuperAdminService();

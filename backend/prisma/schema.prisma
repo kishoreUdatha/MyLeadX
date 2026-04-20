@@ -61,9 +61,14 @@ model Organization {
   voiceMinutesUsed    Float     @default(0) // Total minutes used this month
   voiceMinutesResetAt DateTime? // When usage was last reset
 
-  // Wallet for Phone Number Purchases
+  // Wallet for Phone Number Purchases (USD)
   walletBalance  Float     @default(0) // Prepaid wallet balance in USD
   walletCurrency String    @default("USD")
+
+  // Subscription Wallet for Billing (INR)
+  subscriptionWalletBalance  Float  @default(0) // Prepaid subscription wallet in INR
+  subscriptionWalletCurrency String @default("INR")
+
   kycVerified    Boolean   @default(false) // KYC verification status for Indian numbers
   kycVerifiedAt  DateTime?
   kycDocuments   Json?     @default("{}") // Store KYC document references
@@ -294,6 +299,9 @@ model Organization {
   leadPrioritySettings LeadPrioritySettings?
   autoReportSchedules  AutoReportSchedule[]
 
+  // Promo Code Redemptions
+  promoCodeRedemptions PromoCodeRedemption[]
+
   @@map("organizations")
 }
 
@@ -435,6 +443,9 @@ model User {
   // Activity Tracking for Team Status
   lastActivityAt DateTime? // Updated on every API call
   workStatus     WorkStatus @default(OFFLINE) // Manual status: ACTIVE, ON_BREAK, OFFLINE
+
+  // Assigned Phone Numbers
+  assignedPhoneNumbers PhoneNumber[] @relation("UserPhoneNumbers")
 
   @@unique([organizationId, email])
   @@map("users")
@@ -2752,6 +2763,7 @@ model PhoneNumber {
 
   // Assignment
   assignedToAgentId String? // Which voice agent is using this number
+  assignedToUserId  String? // Which telecaller/user is using this number
   assignedAt        DateTime?
 
   // Cost tracking
@@ -2770,11 +2782,13 @@ model PhoneNumber {
   // Relations
   organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedAgent VoiceAgent?  @relation(fields: [assignedToAgentId], references: [id], onDelete: SetNull)
+  assignedUser  User?        @relation("UserPhoneNumbers", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   callLogs      AICallLog[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
   @@index([assignedToAgentId])
+  @@index([assignedToUserId])
   @@map("phone_numbers")
 }
 
@@ -4103,6 +4117,68 @@ enum SubscriptionStatus {
 enum BillingCycle {
   monthly
   annual
+}
+
+model PromoCode {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g., "WELCOME20", "LAUNCH50"
+  description String?
+
+  // Discount
+  discountType  DiscountType @default(PERCENTAGE) // PERCENTAGE or FIXED
+  discountValue Float // e.g., 20 for 20% or 500 for ₹500 off
+
+  // Limits
+  maxUses       Int?      // Max total redemptions (null = unlimited)
+  usedCount     Int       @default(0) // Current redemption count
+  maxUsesPerOrg Int       @default(1) // Max uses per organization
+  minAmount     Float?    // Minimum order amount to apply
+  maxDiscount   Float?    // Cap on discount amount (for percentage)
+
+  // Validity
+  validFrom  DateTime  @default(now())
+  validUntil DateTime? // null = no expiry
+
+  // Restrictions
+  applicablePlans String[] // Empty = all plans, or ["growth", "business"]
+  newCustomersOnly Boolean @default(false)
+
+  // Status
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Redemptions
+  redemptions PromoCodeRedemption[]
+
+  @@index([code])
+  @@index([isActive, validUntil])
+  @@map("promo_codes")
+}
+
+model PromoCodeRedemption {
+  id             String   @id @default(uuid())
+  promoCodeId    String
+  organizationId String
+  subscriptionId String?
+
+  discountAmount Float // Actual discount applied
+  originalAmount Float // Original order amount
+  finalAmount    Float // Final amount after discount
+
+  redeemedAt DateTime @default(now())
+
+  promoCode    PromoCode    @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([promoCodeId])
+  @@index([organizationId])
+  @@map("promo_code_redemptions")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
 }
 
 model UsageTracking {

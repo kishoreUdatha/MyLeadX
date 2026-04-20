@@ -71,4 +71,4 @@ export interface NumbersShopFilters {
   pattern: string;
 }
 
-export type TabType = 'shop' | 'my-numbers' | 'wallet';
+export type TabType = 'shop' | 'my-numbers' | 'plivo' | 'wallet';

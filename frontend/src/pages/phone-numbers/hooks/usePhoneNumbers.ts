@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import phoneNumberService from '../../../services/phone-number.service';
-import { PhoneNumber, PhoneNumberStats, Agent, PhoneNumberStatus } from '../phone-numbers.types';
+import { PhoneNumber, PhoneNumberStats, Agent, User, PhoneNumberStatus } from '../phone-numbers.types';
 
 export function usePhoneNumbers() {
   const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumber[]>([]);
@@ -18,6 +18,7 @@ export function usePhoneNumbers() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState<PhoneNumber | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -38,7 +39,7 @@ export function usePhoneNumbers() {
   const loadAgents = async () => {
     try {
       const response = await fetch('/api/voice-ai/agents', {
-        credentials: 'include', // Send cookies for authentication
+        credentials: 'include',
       });
       const data = await response.json();
       if (data.success) {
@@ -49,9 +50,29 @@ export function usePhoneNumbers() {
     }
   };
 
+  const loadUsers = async () => {
+    try {
+      const response = await fetch('/api/users?role=telecaller,team_lead,manager', {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUsers(data.data.map((u: { id: string; firstName: string; lastName: string; email: string }) => ({
+          id: u.id,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          email: u.email,
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+  };
+
   useEffect(() => {
     loadData();
     loadAgents();
+    loadUsers();
   }, [loadData]);
 
   const handleDelete = async (id: string) => {
@@ -81,13 +102,31 @@ export function usePhoneNumbers() {
   };
 
   const handleUnassign = async (phoneNumberId: string) => {
+    const phoneNumber = phoneNumbers.find(pn => pn.id === phoneNumberId);
     try {
-      await phoneNumberService.unassignFromAgent(phoneNumberId);
+      if (phoneNumber?.assignedToUserId) {
+        await phoneNumberService.unassignFromUser(phoneNumberId);
+      } else {
+        await phoneNumberService.unassignFromAgent(phoneNumberId);
+      }
       toast.success('Phone number unassigned');
       loadData();
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
       toast.error(err.response?.data?.message || 'Failed to unassign phone number');
+    }
+  };
+
+  const handleAssignToUser = async (phoneNumberId: string, userId: string) => {
+    try {
+      await phoneNumberService.assignToUser(phoneNumberId, userId);
+      toast.success('Phone number assigned to user');
+      setShowAssignModal(false);
+      setSelectedNumber(null);
+      loadData();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || 'Failed to assign phone number');
     }
   };
 
@@ -120,7 +159,8 @@ export function usePhoneNumbers() {
     (pn) =>
       pn.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       pn.friendlyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      pn.assignedAgent?.name.toLowerCase().includes(searchTerm.toLowerCase())
+      pn.assignedAgent?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${pn.assignedUser?.firstName || ''} ${pn.assignedUser?.lastName || ''}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return {
@@ -129,6 +169,7 @@ export function usePhoneNumbers() {
     stats,
     loading,
     agents,
+    users,
     // Filters
     searchTerm,
     setSearchTerm,
@@ -147,6 +188,7 @@ export function usePhoneNumbers() {
     loadData,
     handleDelete,
     handleAssign,
+    handleAssignToUser,
     handleUnassign,
   };
 }

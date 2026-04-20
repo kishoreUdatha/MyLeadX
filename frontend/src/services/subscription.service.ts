@@ -253,6 +253,95 @@ class SubscriptionService {
     if (limit === -1) return 0; // Unlimited
     return Math.min(100, Math.round((used / limit) * 100));
   }
+
+  // ============ Wallet Methods ============
+
+  // Get wallet balance
+  async getWalletBalance(): Promise<{
+    balance: number;
+    currency: string;
+    presets: number[];
+    lastTransaction?: {
+      type: string;
+      amount: number;
+      description: string;
+      createdAt: string;
+    };
+  }> {
+    const response = await api.get('/wallet/balance');
+    return response.data.data;
+  }
+
+  // Create top-up order
+  async createTopUp(amount: number): Promise<{
+    orderId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+  }> {
+    const response = await api.post('/wallet/topup', { amount });
+    return response.data.data;
+  }
+
+  // Verify top-up payment
+  async verifyTopUp(
+    razorpayOrderId: string,
+    razorpayPaymentId: string,
+    razorpaySignature: string
+  ): Promise<{
+    success: boolean;
+    newBalance: number;
+    transactionId: string;
+  }> {
+    const response = await api.post('/wallet/topup/verify', {
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+    });
+    return response.data.data;
+  }
+
+  // Get wallet transactions
+  async getWalletTransactions(
+    page: number = 1,
+    limit: number = 20,
+    type?: 'CREDIT' | 'DEBIT' | 'REFUND'
+  ): Promise<{
+    transactions: Array<{
+      id: string;
+      type: string;
+      amount: number;
+      currency: string;
+      balanceBefore: number;
+      balanceAfter: number;
+      description: string;
+      referenceType?: string;
+      referenceId?: string;
+      status: string;
+      createdAt: string;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
+    if (type) params.append('type', type);
+    const response = await api.get(`/wallet/transactions?${params.toString()}`);
+    return response.data.data;
+  }
+
+  // Get recent wallet transactions
+  async getRecentWalletTransactions(): Promise<Array<{
+    id: string;
+    type: string;
+    amount: number;
+    description: string;
+    createdAt: string;
+  }>> {
+    const response = await api.get('/wallet/recent');
+    return response.data.data;
+  }
 }
 
 export const subscriptionService = new SubscriptionService();

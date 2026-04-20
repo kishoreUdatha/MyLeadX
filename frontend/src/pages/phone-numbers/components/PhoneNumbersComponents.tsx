@@ -23,6 +23,7 @@ import {
   PhoneNumber,
   PhoneNumberStats,
   Agent,
+  User,
   PhoneNumberFormData,
   PhoneNumberStatus,
   CreatePhoneNumberInput,
@@ -255,12 +256,22 @@ const PhoneNumberRow: React.FC<PhoneNumberRowProps> = ({
     </td>
     <td className="px-6 py-4">
       {pn.assignedAgent ? (
-        <Link
-          to={`/voice-ai/agents/${pn.assignedAgent.id}`}
-          className="text-primary-600 hover:text-primary-700"
-        >
-          {pn.assignedAgent.name}
-        </Link>
+        <div>
+          <Link
+            to={`/voice-ai/agents/${pn.assignedAgent.id}`}
+            className="text-primary-600 hover:text-primary-700"
+          >
+            {pn.assignedAgent.name}
+          </Link>
+          <span className="text-xs text-slate-400 block">Voice Agent</span>
+        </div>
+      ) : pn.assignedUser ? (
+        <div>
+          <span className="text-slate-900">
+            {pn.assignedUser.firstName} {pn.assignedUser.lastName}
+          </span>
+          <span className="text-xs text-slate-400 block">Telecaller</span>
+        </div>
       ) : (
         <span className="text-slate-400">Not assigned</span>
       )}
@@ -275,11 +286,11 @@ const PhoneNumberRow: React.FC<PhoneNumberRowProps> = ({
           <button
             onClick={onAssign}
             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="Assign to Agent"
+            title="Assign"
           >
             <UserPlusIcon className="w-5 h-5" />
           </button>
-        ) : pn.status === 'ASSIGNED' ? (
+        ) : pn.status === 'ASSIGNED' || pn.assignedToAgentId || pn.assignedToUserId ? (
           <button
             onClick={onUnassign}
             className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
@@ -526,47 +537,107 @@ export const AddPhoneNumberModal: React.FC<AddPhoneNumberModalProps> = ({
   );
 };
 
-// Assign Agent Modal
+// Assign Modal (supports both Agents and Users)
 interface AssignAgentModalProps {
   phoneNumber: PhoneNumber;
   agents: Agent[];
+  users: User[];
   onClose: () => void;
-  onAssign: (phoneNumberId: string, agentId: string) => void;
+  onAssignAgent: (phoneNumberId: string, agentId: string) => void;
+  onAssignUser: (phoneNumberId: string, userId: string) => void;
 }
 
 export const AssignAgentModal: React.FC<AssignAgentModalProps> = ({
   phoneNumber,
   agents,
+  users,
   onClose,
-  onAssign,
+  onAssignAgent,
+  onAssignUser,
 }) => {
-  const [selectedAgent, setSelectedAgent] = useState('');
+  const [assignType, setAssignType] = useState<'agent' | 'user'>('user');
+  const [selectedId, setSelectedId] = useState('');
+
+  const handleAssign = () => {
+    if (!selectedId) return;
+    if (assignType === 'agent') {
+      onAssignAgent(phoneNumber.id, selectedId);
+    } else {
+      onAssignUser(phoneNumber.id, selectedId);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
         <div className="p-6 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">Assign to Agent</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Assign Phone Number</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Assign {phoneNumber.displayNumber || phoneNumber.number} to a voice agent
+            Assign {phoneNumber.displayNumber || phoneNumber.number}
           </p>
         </div>
 
         <div className="p-6 space-y-4">
+          {/* Assignment Type Toggle */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Select Agent</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Assign To</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setAssignType('user'); setSelectedId(''); }}
+                className={`flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  assignType === 'user'
+                    ? 'bg-primary-50 border-primary-500 text-primary-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Telecaller
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAssignType('agent'); setSelectedId(''); }}
+                className={`flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  assignType === 'agent'
+                    ? 'bg-primary-50 border-primary-500 text-primary-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Voice Agent
+              </button>
+            </div>
+          </div>
+
+          {/* Selection Dropdown */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              {assignType === 'agent' ? 'Select Voice Agent' : 'Select Telecaller'}
+            </label>
             <select
-              value={selectedAgent}
-              onChange={(e) => setSelectedAgent(e.target.value)}
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
               className="input"
             >
-              <option value="">Choose an agent...</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
+              <option value="">
+                {assignType === 'agent' ? 'Choose a voice agent...' : 'Choose a telecaller...'}
+              </option>
+              {assignType === 'agent'
+                ? agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))
+                : users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.firstName} {user.lastName} ({user.email})
+                    </option>
+                  ))}
             </select>
+            {assignType === 'user' && users.length === 0 && (
+              <p className="text-sm text-slate-500 mt-1">No telecallers found in your organization.</p>
+            )}
+            {assignType === 'agent' && agents.length === 0 && (
+              <p className="text-sm text-slate-500 mt-1">No voice agents found. Create one first.</p>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
@@ -574,8 +645,8 @@ export const AssignAgentModal: React.FC<AssignAgentModalProps> = ({
               Cancel
             </button>
             <button
-              onClick={() => onAssign(phoneNumber.id, selectedAgent)}
-              disabled={!selectedAgent}
+              onClick={handleAssign}
+              disabled={!selectedId}
               className="btn btn-primary"
             >
               Assign

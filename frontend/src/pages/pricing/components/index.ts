@@ -11,6 +11,7 @@ export {
   ComparisonToggle,
   ComparisonTable,
   CategoryComparisonTable,
+  WalletRatesSection,
   AddOnsSection,
   FAQSection,
   CTASection,

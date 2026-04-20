@@ -1,9 +1,10 @@
 /**
  * Manual Call Queue Page
  * Interface for manually dialing contacts from a campaign queue
+ * Now supports browser-based softphone calling
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useManualCallQueue } from './hooks';
 import {
   LoadingState,
@@ -13,6 +14,8 @@ import {
   ContactDetailsPanel,
   ScheduleModal,
 } from './components';
+import { Softphone } from '../../components/Softphone';
+import { useSoftphone } from '../../hooks/useSoftphone';
 
 export const ManualCallQueuePage: React.FC = () => {
   const {
@@ -41,6 +44,25 @@ export const ManualCallQueuePage: React.FC = () => {
     navigateToLead,
     clearError,
   } = useManualCallQueue();
+
+  // Softphone state - shows the softphone widget when a contact is selected
+  const [showSoftphone, setShowSoftphone] = useState(true);
+
+  // Get softphone hook for status
+  const { isRegistered, status: softphoneStatus, isOnCall } = useSoftphone({
+    autoRegister: true,
+  });
+
+  // Handle call with softphone
+  const handleSoftphoneCallStart = (callId: string) => {
+    console.log('[ManualCallQueue] Softphone call started:', callId);
+  };
+
+  const handleSoftphoneCallEnd = (callId: string, duration?: number) => {
+    console.log('[ManualCallQueue] Softphone call ended:', callId, duration);
+    // Refresh the queue after call ends
+    fetchQueue();
+  };
 
   if (loading && !campaign) {
     return <LoadingState />;
@@ -92,6 +114,22 @@ export const ManualCallQueuePage: React.FC = () => {
           onUpdate={setScheduleData}
           onSubmit={handleSchedule}
           onClose={closeScheduleModal}
+        />
+      )}
+
+      {/* Softphone Widget - Shows when contact is selected */}
+      {showSoftphone && selectedContact && (
+        <Softphone
+          phoneNumber={selectedContact.phone}
+          contactName={selectedContact.name || `${selectedContact.lead?.firstName || ''} ${selectedContact.lead?.lastName || ''}`.trim() || undefined}
+          leadId={selectedContact.lead?.id}
+          campaignId={campaign?.id}
+          contactId={selectedContact.id}
+          onCallStart={handleSoftphoneCallStart}
+          onCallEnd={handleSoftphoneCallEnd}
+          showAsWidget={true}
+          position="bottom-right"
+          minimizable={true}
         />
       )}
     </div>

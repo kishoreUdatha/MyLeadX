@@ -2,8 +2,10 @@
  * Step 5: Complete Your Agent
  */
 
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import { AgentFormData } from '../types';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, Loader2, Phone, AlertCircle } from 'lucide-react';
+import { AgentFormData, PhoneNumberOption } from '../types';
+import api from '../../../../services/api';
 
 interface Props {
   formData: AgentFormData;
@@ -14,11 +16,37 @@ interface Props {
 }
 
 export function StepComplete({ formData, onUpdate, onBack, onCreate, isCreating }: Props) {
+  const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumberOption[]>([]);
+  const [loadingNumbers, setLoadingNumbers] = useState(true);
+
+  // Fetch available phone numbers
+  useEffect(() => {
+    const fetchPhoneNumbers = async () => {
+      try {
+        setLoadingNumbers(true);
+        const response = await api.get('/numbers-shop/my-numbers');
+        const numbers = response.data?.numbers || response.data || [];
+        // Filter to only show available numbers (not assigned to other agents)
+        const availableNumbers = numbers.filter(
+          (num: any) => num.status === 'AVAILABLE' || !num.assignedToAgentId
+        );
+        setPhoneNumbers(availableNumbers);
+      } catch (error) {
+        console.error('Failed to fetch phone numbers:', error);
+        setPhoneNumbers([]);
+      } finally {
+        setLoadingNumbers(false);
+      }
+    };
+
+    fetchPhoneNumbers();
+  }, []);
+
   return (
     <div className="max-w-xl mx-auto">
       <h1 className="text-3xl font-bold text-gray-900 mb-2">Complete your agent</h1>
       <p className="text-gray-600 mb-8">
-        Name your agent, describe its goal, and optionally add your website
+        Name your agent, assign a phone number, and describe its goal
       </p>
 
       <div className="space-y-6">
@@ -40,6 +68,56 @@ export function StepComplete({ formData, onUpdate, onBack, onCreate, isCreating 
               {formData.name.length}/50
             </span>
           </div>
+        </div>
+
+        {/* Phone Number Selection */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="flex items-center gap-2">
+              <Phone className="w-4 h-4" />
+              Phone Number for Outbound Calls
+            </div>
+          </label>
+          {loadingNumbers ? (
+            <div className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-lg bg-gray-50">
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              <span className="text-gray-500">Loading phone numbers...</span>
+            </div>
+          ) : phoneNumbers.length === 0 ? (
+            <div className="px-4 py-4 border border-amber-200 rounded-lg bg-amber-50">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">No phone numbers available</p>
+                  <p className="text-sm text-amber-700 mt-1">
+                    Purchase phone numbers from the{' '}
+                    <a href="/numbers-shop" className="underline font-medium">
+                      Numbers Shop
+                    </a>{' '}
+                    to enable outbound calling.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <select
+              value={formData.phoneNumberId || ''}
+              onChange={(e) => onUpdate({ phoneNumberId: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+            >
+              <option value="">Select a phone number (optional)</option>
+              {phoneNumbers.map((num) => (
+                <option key={num.id} value={num.id}>
+                  {num.displayNumber || num.number}
+                  {num.friendlyName ? ` - ${num.friendlyName}` : ''}
+                  {' '}({num.provider})
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="text-sm text-gray-500 mt-1">
+            This number will be used as the caller ID when the agent makes outbound calls.
+          </p>
         </div>
 
         {/* Website */}

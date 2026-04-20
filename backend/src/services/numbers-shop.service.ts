@@ -12,6 +12,7 @@ import { AppError } from '../utils/errors';
 import { createExotelService, exotelService } from '../integrations/exotel.service';
 import { PhoneNumberProvider, PhoneNumberType, PhoneNumberSource, WalletTransactionType, WalletTransactionStatus } from '@prisma/client';
 import crypto from 'crypto';
+import axios from 'axios';
 
 // Pricing configuration (in USD)
 const PRICING = {
@@ -939,6 +940,276 @@ class NumbersShopService {
     });
 
     return { success: true };
+  }
+
+  // ==================== PLIVO INTEGRATION ====================
+
+  /**
+   * Get Plivo credentials from environment
+   */
+  private getPlivoCredentials(): { authId: string; authToken: string } | null {
+    const authId = process.env.PLIVO_AUTH_ID;
+    const authToken = process.env.PLIVO_AUTH_TOKEN;
+    if (!authId || !authToken) return null;
+    return { authId, authToken };
+  }
+
+  /**
+   * List available Plivo numbers for purchase
+   */
+  async listAvailablePlivoNumbers(params: {
+    country?: string;
+    type?: 'local' | 'mobile' | 'tollfree';
+    region?: string;
+    pattern?: string;
+    limit?: number;
+  } = {}): Promise<AvailableNumber[]> {
+    const creds = this.getPlivoCredentials();
+    if (!creds) {
+      return [];
+    }
+
+    try {
+      const country = params.country || 'IN';
+      const type = params.type || 'local';
+      const limit = params.limit || 20;
+
+      let url = `https://api.plivo.com/v1/Account/${creds.authId}/PhoneNumber/?country_iso=${country}&type=${type}&limit=${limit}`;
+
+      if (params.pattern) {
+        url += `&pattern=${params.pattern}`;
+      }
+      if (params.region) {
+        url += `&region=${params.region}`;
+      }
+
+      const response = await axios.get(url, {
+        auth: { username: creds.authId, password: creds.authToken },
+        httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+      });
+
+      const numbers = response.data.objects || [];
+
+      return numbers.map((num: any) => ({
+        phoneNumber: num.number,
+        displayNumber: this.formatPlivoNumber(num.number),
+        region: num.region || country,
+        city: num.city || null,
+        type: num.type || type,
+        capabilities: {
+          voice: num.voice_enabled || true,
+          sms: num.sms_enabled || false
+        },
+        monthlyPrice: parseFloat(num.monthly_rental_rate) || 3.13,
+        currency: 'USD',
+        provider: 'PLIVO',
+        source: 'PLATFORM' as const,
+        voiceRate: parseFloat(num.voice_rate) || 0.0135,
+        complianceStatus: num.compliance_requirement ? 'required' : 'not_required',
+      }));
+    } catch (error: any) {
+      console.error('[NumbersShop] Plivo list numbers error:', error.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get owned Plivo numbers
+   */
+  async getOwnedPlivoNumbers(): Promise<any[]> {
+    const creds = this.getPlivoCredentials();
+    if (!creds) {
+      return [];
+    }
+
+    try {
+      const response = await axios.get(
+        `https://api.plivo.com/v1/Account/${creds.authId}/Number/`,
+        {
+          auth: { username: creds.authId, password: creds.authToken },
+          httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+        }
+      );
+
+      return response.data.objects || [];
+    } catch (error: any) {
+      console.error('[NumbersShop] Plivo get owned numbers error:', error.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Purchase a Plivo number
+   */
+  async purchasePlivoNumber(
+    organizationId: string,
+    phoneNumber: string,
+    options: { friendlyName?: string; assignToUserId?: string } = {}
+  ): Promise<PurchaseResult> {
+    const creds = this.getPlivoCredentials();
+    if (!creds) {
+      throw new AppError('Plivo is not configured', 400);
+    }
+
+    try {
+      // Purchase from Plivo
+      const response = await axios.post(
+        `https://api.plivo.com/v1/Account/${creds.authId}/PhoneNumber/${phoneNumber}/`,
+        {},
+        {
+          auth: { username: creds.authId, password: creds.authToken },
+          headers: { 'Content-Type': 'application/json' },
+          httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+        }
+      );
+
+      if (response.data.status !== 'fulfilled') {
+        throw new AppError('Failed to purchase number from Plivo', 500);
+      }
+
+      // Save to database
+      const phoneNumberRecord = await prisma.phoneNumber.create({
+        data: {
+          organizationId,
+          number: phoneNumber,
+          displayNumber: this.formatPlivoNumber(phoneNumber),
+          friendlyName: options.friendlyName || null,
+          provider: PhoneNumberProvider.PLIVO,
+          providerNumberId: phoneNumber,
+          source: PhoneNumberSource.PLATFORM,
+          type: this.getPhoneNumberType(phoneNumber),
+          capabilities: { voice: true, sms: false },
+          status: options.assignToUserId ? 'ASSIGNED' : 'AVAILABLE',
+          assignedToUserId: options.assignToUserId || null,
+          assignedAt: options.assignToUserId ? new Date() : null,
+          monthlyRent: 3.13,
+          perMinuteRate: 0.0135,
+          currency: 'USD',
+          region: 'India',
+        },
+      });
+
+      return {
+        success: true,
+        phoneNumber: phoneNumberRecord,
+      };
+    } catch (error: any) {
+      console.error('[NumbersShop] Plivo purchase error:', error.response?.data || error.message);
+      throw new AppError(
+        error.response?.data?.error || error.message || 'Failed to purchase Plivo number',
+        500
+      );
+    }
+  }
+
+  /**
+   * Get Plivo account info
+   */
+  async getPlivoAccountInfo(): Promise<{
+    configured: boolean;
+    balance?: number;
+    accountType?: string;
+    name?: string;
+  }> {
+    const creds = this.getPlivoCredentials();
+    if (!creds) {
+      return { configured: false };
+    }
+
+    try {
+      const response = await axios.get(
+        `https://api.plivo.com/v1/Account/${creds.authId}/`,
+        {
+          auth: { username: creds.authId, password: creds.authToken },
+          httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
+        }
+      );
+
+      return {
+        configured: true,
+        balance: parseFloat(response.data.cash_credits) || 0,
+        accountType: response.data.account_type,
+        name: response.data.name,
+      };
+    } catch (error: any) {
+      console.error('[NumbersShop] Plivo account info error:', error.response?.data || error.message);
+      return { configured: false };
+    }
+  }
+
+  /**
+   * Sync all owned Plivo numbers to the database
+   * This imports numbers that were purchased directly in Plivo but not yet in our database
+   */
+  async syncPlivoNumbers(organizationId: string): Promise<{
+    synced: number;
+    skipped: number;
+  }> {
+    const creds = this.getPlivoCredentials();
+    if (!creds) {
+      throw new AppError('Plivo is not configured', 400);
+    }
+
+    // Get all owned numbers from Plivo
+    const ownedNumbers = await this.getOwnedPlivoNumbers();
+
+    if (ownedNumbers.length === 0) {
+      return { synced: 0, skipped: 0 };
+    }
+
+    let synced = 0;
+    let skipped = 0;
+
+    for (const num of ownedNumbers) {
+      const phoneNumber = num.number;
+
+      // Check if number already exists in database for this organization
+      const existing = await prisma.phoneNumber.findFirst({
+        where: {
+          organizationId,
+          number: phoneNumber,
+        },
+      });
+
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      // Create phone number record
+      await prisma.phoneNumber.create({
+        data: {
+          organizationId,
+          number: phoneNumber,
+          displayNumber: this.formatPlivoNumber(phoneNumber),
+          friendlyName: num.alias || null,
+          provider: PhoneNumberProvider.PLIVO,
+          providerNumberId: phoneNumber,
+          source: PhoneNumberSource.PLATFORM,
+          type: this.getPhoneNumberType(phoneNumber),
+          capabilities: {
+            voice: num.voice_enabled || true,
+            sms: num.sms_enabled || false,
+          },
+          status: 'AVAILABLE',
+          monthlyRent: parseFloat(num.monthly_rental_rate) || 3.13,
+          perMinuteRate: parseFloat(num.voice_rate) || 0.0135,
+          currency: 'USD',
+          region: num.region || 'India',
+        },
+      });
+
+      synced++;
+    }
+
+    return { synced, skipped };
+  }
+
+  private formatPlivoNumber(phone: string): string {
+    if (phone.startsWith('91') && phone.length === 12) {
+      return `+91 ${phone.slice(2, 7)} ${phone.slice(7)}`;
+    }
+    return phone.startsWith('+') ? phone : `+${phone}`;
   }
 
   // ==================== HELPER METHODS ====================

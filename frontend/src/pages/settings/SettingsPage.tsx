@@ -27,6 +27,8 @@ import {
   EnvelopeIcon,
   CubeIcon,
   PaintBrushIcon,
+  CreditCardIcon,
+  WalletIcon,
 } from '@heroicons/react/24/outline';
 
 interface SettingItem {
@@ -46,6 +48,26 @@ interface SettingCategory {
 }
 
 const settingsCategories: SettingCategory[] = [
+  {
+    id: 'calling',
+    name: 'Calling',
+    icon: PhoneIcon,
+    color: 'text-teal-600 bg-teal-50',
+    items: [
+      { id: 'phone-numbers-calling', name: 'Phone Numbers', description: 'Assign numbers to telecallers', icon: PhoneIcon, path: '/settings/telecaller-numbers' },
+      { id: 'voice-minutes', name: 'Voice Minutes', description: 'Call credits & usage', icon: PhoneIcon, path: '/settings/voice-minutes' },
+    ],
+  },
+  {
+    id: 'billing',
+    name: 'Billing & Subscription',
+    icon: CreditCardIcon,
+    color: 'text-emerald-600 bg-emerald-50',
+    items: [
+      { id: 'billing-dashboard', name: 'Billing Dashboard', description: 'Plans & invoices', icon: CreditCardIcon, path: '/settings/billing' },
+      { id: 'wallet', name: 'Wallet & Top-up', description: 'Manage balance', icon: WalletIcon, path: '/settings/billing' },
+    ],
+  },
   {
     id: 'account',
     name: 'Account',
@@ -103,7 +125,6 @@ const settingsCategories: SettingCategory[] = [
       { id: 'whatsapp', name: 'WhatsApp', description: 'Business API', icon: ChatBubbleLeftRightIcon, path: '/settings/whatsapp' },
       { id: 'email', name: 'Email Templates', description: 'Email builder', icon: EnvelopeIcon, path: '/settings/email-templates' },
       { id: 'sms', name: 'SMS', description: 'SMS gateway', icon: ChatBubbleLeftRightIcon, path: '/settings/sms' },
-      { id: 'voice', name: 'Voice Minutes', description: 'Call credits', icon: PhoneIcon, path: '/settings/voice-minutes' },
     ],
   },
   {

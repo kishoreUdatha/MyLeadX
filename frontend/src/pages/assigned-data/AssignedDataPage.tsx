@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import {
   PhoneIcon,
+  PhoneXMarkIcon,
   MagnifyingGlassIcon,
   ArrowPathIcon,
   CheckCircleIcon,
@@ -13,6 +14,7 @@ import {
   ChatBubbleLeftRightIcon,
   ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
+import { Softphone } from '../../components/Softphone';
 
 interface RawRecord {
   id: string;
@@ -77,6 +79,7 @@ export default function AssignedDataPage() {
   const [showCallModal, setShowCallModal] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [uploadingRecording, setUploadingRecording] = useState(false);
+  const [softphoneRecord, setSoftphoneRecord] = useState<RawRecord | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -130,10 +133,17 @@ export default function AssignedDataPage() {
   const totalPages = Math.ceil(total / limit);
 
   const handleCall = (record: RawRecord) => {
-    setSelectedRecord(record);
-    setShowCallModal(true);
-    // Open phone dialer
-    window.location.href = `tel:${record.phone}`;
+    // Use browser softphone instead of mobile dialer
+    setSoftphoneRecord(record);
+  };
+
+  const handleCallEnd = () => {
+    if (softphoneRecord) {
+      setSelectedRecord(softphoneRecord);
+      setShowCallModal(true);
+    }
+    setSoftphoneRecord(null);
+    fetchData(); // Refresh data after call
   };
 
   const updateStatus = async (id: string, status: string, notes?: string) => {
@@ -457,8 +467,13 @@ export default function AssignedDataPage() {
                       {/* Call Button */}
                       <button
                         onClick={() => handleCall(record)}
-                        className="p-2 text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
-                        title="Call"
+                        disabled={softphoneRecord?.id === record.id}
+                        className={`p-2 text-white rounded-lg transition-colors ${
+                          softphoneRecord?.id === record.id
+                            ? 'bg-orange-500 animate-pulse cursor-not-allowed'
+                            : 'bg-green-500 hover:bg-green-600'
+                        }`}
+                        title={softphoneRecord?.id === record.id ? 'Call in progress...' : 'Call'}
                       >
                         <PhoneIcon className="w-4 h-4" />
                       </button>
@@ -521,6 +536,23 @@ export default function AssignedDataPage() {
           </div>
         )}
       </div>
+
+      {/* Browser Softphone Widget */}
+      {softphoneRecord && (
+        <Softphone
+          phoneNumber={softphoneRecord.phone}
+          contactName={`${softphoneRecord.firstName} ${softphoneRecord.lastName || ''}`.trim()}
+          onCallStart={(callId) => console.log('[AssignedData] Call started:', callId)}
+          onCallEnd={(callId, duration) => {
+            console.log('[AssignedData] Call ended:', callId, 'Duration:', duration);
+            handleCallEnd();
+          }}
+          onClose={() => setSoftphoneRecord(null)}
+          showAsWidget={true}
+          position="bottom-right"
+          minimizable={true}
+        />
+      )}
 
       {/* Call Outcome Modal */}
       {showCallModal && selectedRecord && (

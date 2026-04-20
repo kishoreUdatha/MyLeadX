@@ -1093,4 +1093,77 @@ router.get('/onboarding-status', async (req: TenantRequest, res: Response) => {
   }
 });
 
+/**
+ * GET /api/organization/billing-details
+ * Get billing details for invoices
+ */
+router.get('/billing-details', async (req: TenantRequest, res: Response) => {
+  try {
+    const organization = await prisma.organization.findUnique({
+      where: { id: req.organizationId },
+      select: {
+        name: true,
+        email: true,
+        taxId: true,
+        billingAddress: true,
+      },
+    });
+
+    if (!organization) {
+      return ApiResponse.error(res, 'Organization not found', 404);
+    }
+
+    return ApiResponse.success(res, 'Billing details retrieved', {
+      name: organization.name,
+      email: organization.email,
+      gstin: organization.taxId,
+      billingAddress: organization.billingAddress,
+    });
+  } catch (error) {
+    console.error('Error fetching billing details:', error);
+    return ApiResponse.error(res, 'Failed to fetch billing details', 500);
+  }
+});
+
+/**
+ * PATCH /api/organization/billing-details
+ * Update billing details for invoices
+ */
+router.patch(
+  '/billing-details',
+  validate([
+    body('gstin').optional().trim().isLength({ max: 15 }).matches(/^[A-Z0-9]*$/).withMessage('Invalid GSTIN format'),
+    body('billingAddress').optional().trim().isLength({ max: 500 }).withMessage('Address must be at most 500 characters'),
+  ]),
+  async (req: TenantRequest, res: Response) => {
+    try {
+      const { gstin, billingAddress } = req.body;
+
+      const organization = await prisma.organization.update({
+        where: { id: req.organizationId },
+        data: {
+          ...(gstin !== undefined && { taxId: gstin }),
+          ...(billingAddress !== undefined && { billingAddress }),
+        },
+        select: {
+          name: true,
+          email: true,
+          taxId: true,
+          billingAddress: true,
+        },
+      });
+
+      return ApiResponse.success(res, 'Billing details updated', {
+        name: organization.name,
+        email: organization.email,
+        gstin: organization.taxId,
+        billingAddress: organization.billingAddress,
+      });
+    } catch (error) {
+      console.error('Error updating billing details:', error);
+      return ApiResponse.error(res, 'Failed to update billing details', 500);
+    }
+  }
+);
+
 export default router;

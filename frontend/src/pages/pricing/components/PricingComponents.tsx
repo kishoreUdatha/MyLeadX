@@ -14,9 +14,12 @@ import {
   ChartBarIcon,
   ClockIcon,
   ChatBubbleLeftRightIcon,
+  WalletIcon,
+  CpuChipIcon,
+  BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
 import { StarIcon } from '@heroicons/react/24/solid';
-import { Plan, SimplePlanFeature, FAQItem, TrustBadge, PlanTier, AddOn, FeatureCategory } from '../pricing.types';
+import { Plan, SimplePlanFeature, FAQItem, TrustBadge, PlanTier, AddOn, FeatureCategory, PlanCategory, WalletRate } from '../pricing.types';
 import { formatPrice, PLAN_TIERS } from '../pricing.constants';
 
 // Navigation Component
@@ -28,7 +31,7 @@ export const Navigation: React.FC = () => (
           <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20">
             <PhoneIcon className="w-5 h-5 text-white" />
           </div>
-          <span className="text-xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">VoiceCRM</span>
+          <span className="text-xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">MyLeadX</span>
         </Link>
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-1 text-slate-600 hover:text-slate-900 text-sm">
@@ -54,55 +57,72 @@ export const Navigation: React.FC = () => (
 interface HeroSectionProps {
   isAnnual: boolean;
   onToggleBilling: (annual: boolean) => void;
+  planCategory: PlanCategory;
+  onToggleCategory: (category: PlanCategory) => void;
 }
 
-export const HeroSection: React.FC<HeroSectionProps> = ({ isAnnual, onToggleBilling }) => (
-  <div className="relative pt-24 pb-20 overflow-hidden">
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-primary-900"></div>
-    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50"></div>
+export const HeroSection: React.FC<HeroSectionProps> = ({ isAnnual, onToggleBilling, planCategory, onToggleCategory }) => (
+  <div className="pt-16 pb-4">
+    <div className="max-w-7xl mx-auto px-4">
+      {/* Compact header with toggles inline */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Pricing</h1>
+          <p className="text-sm text-slate-500">14-day free trial. No credit card.</p>
+        </div>
 
-    <div className="relative max-w-7xl mx-auto px-4 text-center">
-      <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6">
-        <StarIcon className="w-4 h-4 text-yellow-400" />
-        <span className="text-white/90 text-sm font-medium">14-Day Free Trial on All Plans</span>
-      </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Plan Category Toggle */}
+          <div className="inline-flex items-center bg-slate-100 rounded-lg p-0.5 text-sm">
+            <button
+              onClick={() => onToggleCategory('crm-only')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                planCategory === 'crm-only'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              CRM Only
+            </button>
+            <button
+              onClick={() => onToggleCategory('crm-ai-voice')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                planCategory === 'crm-ai-voice'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              CRM + AI Voice
+            </button>
+          </div>
 
-      <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4">
-        Simple, Transparent
-        <span className="block bg-gradient-to-r from-primary-400 to-cyan-400 bg-clip-text text-transparent">
-          Pricing
-        </span>
-      </h1>
-
-      <p className="text-lg text-slate-300 max-w-2xl mx-auto mb-10">
-        CRM + AI Voice Agent in one platform. Choose the plan that fits your team.
-      </p>
-
-      {/* Billing Toggle */}
-      <div className="inline-flex items-center gap-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-2">
-        <button
-          onClick={() => onToggleBilling(false)}
-          className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all ${
-            !isAnnual
-              ? 'bg-white text-slate-900 shadow-lg'
-              : 'text-white/70 hover:text-white'
-          }`}
-        >
-          Monthly
-        </button>
-        <button
-          onClick={() => onToggleBilling(true)}
-          className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-            isAnnual
-              ? 'bg-white text-slate-900 shadow-lg'
-              : 'text-white/70 hover:text-white'
-          }`}
-        >
-          Annual
-          <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full font-semibold">
-            -20%
-          </span>
-        </button>
+          {/* Billing Toggle */}
+          <div className="inline-flex items-center bg-slate-100 rounded-lg p-0.5 text-sm">
+            <button
+              onClick={() => onToggleBilling(false)}
+              className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                !isAnnual
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => onToggleBilling(true)}
+              className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
+                isAnnual
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Yearly
+              <span className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">
+                -20%
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -116,132 +136,113 @@ interface PlanCardProps {
 }
 
 export const PlanCard: React.FC<PlanCardProps> = ({ plan, isAnnual, onSelectPlan }) => {
-  const IconComponent = plan.icon;
+  const isCrmOnly = plan.category === 'crm-only';
 
   return (
     <div
-      className={`relative bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 ${
-        plan.popular ? 'ring-2 ring-primary-500 lg:scale-[1.02]' : 'border border-slate-200'
+      className={`relative bg-white rounded-2xl flex flex-col transition-all duration-200 ${
+        plan.popular
+          ? 'ring-2 ring-primary-500 shadow-xl'
+          : 'border border-slate-200 hover:border-slate-300 hover:shadow-lg'
       }`}
     >
       {/* Popular Badge */}
       {plan.popular && (
-        <div className="bg-primary-500 text-white text-center py-2 text-sm font-semibold">
-          MOST POPULAR
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <span className="bg-primary-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+            MOST POPULAR
+          </span>
         </div>
       )}
 
       <div className="p-6 flex flex-col flex-1">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${plan.color} flex items-center justify-center`}>
-            <IconComponent className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">{plan.name}</h3>
-            <p className="text-xs text-slate-500">{plan.subtitle}</p>
-          </div>
+        {/* Plan Name */}
+        <div className="mb-4">
+          <h3 className="text-xl font-bold text-slate-900">{plan.name}</h3>
+          <p className="text-sm text-slate-500 mt-1">{plan.subtitle}</p>
         </div>
 
         {/* Price */}
-        <div className="mb-5 pb-5 border-b-2 border-slate-100">
+        <div className="mb-6">
           {plan.customPricing ? (
             <div>
-              <div className="text-4xl font-extrabold text-slate-900">Custom</div>
-              <p className="text-sm text-slate-500 mt-1">Contact for pricing</p>
+              <div className="text-4xl font-bold text-slate-900">Custom</div>
+              <p className="text-sm text-slate-500 mt-1">Let's talk</p>
             </div>
           ) : (
             <div>
               <div className="flex items-baseline">
-                <span className="text-4xl font-extrabold text-slate-900">
+                <span className="text-4xl font-bold text-slate-900">
                   {formatPrice(isAnnual ? plan.annualPrice : plan.monthlyPrice)}
                 </span>
-                <span className="text-slate-500 ml-1">/month</span>
+                <span className="text-slate-500 ml-1">/mo</span>
               </div>
               {isAnnual && (
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-sm text-slate-400 line-through">
-                    {formatPrice(plan.monthlyPrice)}
-                  </span>
-                  <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">
-                    SAVE 20%
-                  </span>
-                </div>
+                <p className="text-sm text-green-600 font-medium mt-1">
+                  Save ₹{((plan.monthlyPrice - plan.annualPrice) * 12).toLocaleString('en-IN')}/year
+                </p>
               )}
             </div>
           )}
         </div>
 
-        {/* Key Limits */}
-        <div className="space-y-3 mb-5 pb-5 border-b-2 border-slate-100">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-600 flex items-center gap-2">
-              <ClockIcon className="w-4 h-4 text-primary-500" />
-              Voice Minutes
-            </span>
-            <span className="font-bold text-slate-900">{plan.metrics.minutes}/mo</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-600 flex items-center gap-2">
-              <PhoneIcon className="w-4 h-4 text-primary-500" />
-              Phone Numbers
-            </span>
-            <span className="font-bold text-slate-900">{plan.metrics.numbers}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-600 flex items-center gap-2">
-              <SparklesIcon className="w-4 h-4 text-primary-500" />
-              AI Voice Agents
-            </span>
-            <span className="font-bold text-slate-900">{plan.metrics.agents}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-600 flex items-center gap-2">
-              <UserGroupIcon className="w-4 h-4 text-primary-500" />
-              Team Members
-            </span>
-            <span className="font-bold text-slate-900">{plan.metrics.users}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-600 flex items-center gap-2">
-              <ChartBarIcon className="w-4 h-4 text-primary-500" />
-              Leads Capacity
-            </span>
-            <span className="font-bold text-slate-900">{plan.metrics.leads}</span>
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="flex-1 mb-5">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Features Included:</p>
-          <ul className="space-y-2">
-            {plan.features.map((feature, idx) => (
-              <li key={idx} className="flex items-center gap-2">
-                <CheckIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <span className="text-sm text-slate-700">{feature}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
         {/* CTA Button */}
         <button
           onClick={() => onSelectPlan(plan.id)}
-          className={`w-full py-3.5 px-4 rounded-xl font-bold text-base transition-all ${
+          className={`w-full py-3 px-4 rounded-lg font-semibold text-sm transition-all mb-6 ${
             plan.popular
-              ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-lg shadow-primary-500/30'
-              : plan.id === 'enterprise'
-              ? 'bg-slate-800 text-white hover:bg-slate-900'
+              ? 'bg-primary-500 text-white hover:bg-primary-600'
               : 'bg-slate-900 text-white hover:bg-slate-800'
           }`}
         >
           {plan.id === 'enterprise' ? 'Contact Sales' : 'Start Free Trial'}
         </button>
 
-        {/* Extra Rate */}
-        <p className="text-xs text-slate-400 text-center mt-3">
-          Extra minutes: <span className="font-semibold text-slate-600">₹{plan.extraRate}/min</span>
+        {/* Features Header */}
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+          What's included:
         </p>
+
+        {/* Key Limits & Features */}
+        <ul className="space-y-3 flex-1">
+          {!isCrmOnly && (
+            <>
+              <li className="flex items-center gap-3">
+                <CheckIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                <span className="text-sm text-slate-700"><strong>{plan.metrics.minutes}</strong> AI minutes/month</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <CheckIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                <span className="text-sm text-slate-700"><strong>{plan.metrics.agents}</strong> AI voice agents</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <CheckIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                <span className="text-sm text-slate-700"><strong>{plan.metrics.numbers}</strong> phone numbers</span>
+              </li>
+            </>
+          )}
+          <li className="flex items-center gap-3">
+            <CheckIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
+            <span className="text-sm text-slate-700"><strong>{plan.metrics.users}</strong> team members</span>
+          </li>
+          <li className="flex items-center gap-3">
+            <CheckIcon className="w-5 h-5 text-primary-500 flex-shrink-0" />
+            <span className="text-sm text-slate-700"><strong>{plan.metrics.leads}</strong> leads capacity</span>
+          </li>
+          {plan.features.map((feature, idx) => (
+            <li key={idx} className="flex items-center gap-3">
+              <CheckIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
+              <span className="text-sm text-slate-700">{feature}</span>
+            </li>
+          ))}
+        </ul>
+
+        {/* Extra info */}
+        {!isCrmOnly && plan.extraRate > 0 && (
+          <p className="text-xs text-slate-400 text-center mt-4 pt-4 border-t border-slate-100">
+            Additional minutes at ₹{plan.extraRate}/min
+          </p>
+        )}
       </div>
     </div>
   );
@@ -254,9 +255,64 @@ interface PricingCardsProps {
   onSelectPlan: (planId: string) => void;
 }
 
+// Custom Plan Card
+const CustomPlanCard: React.FC<{ onContact: () => void }> = ({ onContact }) => (
+  <div className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col hover:border-slate-300 hover:shadow-lg transition-all">
+    <div className="mb-4">
+      <h3 className="text-xl font-bold text-slate-900">Build Your Own</h3>
+      <p className="text-sm text-slate-500 mt-1">Custom plan for your needs</p>
+    </div>
+
+    <div className="flex-1 space-y-3 mb-6">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-500">Users</span>
+        <span className="font-semibold text-slate-900">Custom</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-500">AI Minutes</span>
+        <span className="font-semibold text-slate-900">Custom</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-500">Phone Numbers</span>
+        <span className="font-semibold text-slate-900">Custom</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-slate-500">AI Agents</span>
+        <span className="font-semibold text-slate-900">Custom</span>
+      </div>
+    </div>
+
+    <ul className="space-y-2 mb-6 text-sm">
+      <li className="flex items-center gap-2">
+        <CheckIcon className="w-4 h-4 text-green-500" />
+        <span className="text-slate-700">Volume discounts</span>
+      </li>
+      <li className="flex items-center gap-2">
+        <CheckIcon className="w-4 h-4 text-green-500" />
+        <span className="text-slate-700">Dedicated support</span>
+      </li>
+      <li className="flex items-center gap-2">
+        <CheckIcon className="w-4 h-4 text-green-500" />
+        <span className="text-slate-700">Custom integrations</span>
+      </li>
+      <li className="flex items-center gap-2">
+        <CheckIcon className="w-4 h-4 text-green-500" />
+        <span className="text-slate-700">SLA guarantee</span>
+      </li>
+    </ul>
+
+    <button
+      onClick={onContact}
+      className="w-full py-3 px-4 rounded-lg font-semibold text-sm bg-slate-900 text-white hover:bg-slate-800 transition-all"
+    >
+      Contact Sales
+    </button>
+  </div>
+);
+
 export const PricingCards: React.FC<PricingCardsProps> = ({ plans, isAnnual, onSelectPlan }) => (
-  <div className="max-w-7xl mx-auto px-4 -mt-10 relative z-10 pb-20">
-    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+  <div className="max-w-6xl mx-auto px-4 py-6">
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 items-start">
       {plans.map(plan => (
         <PlanCard
           key={plan.id}
@@ -265,6 +321,7 @@ export const PricingCards: React.FC<PricingCardsProps> = ({ plans, isAnnual, onS
           onSelectPlan={onSelectPlan}
         />
       ))}
+      <CustomPlanCard onContact={() => onSelectPlan('custom')} />
     </div>
   </div>
 );
@@ -410,6 +467,60 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ items }) => (
   </div>
 );
 
+// Wallet Rates Section Component
+interface WalletRatesSectionProps {
+  rates: WalletRate[];
+}
+
+export const WalletRatesSection: React.FC<WalletRatesSectionProps> = ({ rates }) => (
+  <div className="bg-gradient-to-br from-slate-50 to-slate-100 py-16">
+    <div className="max-w-6xl mx-auto px-4">
+      <div className="text-center mb-12">
+        <div className="inline-flex items-center gap-2 bg-primary-100 text-primary-700 rounded-full px-4 py-2 mb-4">
+          <WalletIcon className="w-5 h-5" />
+          <span className="font-semibold text-sm">Pay-As-You-Go</span>
+        </div>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">
+          Wallet Usage Rates
+        </h2>
+        <p className="text-slate-600 max-w-2xl mx-auto">
+          Top up your wallet and pay only for what you use. No hidden fees, transparent pricing.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {rates.map((rate) => {
+          const IconComponent = rate.icon;
+          return (
+            <div
+              key={rate.id}
+              className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-primary-200 transition-all text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-3">
+                <IconComponent className="w-6 h-6 text-primary-600" />
+              </div>
+              <h3 className="font-bold text-slate-900 mb-1">{rate.name}</h3>
+              <p className="text-xs text-slate-500 mb-3">{rate.description}</p>
+              <div className="flex items-baseline justify-center gap-1">
+                <span className="text-2xl font-extrabold text-primary-600">
+                  ₹{rate.rate}
+                </span>
+                <span className="text-sm text-slate-500">{rate.unit}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-8 text-center">
+        <p className="text-sm text-slate-500">
+          Wallet balance never expires. Auto-recharge available for uninterrupted service.
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
 // CTA Section Component
 interface CTASectionProps {
   onSelectPlan: (planId: string) => void;
@@ -426,11 +537,11 @@ export const CTASection: React.FC<CTASectionProps> = ({ onSelectPlan }) => (
         Ready to transform your sales?
       </h2>
       <p className="text-primary-100 mb-8 text-lg max-w-2xl mx-auto">
-        Join 500+ companies using VoiceCRM to automate calls and close more deals.
+        Join 500+ companies using MyLeadX to automate calls and close more deals.
       </p>
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
         <button
-          onClick={() => onSelectPlan('growth')}
+          onClick={() => onSelectPlan('scale')}
           className="px-8 py-4 bg-white text-primary-600 font-semibold rounded-xl hover:bg-primary-50 transition-all shadow-xl"
         >
           Start 14-Day Free Trial
@@ -583,9 +694,14 @@ export const Footer: React.FC = () => (
     <p>All prices are in INR and exclude GST (18%)</p>
     <p className="mt-2">
       Questions? Email us at{' '}
-      <a href="mailto:support@voicecrm.com" className="text-primary-400 hover:text-primary-300">
-        support@voicecrm.com
+      <a href="mailto:sales@myleadx.ai" className="text-primary-400 hover:text-primary-300">
+        sales@myleadx.ai
       </a>
+      {' '}or call{' '}
+      <a href="tel:+911800XXXXXXX" className="text-primary-400 hover:text-primary-300">
+        1800-XXX-XXXX
+      </a>
+      {' '}(Toll-free)
     </p>
   </div>
 );

@@ -1,0 +1,47 @@
+# VoiceBridge Frontend - Self-Hosted Edition
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+ARG VITE_API_URL
+ARG VITE_WS_URL
+ARG VITE_APP_NAME=VoiceBridge
+
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+ENV VITE_APP_NAME=$VITE_APP_NAME
+
+RUN npm run build
+
+FROM nginx:alpine AS production
+
+ARG VERSION=latest
+
+LABEL org.opencontainers.image.title="VoiceBridge Frontend"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL com.voicebridge.edition="self-hosted"
+
+RUN apk add --no-cache curl
+
+COPY --from=builder /app/nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+RUN echo "OK" > /usr/share/nginx/html/health
+
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:80/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

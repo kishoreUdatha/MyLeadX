@@ -14,3 +14,5 @@ export { default as WhiteLabelPage } from './WhiteLabelPage';
 export { default as SupportToolsPage } from './SupportToolsPage';
 export { default as CompliancePage } from './CompliancePage';
 export { default as SystemPage } from './SystemPage';
+export { default as BillingPage } from './BillingPage';
+export { default as PhoneNumbersPage } from './PhoneNumbersPage';

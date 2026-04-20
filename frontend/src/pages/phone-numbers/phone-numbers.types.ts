@@ -16,6 +16,13 @@ export interface Agent {
   name: string;
 }
 
+export interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 export type PhoneProvider = 'EXOTEL' | 'TWILIO' | 'PLIVO' | 'MSG91' | 'MANUAL';
 export type PhoneType = 'LOCAL' | 'TOLL_FREE' | 'MOBILE' | 'VIRTUAL';
 

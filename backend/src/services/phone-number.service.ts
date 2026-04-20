@@ -121,6 +121,14 @@ class PhoneNumberService {
             name: true,
           },
         },
+        assignedUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -284,6 +292,102 @@ class PhoneNumberService {
     });
 
     return updated;
+  }
+
+  /**
+   * Assign a phone number to a user (telecaller)
+   */
+  async assignToUser(phoneNumberId: string, userId: string, organizationId: string) {
+    // Verify phone number exists and belongs to organization
+    const phoneNumber = await prisma.phoneNumber.findFirst({
+      where: { id: phoneNumberId, organizationId },
+    });
+
+    if (!phoneNumber) {
+      throw new AppError('Phone number not found', 404);
+    }
+
+    if (phoneNumber.status === 'DISABLED') {
+      throw new AppError('Cannot assign a disabled phone number', 400);
+    }
+
+    if (phoneNumber.assignedToUserId && phoneNumber.assignedToUserId !== userId) {
+      throw new AppError('Phone number is already assigned to another user', 400);
+    }
+
+    if (phoneNumber.assignedToAgentId) {
+      throw new AppError('Phone number is already assigned to a voice agent', 400);
+    }
+
+    // Verify user exists and belongs to organization
+    const user = await prisma.user.findFirst({
+      where: { id: userId, organizationId },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    // Assign the phone number
+    const updated = await prisma.phoneNumber.update({
+      where: { id: phoneNumberId },
+      data: {
+        assignedToUserId: userId,
+        assignedAt: new Date(),
+        status: 'ASSIGNED',
+      },
+      include: {
+        assignedUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Unassign a phone number from a user
+   */
+  async unassignFromUser(phoneNumberId: string, organizationId: string) {
+    const phoneNumber = await prisma.phoneNumber.findFirst({
+      where: { id: phoneNumberId, organizationId },
+    });
+
+    if (!phoneNumber) {
+      throw new AppError('Phone number not found', 404);
+    }
+
+    const updated = await prisma.phoneNumber.update({
+      where: { id: phoneNumberId },
+      data: {
+        assignedToUserId: null,
+        assignedAt: null,
+        status: 'AVAILABLE',
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Get phone numbers assigned to a specific user
+   */
+  async getUserPhoneNumbers(userId: string, organizationId: string) {
+    const phoneNumbers = await prisma.phoneNumber.findMany({
+      where: {
+        organizationId,
+        assignedToUserId: userId,
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    return phoneNumbers;
   }
 
   /**

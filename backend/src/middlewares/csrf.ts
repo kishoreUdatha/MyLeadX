@@ -83,6 +83,23 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip for telephony provider callbacks (Plivo, Exotel, etc.)
+  if (req.path.includes('/telephony/plivo/') || req.path.includes('/telephony/exotel/')) {
+    return next();
+  }
+
+  // Skip for softphone callbacks from telephony providers (Plivo/Exotel webhooks)
+  if (req.path.includes('/softphone/') && (
+    req.path.includes('/answer/') ||
+    req.path.includes('/telecaller-answer/') ||
+    req.path.includes('/recording/') ||
+    req.path.includes('/conference-status/') ||
+    req.path.includes('/speech/') ||
+    req.path.includes('/status/')
+  )) {
+    return next();
+  }
+
   // Skip for auth endpoints that don't have session yet or use httpOnly cookie auth
   // Also skip logout - it's a session-destroying action that should work even if CSRF cookie is stale
   const csrfExemptEndpoints = [

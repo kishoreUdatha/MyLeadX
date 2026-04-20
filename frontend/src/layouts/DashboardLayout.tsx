@@ -232,6 +232,7 @@ const communicationNavigation: NavItem[] = [
 const voiceAINavigation: NavItem[] = [
   { name: 'Outbound Calls', href: '/outbound-calls', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller', 'counselor'] }, // All roles - has AI analysis
   { name: 'AI Voice Agents', href: '/voice-ai', icon: SparklesIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'voice_ai_view' },
+  { name: 'Phone Numbers', href: '/numbers-shop', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'settings_view' },
   { name: 'Call Queue', href: '/telecaller-queue', icon: QueueListIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'calls_view' },
   { name: 'Call Monitoring', href: '/call-monitoring', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'calls_view' },
 ];
@@ -278,6 +279,7 @@ const settingsNavigation: NavItem[] = [
   { name: 'Pipeline', href: '/settings/pipeline', icon: FunnelIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
   { name: 'Lead Tags', href: '/settings/tags', icon: TagIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
   { name: 'Commission', href: '/settings/commission', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
+  { name: 'Phone Numbers', href: '/settings/telecaller-numbers', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'settings_general' }, // Assign numbers to telecallers
   { name: 'Notifications', href: '/settings/notification-preferences', icon: BellIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller', 'counselor'] }, // Everyone can manage their notifications
   { name: 'Billing', href: '/subscription', icon: CreditCardIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
 ];
