@@ -158,23 +158,33 @@ export default function UsersListPage() {
 
   // Filter managers by selected branch AND role hierarchy
   const filteredManagers = useMemo(() => {
-    if (!selectedBranchId) return [];
-
     // Get valid manager roles based on selected user role
     const validManagerRoles = selectedRole ? getValidManagerRoles(selectedRole.slug) : ['admin', 'manager', 'team_lead'];
 
-    // Filter by branch (same branch OR no branch for admins) AND by role hierarchy
+    // Filter by role hierarchy first
+    // For Admins (who manage Managers), don't filter by branch - Admins are org-wide
+    // For other roles, filter by branch if selected
     return managers.filter((m: any) => {
-      const branchMatch = m.branchId === selectedBranchId || m.branchId === null;
       const roleMatch = validManagerRoles.includes(m.roleSlug);
+
+      // Admins can manage anyone in the org regardless of branch
+      if (validManagerRoles.includes('admin') && m.roleSlug === 'admin') {
+        return roleMatch;
+      }
+
+      // For non-admin managers, filter by branch if a branch is selected
+      const branchMatch = !selectedBranchId || m.branchId === selectedBranchId || m.branchId === null;
       return branchMatch && roleMatch;
     });
   }, [managers, selectedBranchId, selectedRole]);
 
-  // Clear manager selection when branch changes
+  // Clear manager selection when branch changes (only if current manager is not in filtered list)
   useEffect(() => {
-    setValue('managerId', '');
-  }, [selectedBranchId, setValue]);
+    const currentManagerId = watch('managerId');
+    if (currentManagerId && !filteredManagers.find((m: any) => m.id === currentManagerId)) {
+      setValue('managerId', '');
+    }
+  }, [selectedBranchId, filteredManagers, setValue, watch]);
 
   useEffect(() => {
     dispatch(fetchUsers({ role: roleFilter || undefined }));
@@ -1122,15 +1132,13 @@ export default function UsersListPage() {
                     </div>
                     {showManagerDropdown && (
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Manager</label>
-                        <select {...register('managerId')} disabled={!selectedBranchId} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white transition-colors disabled:bg-gray-50 disabled:text-gray-400">
-                          {!selectedBranchId ? (
-                            <option value="">Select branch first</option>
-                          ) : filteredManagers.length === 0 ? (
-                            <option value="">No managers in this branch</option>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Reports To</label>
+                        <select {...register('managerId')} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white transition-colors disabled:bg-gray-50 disabled:text-gray-400">
+                          {filteredManagers.length === 0 ? (
+                            <option value="">No managers available</option>
                           ) : (
                             <>
-                              <option value="">No manager</option>
+                              <option value="">Select manager</option>
                               {filteredManagers.map((m: any) => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
                             </>
                           )}
