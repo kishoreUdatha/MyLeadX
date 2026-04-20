@@ -129,7 +129,7 @@ export default function UsersListPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [selectedUserAnalytics, setSelectedUserAnalytics] = useState<UserAnalytics | null>(null);
 
-  const { register, handleSubmit, reset, control, setValue } = useForm<UserFormData>();
+  const { register, handleSubmit, reset, control, setValue, watch } = useForm<UserFormData>();
 
   const selectedRoleId = useWatch({ control, name: 'roleId' });
   const selectedBranchId = useWatch({ control, name: 'branchId' });
