@@ -151,6 +151,8 @@ export const OutboundCallsPage: React.FC = () => {
   const [telecallers, setTelecallers] = useState<Telecaller[]>([]);
   const [tcFilterTelecaller, setTcFilterTelecaller] = useState('');
   const [tcFilterOutcome, setTcFilterOutcome] = useState('');
+  const [tcFilterCallType, setTcFilterCallType] = useState('');
+  const [tcFilterDuration, setTcFilterDuration] = useState('');
   const [tcFilterSearch, setTcFilterSearch] = useState('');
   const [tcFilterDateFrom, setTcFilterDateFrom] = useState('');
   const [tcFilterDateTo, setTcFilterDateTo] = useState('');
@@ -338,6 +340,8 @@ export const OutboundCallsPage: React.FC = () => {
       // Apply telecaller filter for admins/managers/team_leads who can view all calls
       if (canViewAllCalls && tcFilterTelecaller) params.append('telecallerId', tcFilterTelecaller);
       if (tcFilterOutcome) params.append('outcome', tcFilterOutcome);
+      if (tcFilterCallType) params.append('callType', tcFilterCallType);
+      if (tcFilterDuration) params.append('duration', tcFilterDuration);
       if (tcFilterDateFrom) params.append('dateFrom', tcFilterDateFrom);
       if (tcFilterDateTo) params.append('dateTo', tcFilterDateTo);
       params.append('_t', Date.now().toString());
@@ -375,7 +379,7 @@ export const OutboundCallsPage: React.FC = () => {
     if (activeTab === 'telecaller-calls') {
       fetchTelecallerCalls();
     }
-  }, [tcFilterTelecaller, tcFilterOutcome, tcFilterDateFrom, tcFilterDateTo, activeTab]);
+  }, [tcFilterTelecaller, tcFilterOutcome, tcFilterCallType, tcFilterDuration, tcFilterDateFrom, tcFilterDateTo, activeTab]);
 
   // Recalculate telecaller analytics when outcomeCounts changes
   useEffect(() => {
@@ -420,6 +424,8 @@ export const OutboundCallsPage: React.FC = () => {
   const clearTcFilters = () => {
     setTcFilterTelecaller('');
     setTcFilterOutcome('');
+    setTcFilterCallType('');
+    setTcFilterDuration('');
     setTcFilterSearch('');
     setTcFilterDateFrom('');
     setTcFilterDateTo('');
@@ -1050,6 +1056,25 @@ export const OutboundCallsPage: React.FC = () => {
               <option value="CONNECTED">Connected</option>
               <option value="PENDING">Pending</option>
             </select>
+            <select
+              value={tcFilterCallType}
+              onChange={(e) => setTcFilterCallType(e.target.value)}
+              className="text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">All Types</option>
+              <option value="OUTBOUND">Outbound</option>
+              <option value="INBOUND">Inbound</option>
+            </select>
+            <select
+              value={tcFilterDuration}
+              onChange={(e) => setTcFilterDuration(e.target.value)}
+              className="text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">All Durations</option>
+              <option value="short">&lt; 30s</option>
+              <option value="medium">30s - 2min</option>
+              <option value="long">&gt; 2min</option>
+            </select>
             <input
               type="date"
               value={tcFilterDateFrom}
@@ -1064,7 +1089,7 @@ export const OutboundCallsPage: React.FC = () => {
               className="text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
               placeholder="To"
             />
-            {(tcFilterTelecaller || tcFilterOutcome || tcFilterSearch || tcFilterDateFrom || tcFilterDateTo) && (
+            {(tcFilterTelecaller || tcFilterOutcome || tcFilterCallType || tcFilterDuration || tcFilterSearch || tcFilterDateFrom || tcFilterDateTo) && (
               <button
                 onClick={clearTcFilters}
                 className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"

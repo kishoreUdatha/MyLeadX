@@ -882,6 +882,8 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
       dateTo,
       outcome,
       status,
+      callType,
+      duration,
       limit = '50',
       offset = '0'
     } = req.query;
@@ -914,6 +916,25 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
       baseWhereClause.createdAt = {};
       if (dateFrom) baseWhereClause.createdAt.gte = new Date(dateFrom as string);
       if (dateTo) baseWhereClause.createdAt.lte = new Date(dateTo as string);
+    }
+
+    // Filter by call type (INBOUND/OUTBOUND)
+    if (callType) {
+      baseWhereClause.callType = callType as string;
+    }
+
+    // Filter by duration range
+    if (duration) {
+      if (duration === 'short') {
+        // Short: < 30 seconds
+        baseWhereClause.duration = { lt: 30 };
+      } else if (duration === 'medium') {
+        // Medium: 30 seconds - 2 minutes
+        baseWhereClause.duration = { gte: 30, lt: 120 };
+      } else if (duration === 'long') {
+        // Long: > 2 minutes
+        baseWhereClause.duration = { gte: 120 };
+      }
     }
 
     // Full where clause including outcome filter (for listing calls)
