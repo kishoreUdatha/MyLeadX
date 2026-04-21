@@ -510,6 +510,70 @@ export class UserService {
     }));
   }
 
+  /**
+   * Get IDs of team members that a user can view based on their role
+   * Used for role-based filtering across all services
+   * Returns null for admin (can view all), or array of user IDs for others
+   */
+  async getViewableTeamMemberIds(
+    organizationId: string,
+    userRole: string,
+    userId: string
+  ): Promise<string[] | null> {
+    const normalizedRole = userRole?.toLowerCase().replace('_', '');
+
+    // Admin can view all - return null to indicate no filtering needed
+    if (normalizedRole === 'admin' || normalizedRole === 'superadmin' || normalizedRole === 'super_admin') {
+      return null;
+    }
+
+    // Manager: can view their team leads + telecallers under those team leads + direct reports
+    if (normalizedRole === 'manager') {
+      const teamLeads = await prisma.user.findMany({
+        where: {
+          organizationId,
+          managerId: userId,
+          role: { slug: 'team_lead' },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const teamLeadIds = teamLeads.map((tl) => tl.id);
+
+      const teamMembers = await prisma.user.findMany({
+        where: {
+          organizationId,
+          isActive: true,
+          OR: [
+            { managerId: userId }, // Direct reports
+            { managerId: { in: teamLeadIds } }, // Reports to team leads
+          ],
+        },
+        select: { id: true },
+      });
+
+      // Include manager themselves + team leads + team members
+      return [userId, ...teamLeadIds, ...teamMembers.map((m) => m.id)];
+    }
+
+    // Team Lead: can view themselves + their direct reports
+    if (normalizedRole === 'teamlead' || normalizedRole === 'team_lead') {
+      const teamMembers = await prisma.user.findMany({
+        where: {
+          organizationId,
+          managerId: userId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      return [userId, ...teamMembers.map((m) => m.id)];
+    }
+
+    // Telecaller/Counselor: can only view themselves
+    return [userId];
+  }
+
   async getRoles(organizationId: string) {
     // Return only organization-specific roles (no duplicates)
     return prisma.role.findMany({
