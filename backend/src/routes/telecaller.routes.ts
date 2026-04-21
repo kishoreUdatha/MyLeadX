@@ -886,24 +886,38 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
       offset = '0'
     } = req.query;
 
-    const whereClause: any = {
+    // Base where clause without outcome filter (for getting outcome counts)
+    const baseWhereClause: any = {
       organizationId,
     };
 
     if (telecallerId) {
-      whereClause.telecallerId = telecallerId;
+      baseWhereClause.telecallerId = telecallerId;
     }
 
     // Filter by branch - get calls from telecallers in the specified branch
     if (branchId) {
-      whereClause.telecaller = {
+      baseWhereClause.telecaller = {
         branchId: branchId as string,
       };
     }
 
     if (leadId) {
-      whereClause.leadId = leadId;
+      baseWhereClause.leadId = leadId;
     }
+
+    if (status) {
+      baseWhereClause.status = status as string;
+    }
+
+    if (dateFrom || dateTo) {
+      baseWhereClause.createdAt = {};
+      if (dateFrom) baseWhereClause.createdAt.gte = new Date(dateFrom as string);
+      if (dateTo) baseWhereClause.createdAt.lte = new Date(dateTo as string);
+    }
+
+    // Full where clause including outcome filter (for listing calls)
+    const whereClause: any = { ...baseWhereClause };
 
     if (outcome) {
       if (outcome === 'PENDING') {
@@ -920,16 +934,6 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
       } else {
         whereClause.outcome = outcome as string;
       }
-    }
-
-    if (status) {
-      whereClause.status = status as string;
-    }
-
-    if (dateFrom || dateTo) {
-      whereClause.createdAt = {};
-      if (dateFrom) whereClause.createdAt.gte = new Date(dateFrom as string);
-      if (dateTo) whereClause.createdAt.lte = new Date(dateTo as string);
     }
 
     const [calls, total] = await Promise.all([
@@ -950,23 +954,23 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
       prisma.telecallerCall.count({ where: whereClause }),
     ]);
 
-    // Get outcome counts
+    // Get outcome counts based on filters (except outcome filter itself)
     const outcomeCounts = await prisma.telecallerCall.groupBy({
       by: ['outcome'],
-      where: { organizationId },
+      where: baseWhereClause,
       _count: { _all: true },
     });
 
-    // Get status counts
+    // Get status counts based on filters
     const statusCounts = await prisma.telecallerCall.groupBy({
       by: ['status'],
-      where: { organizationId },
+      where: baseWhereClause,
       _count: { _all: true },
     });
 
-    const totalCalls = await prisma.telecallerCall.count({ where: { organizationId } });
+    const totalCalls = await prisma.telecallerCall.count({ where: baseWhereClause });
     const pendingCalls = await prisma.telecallerCall.count({
-      where: { organizationId, outcome: null }
+      where: { ...baseWhereClause, outcome: null }
     });
 
     const counts: Record<string, number> = {
