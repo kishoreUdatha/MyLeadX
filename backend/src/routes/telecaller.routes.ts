@@ -864,7 +864,7 @@ router.get('/leads', async (req: TenantRequest, res: Response) => {
   }
 });
 
-// Get ALL telecaller calls in organization (All roles can view)
+// Get ALL telecaller calls in organization (role-based filtering)
 router.get('/all-calls', async (req: TenantRequest, res: Response) => {
   // Prevent caching of this endpoint
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -873,7 +873,11 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
 
   try {
     const organizationId = req.organization!.id;
-    console.log(`[TelecallerAllCalls] Fetching calls for org: ${organizationId}`);
+    const userRole = req.user?.role || req.user?.roleSlug;
+    const userId = req.user?.id;
+    const normalizedRole = userRole?.toLowerCase().replace('_', '');
+
+    console.log(`[TelecallerAllCalls] Fetching calls for org: ${organizationId}, role: ${normalizedRole}`);
     const {
       telecallerId,
       leadId,
@@ -893,6 +897,63 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
       organizationId,
     };
 
+    // Role-based filtering
+    // Admin: sees all calls
+    // Manager: sees calls from their team (team leads + telecallers under them)
+    // Team Lead: sees calls from their telecallers
+    // Telecaller: sees only their own calls
+    if (normalizedRole === 'manager' && userId) {
+      // Get team leads reporting to this manager
+      const teamLeads = await prisma.user.findMany({
+        where: {
+          organizationId,
+          managerId: userId,
+          role: { slug: 'team_lead' },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const teamLeadIds = teamLeads.map(tl => tl.id);
+
+      // Get all telecallers under these team leads + direct reports
+      const teamMembers = await prisma.user.findMany({
+        where: {
+          organizationId,
+          OR: [
+            { managerId: { in: teamLeadIds } },
+            { managerId: userId },
+          ],
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const teamMemberIds = [...teamLeadIds, ...teamMembers.map(m => m.id)];
+
+      if (teamMemberIds.length > 0) {
+        baseWhereClause.telecallerId = { in: teamMemberIds };
+      } else {
+        // No team members, show no calls
+        baseWhereClause.telecallerId = userId;
+      }
+    } else if (normalizedRole === 'teamlead' && userId) {
+      // Get telecallers reporting to this team lead
+      const teamMembers = await prisma.user.findMany({
+        where: {
+          organizationId,
+          managerId: userId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const teamMemberIds = [userId, ...teamMembers.map(m => m.id)];
+      baseWhereClause.telecallerId = { in: teamMemberIds };
+    } else if (normalizedRole === 'telecaller' && userId) {
+      // Telecaller sees only their own calls
+      baseWhereClause.telecallerId = userId;
+    }
+    // Admin sees all (no additional filter)
+
+    // If telecallerId filter is provided, it overrides role-based filter (for drill-down)
     if (telecallerId) {
       baseWhereClause.telecallerId = telecallerId;
     }
@@ -900,6 +961,7 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
     // Filter by branch - get calls from telecallers in the specified branch
     if (branchId) {
       baseWhereClause.telecaller = {
+        ...baseWhereClause.telecaller,
         branchId: branchId as string,
       };
     }
