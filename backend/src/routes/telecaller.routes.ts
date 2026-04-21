@@ -924,13 +924,16 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
         whereClause.outcome = null;
       } else if (outcome === 'Connected') {
         // Connected = calls where customer answered
-        whereClause.outcome = { in: ['INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'CONVERTED', 'CONNECTED'] };
+        whereClause.outcome = { in: ['INTERESTED', 'NOT_INTERESTED', 'CALLBACK_REQUESTED', 'CALLBACK', 'CONVERTED', 'CONNECTED'] };
       } else if (outcome === 'Not Connected' || outcome === 'NOT_CONNECTED') {
         // Not Connected = calls where customer didn't answer
         whereClause.outcome = { in: ['NO_ANSWER', 'BUSY', 'VOICEMAIL'] };
       } else if (outcome === 'Lost' || outcome === 'LOST') {
         // Lost = not interested
         whereClause.outcome = 'NOT_INTERESTED';
+      } else if (outcome === 'CALLBACK_REQUESTED' || outcome === 'CALLBACK') {
+        // Handle both CALLBACK and CALLBACK_REQUESTED
+        whereClause.outcome = { in: ['CALLBACK_REQUESTED', 'CALLBACK'] };
       } else {
         whereClause.outcome = outcome as string;
       }
