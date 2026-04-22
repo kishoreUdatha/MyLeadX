@@ -991,8 +991,16 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
 
     if (dateFrom || dateTo) {
       baseWhereClause.createdAt = {};
-      if (dateFrom) baseWhereClause.createdAt.gte = new Date(dateFrom as string);
-      if (dateTo) baseWhereClause.createdAt.lte = new Date(dateTo as string);
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        baseWhereClause.createdAt.gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        baseWhereClause.createdAt.lte = toDate;
+      }
     }
 
     // Filter by call type (INBOUND/OUTBOUND)
@@ -1130,8 +1138,16 @@ router.get('/calls', async (req: TenantRequest, res: Response) => {
 
     if (dateFrom || dateTo) {
       whereClause.createdAt = {};
-      if (dateFrom) whereClause.createdAt.gte = new Date(dateFrom as string);
-      if (dateTo) whereClause.createdAt.lte = new Date(dateTo as string);
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        whereClause.createdAt.gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        whereClause.createdAt.lte = toDate;
+      }
     }
 
     const [calls, total] = await Promise.all([
