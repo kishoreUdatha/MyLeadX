@@ -1237,6 +1237,7 @@ export interface ExtractedCallData {
   callbackDate?: string;
   callbackTime?: string;
   callbackNotes?: string;
+  summary?: string;
 }
 
 /**

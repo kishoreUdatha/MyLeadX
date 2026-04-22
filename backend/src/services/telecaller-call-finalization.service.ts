@@ -192,25 +192,51 @@ class TelecallerCallFinalizationService {
         messages: [
           {
             role: 'system',
-            content: `You are a speaker diarization and sentiment analysis assistant for a phone sales call between a telecaller (agent) and a prospective student/parent (customer).
+            content: `You are a speaker diarization and sentiment analysis assistant for an OUTBOUND phone call from a telecaller (AGENT) at an education institution to a prospective student or parent (CUSTOMER).
 
-You will receive a raw transcript that may be unlabeled or mislabeled. Split it into the actual back-and-forth turns and analyze each turn's sentiment.
+The input is a raw transcript with NO speaker labels — often a run-on paragraph that mixes BOTH speakers' words together because the ASR engine could not separate them. Your job is to AGGRESSIVELY split it into alternating agent and customer turns using linguistic cues.
 
-Rules:
-- Agent typically: introduces themselves, explains courses/colleges/fees, asks qualifying questions, pitches admissions, handles objections, schedules callbacks.
-- Customer typically: answers questions about themselves (name, class, board, course interested), asks about fees/location/hostel/placements, raises concerns, agrees/disagrees.
-- Preserve the ORIGINAL wording and language of every sentence — do NOT translate or paraphrase, just assign each sentence to the correct speaker.
-- Break long monologues into multiple turns only where a speaker change clearly happens.
-- If a sentence is ambiguous, use surrounding context (questions → agent, answers → customer).
-- Never invent content. If the transcript only contains one side, return only that side's turns honestly.
-- Sentiment: "positive" for interest/agreement/enthusiasm, "negative" for rejection/concerns/frustration, "neutral" for factual/questions.
-${language ? `- The transcript language is ${language}. Keep it in that language.` : ''}
+=== CONVERSATION PATTERN (OUTBOUND CALL) ===
+1. CUSTOMER picks up, says "Hello / హలో / Hai సార్" (short greeting).
+2. AGENT introduces themselves ("I'm calling from X college", "నేను X కాలేజీ నుండి మాట్లాడుతున్నాను").
+3. AGENT asks qualifying questions about the student's class, board, course interest, location.
+4. CUSTOMER answers with personal/student info.
+5. AGENT explains fees, courses, hostel, scholarships, and asks follow-up questions.
+6. CUSTOMER expresses interest/concerns/agreement.
+7. Call ends with AGENT scheduling next steps and CUSTOMER acknowledging ("OK", "Okay sir", "ఓకే").
+
+=== AGENT (role: "assistant") CUES ===
+- Self-introduction phrases: "I'm calling from", "this is X from", "నేను...నుండి", "...కాలేజీ నుండి"
+- Questions (containing ?, or question words: what / where / when / how / which / ఏ / ఎక్కడ / ఎప్పుడు / ఎలా / ఎంత / ఏం / ఎవరు)
+- Course / college / admission vocabulary: fee, fees, course, college, admission, join, scholarship, hostel, placement, BTech, degree, intermediate
+- Telugu: ఫీజు, కోర్స్, కాలేజీ, అడ్మిషన్, జాయిన్, స్కాలర్‌షిప్, హాస్టల్, ప్లేస్‌మెంట్, బిటెక్, డిగ్రీ, ఇంటర్మీడియట్
+- Probing for next steps: "when can you visit", "shall I schedule a callback", "would you like to join"
+
+=== CUSTOMER (role: "user") CUES ===
+- Short greetings on pickup: "Hello", "Hi", "Yes", "Hello sir", "హలో", "హలో సార్", "అవును"
+- Self/family identification: "I'm X's father/mother/parent", "My daughter/son", "నేను...తండ్రిని/తల్లిని/పేరెంట్స్", "పాప", "బాబు", "మా అమ్మాయి"
+- Answering personal/student specifics: class completed, board, marks, location preference
+- Telugu acks: "అవును", "అవునండి", "సరే", "ఓకే", "థ్యాంక్స్"
+- Location preference: "near our home", "ఇక్కడ దగ్గర", "close by"
+
+=== CRITICAL RULES ===
+1. Output MUST contain BOTH "assistant" AND "user" turns if the transcript has >= 15 words. A real phone call ALWAYS has two speakers. A one-sided result is almost always a diarization failure — split aggressively.
+2. Questions (with ? or question words above) are ALMOST ALWAYS the AGENT, never the customer.
+3. Short acknowledgments following a question belong to the CUSTOMER.
+4. Break run-on sentences at natural speaker-change points: greeting → introduction, question → answer, answer → next question.
+5. Self-introductions ("I'm calling from X college") are ALWAYS the AGENT.
+6. Family identification ("I'm the parent of X", "my daughter") is ALWAYS the CUSTOMER.
+7. Preserve ORIGINAL wording and language — do NOT translate or paraphrase. Just split and assign.
+8. Sentiment: "positive" for interest/agreement/enthusiasm, "negative" for rejection/concerns/frustration, "neutral" for factual statements and questions.
+${language ? `- The transcript language is ${language}. Keep the output in that language.` : ''}
 
 Return JSON:
 {
   "turns": [
-    { "role": "assistant", "content": "...", "sentiment": "neutral" },
-    { "role": "user", "content": "...", "sentiment": "positive" }
+    { "role": "user", "content": "హలో హలో సార్", "sentiment": "neutral" },
+    { "role": "user", "content": "పూజిత వల్ల పేరెంట్స్ మాట్లాడేది", "sentiment": "neutral" },
+    { "role": "assistant", "content": "మీ పాప ఇంటర్మీడియట్ అయిపోయింది, బిటెక్ ఎక్కడ జాయిన్ చేయాలనుకుంటారు?", "sentiment": "neutral" },
+    { "role": "user", "content": "ఇక్కడ దగ్గర్లోనే", "sentiment": "positive" }
   ]
 }
 Use "assistant" for the telecaller/agent, and "user" for the customer/student/parent.`,
@@ -250,10 +276,100 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
   }
 
   /**
+   * Safety net for single-speaker diarization failures.
+   *
+   * When GPT or the heuristic returns all turns under one role (common for mono
+   * recordings where both voices are mixed into one audio stream), this method
+   * re-splits the content using linguistic cues to recover a balanced
+   * agent/customer conversation. Returns the input unchanged if it is already
+   * balanced or if rebalancing cannot produce a two-sided result.
+   */
+  private rebalanceSingleSpeakerTurns(
+    turns: Array<{ role: string; content: string; sentiment: string; startTimeSeconds: number }>,
+    callDuration: number
+  ): Array<{ role: string; content: string; sentiment: string; startTimeSeconds: number }> {
+    if (turns.length === 0) return turns;
+    const roles = new Set(turns.map(t => t.role));
+    if (roles.size !== 1) return turns;
+
+    const fullText = turns.map(t => t.content).join(' ').trim();
+    const totalWords = fullText.split(/\s+/).filter(w => w.length > 0).length;
+    if (totalWords < 30) return turns;
+
+    const sentences = fullText
+      .split(/(?<=[.?!।])\s+|(?<=\bsir\b)\s+|(?<=\bసార్)\s+|(?<=\bఅండి)\s+/iu)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    if (sentences.length < 2) return turns;
+
+    const agentCues: RegExp[] = [
+      /\?/,
+      /\b(what|where|when|how|which|why|who)\b/i,
+      /ఏం|ఎక్కడ|ఎప్పుడు|ఎలా|ఎంత|ఏ\s*కోర్స్|ఎవరు/,
+      /\b(fee|fees|course|college|admission|join|scholarship|hostel|placement|btech|degree|intermediate)\b/i,
+      /ఫీజు|కోర్స్|కాలేజీ|అడ్మిషన్|జాయిన్|స్కాలర్|హాస్టల్|ప్లేస్‌మెంట్|బిటెక్|డిగ్రీ|ఇంటర్మీడియట్/,
+      /\b(i'?m|i am)\s+(calling|from)\b/i,
+      /నేను.*మాట్లాడుతున్నాను|నుండి\s*మాట్లాడుతున్నాను|కాలేజీ\s*నుండి/,
+    ];
+    const customerCues: RegExp[] = [
+      /^\s*(hello|hi|hey|yes|yeah|ok|okay|sure|thanks?|bye|no|nope)\b/i,
+      /^\s*(హలో|హాయ్|అవును|అవునండి|ఓకే|సరే|థ్యాంక్స్|కాదు)/,
+      /\bmy\s+(son|daughter|child|kid|father|mother|parent)\b/i,
+      /\b(i'?m|i am)\s+(the\s+)?(father|mother|parent|uncle|aunt)\b/i,
+      /నా\s*(కొడుకు|కూతురు|పాప|బాబు|అమ్మాయి|అబ్బాయి)|వల్ల\s*పేరెంట్స్|మా\s*(అమ్మాయి|అబ్బాయి|పాప|బాబు)/,
+      /ఇక్కడ\s*దగ్గర|దగ్గర్లోనే|close\s+by|near\s+(our\s+)?home/i,
+    ];
+
+    const classify = (s: string): 'agent' | 'customer' | 'unknown' => {
+      const a = agentCues.filter(r => r.test(s)).length;
+      const c = customerCues.filter(r => r.test(s)).length;
+      if (a > c) return 'agent';
+      if (c > a) return 'customer';
+      return 'unknown';
+    };
+
+    // Outbound call convention: customer greets first when they pick up.
+    const firstLooksLikeGreeting = /^\s*(hello|hi|hey|హలో|హాయ్)\b/i.test(sentences[0]);
+    let currentRole: 'assistant' | 'user' = firstLooksLikeGreeting ? 'user' : 'assistant';
+    const rebuilt: Array<{ role: string; content: string; sentiment: string; startTimeSeconds: number }> = [];
+
+    sentences.forEach((sentence, idx) => {
+      const cue = classify(sentence);
+      if (cue === 'agent') currentRole = 'assistant';
+      else if (cue === 'customer') currentRole = 'user';
+      rebuilt.push({
+        role: currentRole,
+        content: sentence,
+        sentiment: 'neutral',
+        startTimeSeconds: Math.round((idx / sentences.length) * callDuration),
+      });
+    });
+
+    const merged: Array<{ role: string; content: string; sentiment: string; startTimeSeconds: number }> = [];
+    for (const t of rebuilt) {
+      const last = merged[merged.length - 1];
+      if (last && last.role === t.role) {
+        last.content = (last.content + ' ' + t.content).trim();
+      } else {
+        merged.push({ ...t });
+      }
+    }
+
+    const rebuiltRoles = new Set(merged.map(t => t.role));
+    if (rebuiltRoles.size !== 2) return turns;
+
+    console.log(
+      `[TelecallerAI] Rebalanced single-speaker transcript into ${merged.length} turns (agent=${merged.filter(m => m.role === 'assistant').length}, customer=${merged.filter(m => m.role === 'user').length})`
+    );
+    return merged;
+  }
+
+  /**
    * Build transcript messages with best available strategy:
    * 1. If the transcript already has speaker labels — use them.
    * 2. Otherwise try GPT diarization for a real two-sided conversation.
    * 3. Fall back to the alternating-sentences heuristic.
+   * 4. If the result is single-speaker on a long transcript, rebalance with linguistic cues.
    * All messages include startTimeSeconds and sentiment for UI sync.
    */
   private async buildTranscriptMessages(
@@ -267,29 +383,29 @@ Use "assistant" for the telecaller/agent, and "user" for the customer/student/pa
     const labelPattern = /^(Agent|Telecaller|Assistant|Rep|User|Customer|Caller|Lead):\s*/im;
 
     if (labelPattern.test(transcript)) {
-      // Parse labeled transcript and add timestamps/sentiment
       const parsed = this.parseTranscriptToMessages(transcript);
-      return parsed.map((msg, idx, arr) => ({
+      const labeled = parsed.map((msg, idx, arr) => ({
         ...msg,
         sentiment: 'neutral',
         startTimeSeconds: Math.round((idx / arr.length) * duration),
       }));
+      return this.rebalanceSingleSpeakerTurns(labeled, duration);
     }
 
-    // GPT diarization now returns sentiment and timestamps
     const diarized = await this.diarizeTranscriptWithGPT(transcript, language, duration);
     if (diarized && diarized.length > 0) {
       console.log(`[TelecallerAI] GPT diarization produced ${diarized.length} turns with sentiment`);
-      return diarized;
+      return this.rebalanceSingleSpeakerTurns(diarized, duration);
     }
 
     console.log(`[TelecallerAI] Falling back to heuristic sentence-alternation parser`);
     const parsed = this.parseTranscriptToMessages(transcript);
-    return parsed.map((msg, idx, arr) => ({
+    const heuristic = parsed.map((msg, idx, arr) => ({
       ...msg,
       sentiment: 'neutral',
       startTimeSeconds: Math.round((idx / arr.length) * duration),
     }));
+    return this.rebalanceSingleSpeakerTurns(heuristic, duration);
   }
 
   /**
@@ -1911,6 +2027,7 @@ ${call.summary}
         prisma.telecallerCall.findUnique({
           where: { id: callId },
           include: {
+            lead: true,
             telecaller: {
               select: {
                 id: true,
@@ -2246,7 +2363,7 @@ ${call.summary}
   /**
    * Map CallOutcome to RawImportRecord status
    */
-  private mapOutcomeToRawImportStatus(outcome: CallOutcome): string {
+  private mapOutcomeToRawImportStatus(outcome: CallOutcome): any {
     const mapping: Record<string, string> = {
       INTERESTED: 'INTERESTED',
       NOT_INTERESTED: 'NOT_INTERESTED',
@@ -2343,7 +2460,6 @@ ${call.summary}
           source: rawRecord.bulkImport?.source || 'BULK_UPLOAD',
           sourceDetails: `Qualified by Telecaller: ${call.telecaller?.firstName} ${call.telecaller?.lastName}`,
           priority: outcome === 'CONVERTED' ? 'HIGH' : (outcome === 'INTERESTED' ? 'HIGH' : 'MEDIUM'),
-          status: 'NEW', // New lead waiting for counselor assignment
           customFields: {
             ...customData,
             ...qualification,
@@ -2441,7 +2557,7 @@ Outcome: ${outcome} | Sentiment: ${sentiment}
 
 Please assign this lead to a counselor for follow-up.`,
           priority: outcome === 'CONVERTED' || outcome === 'INTERESTED' ? 'HIGH' : 'MEDIUM',
-          status: 'PENDING',
+          status: 'UPCOMING',
           // No assignedToId - will show in manager's unassigned follow-ups
           metadata: {
             needsAssignment: true,
@@ -2456,28 +2572,32 @@ Please assign this lead to a counselor for follow-up.`,
       const managers = await prisma.user.findMany({
         where: {
           organizationId,
-          role: { in: ['ADMIN', 'MANAGER'] },
+          role: { slug: { in: ['admin', 'manager'] } },
           isActive: true,
-        },
+        } as any,
         select: { id: true },
       });
 
-      // Create notifications for each manager
+      // Create notifications for each manager (Notification model may not exist in all schemas)
       for (const manager of managers) {
-        await prisma.notification.create({
-          data: {
-            userId: manager.id,
-            type: 'LEAD_QUALIFIED',
-            title: 'New Qualified Lead Needs Assignment',
-            message: `Telecaller ${call.telecaller?.firstName} qualified lead "${firstName} ${lastName}". Please assign to a counselor.`,
+        try {
+          await (prisma as any).notification?.create({
             data: {
-              leadId: lead.id,
-              callId: call.id,
-              outcome,
-              sentiment,
+              userId: manager.id,
+              type: 'LEAD_QUALIFIED',
+              title: 'New Qualified Lead Needs Assignment',
+              message: `Telecaller ${call.telecaller?.firstName} qualified lead "${firstName} ${lastName}". Please assign to a counselor.`,
+              data: {
+                leadId: lead.id,
+                callId: call.id,
+                outcome,
+                sentiment,
+              },
             },
-          },
-        });
+          });
+        } catch (notifErr) {
+          console.warn('[TelecallerAI] Notification create skipped:', (notifErr as Error)?.message);
+        }
       }
 
       console.log(`[TelecallerAI] Created lead ${lead.id} from raw import ${rawRecord.id} - notified ${managers.length} managers`);
@@ -2488,7 +2608,7 @@ Please assign this lead to a counselor for follow-up.`,
         await prisma.leadActivity.create({
           data: {
             leadId: call.leadId || undefined,
-            type: 'ERROR',
+            type: 'NOTE_ADDED',
             title: 'Auto-conversion failed',
             description: `Failed to auto-convert raw import to lead: ${(error as Error).message}`,
             userId: call.telecallerId,

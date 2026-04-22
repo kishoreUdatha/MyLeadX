@@ -26,6 +26,7 @@ import { formatPhoneNumber } from '../utils/formatters';
 import { RootStackParamList, Lead } from '../types';
 import { messagingApi } from '../api/messaging';
 import { appointmentsApi } from '../api/appointments';
+import { telecallerApi, followUpApi } from '../api/telecaller';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Call'>;
 type CallRouteProp = RouteProp<RootStackParamList, 'Call'>;
@@ -345,6 +346,15 @@ const CallScreen: React.FC = () => {
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState('');
 
+  // Follow-up flow state: when the telecaller picks CALLBACK we switch the modal
+  // to a date/time picker instead of submitting immediately.
+  const [pendingOutcome, setPendingOutcome] = useState<string | null>(null);
+  const defaultCallback = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  defaultCallback.setHours(10, 0, 0, 0);
+  const [callbackAt, setCallbackAt] = useState<Date>(defaultCallback);
+  const [showCallbackDatePicker, setShowCallbackDatePicker] = useState(false);
+  const [showCallbackTimePicker, setShowCallbackTimePicker] = useState(false);
+
   const OUTCOMES = [
     { value: 'INTERESTED', label: 'Interested', icon: 'thumb-up', color: '#10B981' },
     { value: 'NOT_INTERESTED', label: 'Not Interested', icon: 'thumb-down', color: '#EF4444' },
@@ -357,27 +367,7 @@ const CallScreen: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSelectOutcome = async (outcomeValue: string) => {
-    setIsSubmitting(true);
-    let savedCallId: string | undefined;
-    let savedRecordingPath: string | undefined;
-    let savedDuration = 0;
-    try {
-      // Wait a moment for recording upload to complete
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      // Capture call refs BEFORE submitOutcome resets them so we can navigate.
-      savedCallId = (currentCall as any)?.id;
-      savedRecordingPath = recordingPath || undefined;
-      savedDuration = callDuration || 0;
-      await submitOutcome(outcomeValue as any, outcomeNotes || undefined);
-    } catch (err) {
-      console.error('Failed to submit outcome:', err);
-    }
-    setIsSubmitting(false);
-    setShowOutcomeModal(false);
-
-    // Go straight to the analysis screen so the telecaller sees the transcript
-    // (and AI summary) the moment the backend finishes processing the recording.
+  const navigateAfterSubmit = (savedCallId?: string, savedDuration = 0, savedRecordingPath?: string) => {
     if (savedCallId) {
       navigation.reset({
         index: 1,
@@ -390,6 +380,137 @@ const CallScreen: React.FC = () => {
       navigation.reset({ index: 0, routes: [{ name: 'Main' as any }] });
     }
   };
+
+  // For outcomes that need no further input (NOT_INTERESTED, NO_ANSWER, BUSY,
+  // WRONG_NUMBER) this submits directly. INTERESTED/CONVERTED and CALLBACK
+  // route through a confirmation step via pendingOutcome state.
+  const submitOutcomeAndNavigate = async (outcomeValue: string) => {
+    setIsSubmitting(true);
+    let savedCallId: string | undefined;
+    let savedRecordingPath: string | undefined;
+    let savedDuration = 0;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      savedCallId = (currentCall as any)?.id;
+      savedRecordingPath = recordingPath || undefined;
+      savedDuration = callDuration || 0;
+      await submitOutcome(outcomeValue as any, outcomeNotes || undefined);
+    } catch (err) {
+      console.error('Failed to submit outcome:', err);
+    }
+    setIsSubmitting(false);
+    setShowOutcomeModal(false);
+    setPendingOutcome(null);
+    navigateAfterSubmit(savedCallId, savedDuration, savedRecordingPath);
+  };
+
+  const handleSelectOutcome = async (outcomeValue: string) => {
+    // CALLBACK needs a scheduled date/time before we can submit.
+    // INTERESTED and CONVERTED ask the telecaller whether to also create a Lead.
+    if (outcomeValue === 'CALLBACK' || outcomeValue === 'INTERESTED' || outcomeValue === 'CONVERTED') {
+      setPendingOutcome(outcomeValue);
+      return;
+    }
+    await submitOutcomeAndNavigate(outcomeValue);
+  };
+
+  const handleConfirmCallback = async () => {
+    if (!lead?.id) {
+      Alert.alert('Missing lead', 'Cannot schedule callback without a lead record.');
+      return;
+    }
+    if (callbackAt.getTime() <= Date.now()) {
+      Alert.alert('Pick a future time', 'Callback date/time must be in the future.');
+      return;
+    }
+    setIsSubmitting(true);
+    let savedCallId: string | undefined;
+    let savedRecordingPath: string | undefined;
+    let savedDuration = 0;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      savedCallId = (currentCall as any)?.id;
+      savedRecordingPath = recordingPath || undefined;
+      savedDuration = callDuration || 0;
+      await submitOutcome('CALLBACK' as any, outcomeNotes || undefined);
+      try {
+        await followUpApi.createFollowUp(
+          lead.id,
+          callbackAt.toISOString(),
+          'HUMAN_CALL',
+          outcomeNotes || undefined
+        );
+      } catch (followUpErr) {
+        console.error('Failed to create follow-up:', followUpErr);
+        Alert.alert(
+          'Follow-up not saved',
+          'Call outcome was saved, but scheduling the callback failed. Please re-schedule from the lead detail page.'
+        );
+      }
+    } catch (err) {
+      console.error('Failed to submit callback outcome:', err);
+    }
+    setIsSubmitting(false);
+    setShowOutcomeModal(false);
+    setPendingOutcome(null);
+    navigateAfterSubmit(savedCallId, savedDuration, savedRecordingPath);
+  };
+
+  const handleConfirmConvert = async (convertToLead: boolean) => {
+    const outcome = pendingOutcome || 'INTERESTED';
+    setIsSubmitting(true);
+    let savedCallId: string | undefined;
+    let savedRecordingPath: string | undefined;
+    let savedDuration = 0;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      savedCallId = (currentCall as any)?.id;
+      savedRecordingPath = recordingPath || undefined;
+      savedDuration = callDuration || 0;
+      await submitOutcome(outcome as any, outcomeNotes || undefined);
+      if (convertToLead && lead?.id) {
+        try {
+          await telecallerApi.convertToLead(lead.id, outcomeNotes || undefined);
+        } catch (convertErr: any) {
+          console.error('Failed to convert to lead:', convertErr);
+          Alert.alert(
+            'Lead not created',
+            convertErr?.message ||
+              'Call outcome was saved, but creating the lead failed. You can convert from the assigned data list.'
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to submit outcome:', err);
+    }
+    setIsSubmitting(false);
+    setShowOutcomeModal(false);
+    setPendingOutcome(null);
+    navigateAfterSubmit(savedCallId, savedDuration, savedRecordingPath);
+  };
+
+  const onCallbackDateChange = (_event: any, selectedDate?: Date) => {
+    setShowCallbackDatePicker(false);
+    if (selectedDate) {
+      const next = new Date(callbackAt);
+      next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+      setCallbackAt(next);
+    }
+  };
+
+  const onCallbackTimeChange = (_event: any, selectedTime?: Date) => {
+    setShowCallbackTimePicker(false);
+    if (selectedTime) {
+      const next = new Date(callbackAt);
+      next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+      setCallbackAt(next);
+    }
+  };
+
+  const formatCallbackDate = (d: Date) =>
+    d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const formatCallbackTime = (d: Date) =>
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const handleEndCall = async () => {
     Alert.alert(
@@ -810,60 +931,227 @@ const CallScreen: React.FC = () => {
         onRequestClose={() => {}}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Call Outcome</Text>
+              <Text style={styles.modalTitle}>
+                {pendingOutcome === 'CALLBACK'
+                  ? 'Schedule Callback'
+                  : pendingOutcome === 'INTERESTED' || pendingOutcome === 'CONVERTED'
+                  ? pendingOutcome === 'CONVERTED'
+                    ? 'Convert to Lead?'
+                    : 'Interested — Convert to Lead?'
+                  : 'Call Outcome'}
+              </Text>
+              {pendingOutcome && !isSubmitting && (
+                <TouchableOpacity onPress={() => setPendingOutcome(null)}>
+                  <Icon name="arrow-left" size={22} color="#6B7280" />
+                </TouchableOpacity>
+              )}
             </View>
             <ScrollView style={styles.modalBody}>
-              <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 12 }}>
-                How did the call go?
-              </Text>
               {isSubmitting ? (
                 <View style={{ alignItems: 'center', padding: 30 }}>
                   <ActivityIndicator size="large" color="#3B82F6" />
                   <Text style={{ fontSize: 14, color: '#6B7280', marginTop: 12 }}>Saving call data & recording...</Text>
                 </View>
-              ) : (
-                OUTCOMES.map((item) => (
+              ) : pendingOutcome === 'CALLBACK' ? (
+                <View>
+                  <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 12 }}>
+                    When should we call {lead?.name || 'the customer'} back?
+                  </Text>
                   <TouchableOpacity
-                    key={item.value}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
                       padding: 14,
-                      marginBottom: 8,
+                      marginBottom: 10,
                       backgroundColor: '#F9FAFB',
                       borderRadius: 10,
                       borderWidth: 1,
                       borderColor: '#E5E7EB',
                     }}
-                    onPress={() => handleSelectOutcome(item.value)}
+                    onPress={() => setShowCallbackDatePicker(true)}
                   >
-                    <Icon name={item.icon} size={24} color={item.color} />
-                    <Text style={{ fontSize: 16, fontWeight: '500', color: '#1F2937', marginLeft: 12 }}>
-                      {item.label}
+                    <Icon name="calendar" size={22} color="#3B82F6" />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={{ fontSize: 12, color: '#6B7280' }}>Date</Text>
+                      <Text style={{ fontSize: 16, color: '#1F2937', fontWeight: '500' }}>
+                        {formatCallbackDate(callbackAt)}
+                      </Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 14,
+                      marginBottom: 10,
+                      backgroundColor: '#F9FAFB',
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                    }}
+                    onPress={() => setShowCallbackTimePicker(true)}
+                  >
+                    <Icon name="clock-outline" size={22} color="#F59E0B" />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={{ fontSize: 12, color: '#6B7280' }}>Time</Text>
+                      <Text style={{ fontSize: 16, color: '#1F2937', fontWeight: '500' }}>
+                        {formatCallbackTime(callbackAt)}
+                      </Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 10,
+                      padding: 12,
+                      marginTop: 4,
+                      marginBottom: 12,
+                      fontSize: 14,
+                      color: '#1F2937',
+                      minHeight: 60,
+                      textAlignVertical: 'top',
+                    }}
+                    placeholder="Notes for the callback (optional)..."
+                    placeholderTextColor="#9CA3AF"
+                    value={outcomeNotes}
+                    onChangeText={setOutcomeNotes}
+                    multiline
+                  />
+                  <TouchableOpacity
+                    style={{
+                      padding: 14,
+                      backgroundColor: '#F59E0B',
+                      borderRadius: 10,
+                      alignItems: 'center',
+                    }}
+                    onPress={handleConfirmCallback}
+                  >
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#FFFFFF' }}>
+                      Confirm Callback
                     </Text>
                   </TouchableOpacity>
-                ))
+                  {showCallbackDatePicker && (
+                    <DateTimePicker
+                      value={callbackAt}
+                      mode="date"
+                      minimumDate={new Date()}
+                      onChange={onCallbackDateChange}
+                    />
+                  )}
+                  {showCallbackTimePicker && (
+                    <DateTimePicker
+                      value={callbackAt}
+                      mode="time"
+                      onChange={onCallbackTimeChange}
+                    />
+                  )}
+                </View>
+              ) : pendingOutcome === 'INTERESTED' || pendingOutcome === 'CONVERTED' ? (
+                <View>
+                  <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 12 }}>
+                    {pendingOutcome === 'CONVERTED'
+                      ? `Create a Lead record for ${lead?.name || 'this contact'}?`
+                      : `${lead?.name || 'This contact'} is interested. Convert to a Lead now so a counselor can follow up?`}
+                  </Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 10,
+                      padding: 12,
+                      marginBottom: 12,
+                      fontSize: 14,
+                      color: '#1F2937',
+                      minHeight: 60,
+                      textAlignVertical: 'top',
+                    }}
+                    placeholder="Conversion notes (optional)..."
+                    placeholderTextColor="#9CA3AF"
+                    value={outcomeNotes}
+                    onChangeText={setOutcomeNotes}
+                    multiline
+                  />
+                  <TouchableOpacity
+                    style={{
+                      padding: 14,
+                      backgroundColor: '#10B981',
+                      borderRadius: 10,
+                      alignItems: 'center',
+                      marginBottom: 8,
+                    }}
+                    onPress={() => handleConfirmConvert(true)}
+                  >
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#FFFFFF' }}>
+                      Yes, Convert to Lead
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      padding: 14,
+                      backgroundColor: '#F3F4F6',
+                      borderRadius: 10,
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                    }}
+                    onPress={() => handleConfirmConvert(false)}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '500', color: '#374151' }}>
+                      Save outcome only
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 12 }}>
+                    How did the call go?
+                  </Text>
+                  {OUTCOMES.map((item) => (
+                    <TouchableOpacity
+                      key={item.value}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        padding: 14,
+                        marginBottom: 8,
+                        backgroundColor: '#F9FAFB',
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: '#E5E7EB',
+                      }}
+                      onPress={() => handleSelectOutcome(item.value)}
+                    >
+                      <Icon name={item.icon} size={24} color={item.color} />
+                      <Text style={{ fontSize: 16, fontWeight: '500', color: '#1F2937', marginLeft: 12 }}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 10,
+                      padding: 12,
+                      marginTop: 8,
+                      fontSize: 14,
+                      color: '#1F2937',
+                      minHeight: 60,
+                      textAlignVertical: 'top',
+                    }}
+                    placeholder="Add notes (optional)..."
+                    placeholderTextColor="#9CA3AF"
+                    value={outcomeNotes}
+                    onChangeText={setOutcomeNotes}
+                    multiline
+                  />
+                </>
               )}
-              <TextInput
-                style={{
-                  borderWidth: 1,
-                  borderColor: '#E5E7EB',
-                  borderRadius: 10,
-                  padding: 12,
-                  marginTop: 8,
-                  fontSize: 14,
-                  color: '#1F2937',
-                  minHeight: 60,
-                  textAlignVertical: 'top',
-                }}
-                placeholder="Add notes (optional)..."
-                placeholderTextColor="#9CA3AF"
-                value={outcomeNotes}
-                onChangeText={setOutcomeNotes}
-                multiline
-              />
             </ScrollView>
           </View>
         </View>
