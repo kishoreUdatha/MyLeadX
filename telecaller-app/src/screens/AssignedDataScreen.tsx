@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   StatusBar,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -21,7 +22,10 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
   ALL: { color: '#6366F1', icon: 'format-list-bulleted', label: 'All' },
+  NEW: { color: '#3B82F6', icon: 'phone-outline', label: 'New' },
+  PENDING: { color: '#3B82F6', icon: 'phone-outline', label: 'New' },
   ASSIGNED: { color: '#3B82F6', icon: 'phone-outline', label: 'New' },
+  CALLING: { color: '#F59E0B', icon: 'phone-in-talk', label: 'Calling' },
   INTERESTED: { color: '#10B981', icon: 'thumb-up', label: 'Interested' },
   NOT_INTERESTED: { color: '#EF4444', icon: 'thumb-down', label: 'Not Int.' },
   NO_ANSWER: { color: '#F59E0B', icon: 'phone-missed', label: 'No Answer' },
@@ -70,9 +74,11 @@ const AssignedDataScreen: React.FC = () => {
     endDate: null,
   });
 
+  const newCount =
+    stats?.new ?? ((stats?.pending || 0) + (stats?.assigned || 0) + (stats?.calling || 0));
   const tabs = [
     { key: 'ALL', label: 'All', count: stats?.total || 0 },
-    { key: 'ASSIGNED', label: 'New', count: stats?.assigned || 0 },
+    { key: 'NEW', label: 'New', count: newCount },
     { key: 'INTERESTED', label: 'Interested', count: stats?.interested || 0 },
     { key: 'CALLBACK_REQUESTED', label: 'Callback', count: stats?.callback || 0 },
     { key: 'NO_ANSWER', label: 'No Ans', count: stats?.noAnswer || 0 },
@@ -88,8 +94,10 @@ const AssignedDataScreen: React.FC = () => {
       // Fetch ALL records
       const data = await telecallerApi.getAssignedData();
       setAllRecords(data.records);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch:', error);
+      setAllRecords([]);
+      Alert.alert('Failed to load tasks', error?.message || 'Please check your connection and try again.');
     }
   }, []);
 
@@ -107,8 +115,11 @@ const AssignedDataScreen: React.FC = () => {
     const tabKey = tabs[activeTab]?.key;
     let filtered = allRecords;
 
-    // Filter by status
-    if (tabKey !== 'ALL') {
+    // Filter by status. "NEW" = anything not yet dispositioned: PENDING (freshly imported,
+    // which is the Prisma default), ASSIGNED (handed to telecaller), or CALLING (mid-call).
+    if (tabKey === 'NEW') {
+      filtered = filtered.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
+    } else if (tabKey !== 'ALL') {
       filtered = filtered.filter(r => r.status === tabKey);
     }
 

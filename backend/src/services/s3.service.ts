@@ -99,6 +99,31 @@ export async function getSignedUrlForDownload(
 }
 
 /**
+ * Convert a stored recording URL into a playable presigned URL.
+ * Private S3 buckets return 403 to MediaPlayer without presigning.
+ * Returns the input unchanged for local/non-S3/already-signed URLs, or on error.
+ */
+export async function getPlayableRecordingUrl(
+  storedUrl: string | null | undefined,
+  expiresIn: number = 3600
+): Promise<string | null> {
+  if (!storedUrl) return null;
+  if (storedUrl.startsWith('local://')) return storedUrl;
+  if (!storedUrl.includes('.amazonaws.com/')) return storedUrl;
+  if (storedUrl.includes('X-Amz-Signature=')) return storedUrl;
+
+  try {
+    const [, rest] = storedUrl.split('.amazonaws.com/');
+    const key = decodeURIComponent(rest.split('?')[0]);
+    const command = new GetObjectCommand({ Bucket: RECORDINGS_BUCKET, Key: key });
+    return await getSignedUrl(s3Client, command, { expiresIn });
+  } catch (e) {
+    console.error('[S3] Failed to presign recording URL:', e);
+    return storedUrl;
+  }
+}
+
+/**
  * Get file from local storage (for development)
  */
 export function getLocalFile(key: string): { buffer: Buffer; mimeType: string } | null {

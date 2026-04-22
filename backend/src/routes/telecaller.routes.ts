@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { telecallerCallFinalizationService } from '../services/telecaller-call-finalization.service';
 import { calendarService } from '../services/calendar.service';
 import { workSessionService } from '../services/work-session.service';
-import { uploadRecordingToS3 } from '../services/s3.service';
+import { uploadRecordingToS3, getPlayableRecordingUrl } from '../services/s3.service';
 
 // Helper to save buffer to temp file for AI processing
 function saveTempFile(buffer: Buffer, ext: string): string {
@@ -252,8 +252,8 @@ router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
           assignedTo: { select: { id: true, firstName: true, lastName: true } },
         },
         orderBy: [
-          { status: 'asc' }, // ASSIGNED first
-          { assignedAt: 'desc' },
+          { assignedAt: 'desc' }, // Today's assignments first
+          { createdAt: 'desc' },
         ],
         take: limitNum,
         skip: skipNum,

@@ -368,7 +368,7 @@ export const telecallerApi = {
   getAssignedData: async (
     status?: string,
     search?: string,
-    limit: number = 50,
+    limit: number = 200,
     offset: number = 0
   ): Promise<{ records: AssignedData[]; total: number }> => {
     try {
@@ -379,11 +379,19 @@ export const telecallerApi = {
       if (status && status !== 'ALL') params.append('status', status);
       if (search) params.append('search', search);
 
-      const response = await api.get<ApiResponse<{ records: AssignedData[]; total: number }>>(
-        `/telecaller/assigned-data?${params.toString()}`
+      const url = `/telecaller/assigned-data?${params.toString()}`;
+      console.log('[TelecallerAPI] GET', url);
+      const response = await api.get<ApiResponse<{ records: AssignedData[]; total: number }>>(url);
+      const payload = response.data.data;
+      console.log(
+        '[TelecallerAPI] assigned-data returned:',
+        payload?.records?.length ?? 0,
+        '/ total',
+        payload?.total ?? 0,
       );
-      return response.data.data;
+      return payload;
     } catch (error) {
+      console.error('[TelecallerAPI] assigned-data error:', getErrorMessage(error));
       throw new Error(getErrorMessage(error));
     }
   },
