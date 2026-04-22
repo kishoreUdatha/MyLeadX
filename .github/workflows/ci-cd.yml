@@ -258,33 +258,40 @@ jobs:
             cd /opt/myleadx
 
             echo ""
-            echo "Step 1: Pulling latest code..."
+            echo "Step 1: Cleaning up Docker to free disk space..."
+            docker system prune -af --filter "until=24h" || true
+            docker builder prune -af --filter "until=24h" || true
+            echo "Disk space available: $(df -h / | tail -1 | awk '{print $4}')"
+
+            echo ""
+            echo "Step 2: Pulling latest code..."
             git fetch --all --prune
             git reset --hard origin/main
 
             echo ""
-            echo "Step 2: Building containers..."
+            echo "Step 3: Building containers..."
             docker-compose -f docker-compose.prod.yml --env-file .env.production build --parallel
 
             echo ""
-            echo "Step 3: Stopping old containers..."
+            echo "Step 4: Stopping old containers..."
             docker-compose -f docker-compose.prod.yml --env-file .env.production down
 
             echo ""
-            echo "Step 4: Starting new containers..."
+            echo "Step 5: Starting new containers..."
             docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
 
             echo ""
-            echo "Step 5: Waiting for services..."
+            echo "Step 6: Waiting for services..."
             sleep 20
 
             echo ""
-            echo "Step 6: Running database migrations..."
+            echo "Step 7: Running database migrations..."
             docker exec myleadx-backend npx prisma migrate deploy || echo "Migration skipped"
 
             echo ""
-            echo "Step 7: Cleaning up old images..."
+            echo "Step 8: Final cleanup..."
             docker image prune -f
+            docker builder prune -f || true
 
             echo ""
             echo "Deployment Complete!"

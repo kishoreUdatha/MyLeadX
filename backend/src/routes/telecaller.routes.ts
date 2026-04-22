@@ -585,7 +585,7 @@ router.post('/assigned-data/:id/recording', upload.single('recording'), async (r
     const recordingUrl = await uploadRecordingToS3(req.file.buffer, fileName, req.file.mimetype || 'audio/m4a');
     console.log(`[Telecaller] Recording uploaded to S3: ${recordingUrl}`);
 
-    // Find or create call record
+    // Find existing call record - first by callId, then by looking for recent INITIATED call
     let call;
     if (callId) {
       call = await prisma.telecallerCall.findFirst({
@@ -593,8 +593,23 @@ router.post('/assigned-data/:id/recording', upload.single('recording'), async (r
       });
     }
 
+    // If no callId provided or call not found, look for the most recent INITIATED call
+    // for this phone number by this telecaller (within last 30 minutes)
     if (!call) {
-      // Create call record if not exists
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      call = await prisma.telecallerCall.findFirst({
+        where: {
+          telecallerId: userId,
+          phoneNumber: record.phone,
+          status: 'INITIATED',
+          createdAt: { gte: thirtyMinutesAgo },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    // Only create new record if no existing INITIATED call found
+    if (!call) {
       call = await prisma.telecallerCall.create({
         data: {
           organizationId: req.organization!.id,
@@ -976,8 +991,16 @@ router.get('/all-calls', async (req: TenantRequest, res: Response) => {
 
     if (dateFrom || dateTo) {
       baseWhereClause.createdAt = {};
-      if (dateFrom) baseWhereClause.createdAt.gte = new Date(dateFrom as string);
-      if (dateTo) baseWhereClause.createdAt.lte = new Date(dateTo as string);
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        baseWhereClause.createdAt.gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        baseWhereClause.createdAt.lte = toDate;
+      }
     }
 
     // Filter by call type (INBOUND/OUTBOUND)
@@ -1115,8 +1138,16 @@ router.get('/calls', async (req: TenantRequest, res: Response) => {
 
     if (dateFrom || dateTo) {
       whereClause.createdAt = {};
-      if (dateFrom) whereClause.createdAt.gte = new Date(dateFrom as string);
-      if (dateTo) whereClause.createdAt.lte = new Date(dateTo as string);
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        whereClause.createdAt.gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        whereClause.createdAt.lte = toDate;
+      }
     }
 
     const [calls, total] = await Promise.all([
