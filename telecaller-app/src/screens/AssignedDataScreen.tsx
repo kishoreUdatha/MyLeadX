@@ -73,8 +73,9 @@ const AssignedDataScreen: React.FC = () => {
   const tabs = [
     { key: 'ALL', label: 'All', count: stats?.total || 0 },
     { key: 'ASSIGNED', label: 'New', count: stats?.assigned || 0 },
+    { key: 'CALLING', label: 'Calling', count: stats?.calling || 0 },
     { key: 'INTERESTED', label: 'Interested', count: stats?.interested || 0 },
-    { key: 'CALLBACK_REQUESTED', label: 'Callback', count: stats?.callback || 0 },
+    { key: 'CALLBACK', label: 'Callback', count: stats?.callback || 0 }, // Match both CALLBACK and CALLBACK_REQUESTED
     { key: 'NO_ANSWER', label: 'No Ans', count: stats?.noAnswer || 0 },
     { key: 'NOT_INTERESTED', label: 'Not Int', count: stats?.notInterested || 0 },
     { key: 'CONVERTED', label: 'Done', count: stats?.converted || 0 },
@@ -109,7 +110,12 @@ const AssignedDataScreen: React.FC = () => {
 
     // Filter by status
     if (tabKey !== 'ALL') {
-      filtered = filtered.filter(r => r.status === tabKey);
+      // Handle CALLBACK matching both CALLBACK and CALLBACK_REQUESTED
+      if (tabKey === 'CALLBACK') {
+        filtered = filtered.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
+      } else {
+        filtered = filtered.filter(r => r.status === tabKey);
+      }
     }
 
     // Filter by date range

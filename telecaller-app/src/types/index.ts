@@ -244,6 +244,7 @@ export interface AssignedData {
 export interface AssignedDataStats {
   total: number;
   assigned: number;
+  calling?: number;
   interested: number;
   notInterested: number;
   noAnswer: number;
