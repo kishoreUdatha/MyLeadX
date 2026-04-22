@@ -14,7 +14,11 @@ import {
   AppState,
   AppStateStatus,
   Alert,
+  Modal,
+  TextInput,
+  ScrollView,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -89,6 +93,20 @@ const CallAssignedDataScreen: React.FC = () => {
   const hasEndedRef = useRef<boolean>(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const returnCheckRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Outcome disposition modal: shown after the call ends so the telecaller can
+  // explicitly mark the call as Interested / Not Interested / Callback / etc.
+  // Replaces the old duration-based auto-classification — the telecaller decides.
+  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
+  const [outcomeNotes, setOutcomeNotes] = useState('');
+  const [pendingOutcome, setPendingOutcome] = useState<string | null>(null);
+  const defaultCallback = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  defaultCallback.setHours(10, 0, 0, 0);
+  const [callbackAt, setCallbackAt] = useState<Date>(defaultCallback);
+  const [showCallbackDatePicker, setShowCallbackDatePicker] = useState(false);
+  const [showCallbackTimePicker, setShowCallbackTimePicker] = useState(false);
+  const [isSubmittingOutcome, setIsSubmittingOutcome] = useState(false);
+  const finalDurationRef = useRef<number>(0);
 
   // Start timer
   const startTimer = useCallback(() => {
