@@ -232,6 +232,7 @@ export type AssignedDataStatus =
   | 'INTERESTED'
   | 'NOT_INTERESTED'
   | 'NO_ANSWER'
+  | 'CALLBACK'
   | 'CALLBACK_REQUESTED'
   | 'CONVERTED';
 
