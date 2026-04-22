@@ -10,6 +10,7 @@ import {
   Platform,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
@@ -17,6 +18,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import api from '../api';
+import { followUpApi } from '../api/telecaller';
 import { useAppSelector } from '../store';
 import { MainTabParamList, RootStackParamList } from '../types';
 
@@ -121,23 +123,70 @@ const OutcomeCell: React.FC<{
   </LinearGradient>
 );
 
+interface FollowUpSummary {
+  overdue: number;
+  today: number;
+  upcoming: number;
+  totalPending: number;
+}
+
 const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { user } = useAppSelector((state) => state.auth);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [followUpSummary, setFollowUpSummary] = useState<FollowUpSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await api.get('/telecaller/dashboard-stats');
-      setStats(res.data?.data || null);
+      const [statsRes, fuStats] = await Promise.all([
+        api.get('/telecaller/dashboard-stats'),
+        followUpApi.getFollowUpStats().catch(() => null),
+      ]);
+      setStats(statsRes.data?.data || null);
+      if (fuStats) {
+        setFollowUpSummary({
+          overdue: (fuStats as any).overdue || 0,
+          today: (fuStats as any).today || 0,
+          upcoming: (fuStats as any).upcoming || 0,
+          totalPending:
+            ((fuStats as any).overdue || 0) +
+            ((fuStats as any).today || 0) +
+            ((fuStats as any).upcoming || 0),
+        });
+      }
     } catch (err) {
       console.log('[Dashboard] Failed to fetch stats:', err);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleQuickAction = useCallback(
+    (action: 'Import' | 'Assign' | 'Reports' | 'Team' | 'Campaigns' | 'Settings') => {
+      switch (action) {
+        case 'Assign':
+          navigation.navigate('AssignedData' as any);
+          return;
+        case 'Reports':
+          navigation.navigate('Performance' as any);
+          return;
+        case 'Settings':
+          navigation.navigate('Settings' as any);
+          return;
+        case 'Import':
+        case 'Team':
+        case 'Campaigns':
+        default:
+          Alert.alert(
+            `${action}`,
+            `${action} is available on the web dashboard. Sign in at app.myleadx.ai to use this feature.`
+          );
+      }
+    },
+    [navigation]
+  );
 
   useEffect(() => {
     fetchData();
