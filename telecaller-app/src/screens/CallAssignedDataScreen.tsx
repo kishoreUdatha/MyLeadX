@@ -238,112 +238,169 @@ const CallAssignedDataScreen: React.FC = () => {
 
     console.log('[CallAssignedDataScreen] Final recording path:', finalRecordingPath);
 
-    // If we have a recording and call was long enough, upload for AI analysis
+    // Kick off the recording upload in the background so the telecaller does
+    // not have to wait. The backend will process it once it arrives regardless
+    // of which outcome the telecaller selects.
     if (finalRecordingPath && callId && finalDuration > 5) {
       try {
-        setStatusMessage('Uploading recording for AI analysis...');
-        console.log('[CallAssignedDataScreen] Uploading recording to backend...');
-
-        // Try background upload first (works even when app goes to background)
         if (backgroundUploadService.isAvailable()) {
-          console.log('[CallAssignedDataScreen] Using background upload service');
-          const started = await backgroundUploadService.uploadRecording(
-            finalRecordingPath,
-            callId,
-            data.id,
-            finalDuration,
-            {
-              onSuccess: (cid, recordingUrl) => {
+          backgroundUploadService
+            .uploadRecording(finalRecordingPath, callId, data.id, finalDuration, {
+              onSuccess: (_cid, recordingUrl) => {
                 console.log('[CallAssignedDataScreen] Background upload success:', recordingUrl);
               },
-              onError: (cid, error) => {
-                console.warn('[CallAssignedDataScreen] Background upload error:', error);
+              onError: (_cid, err) => {
+                console.warn('[CallAssignedDataScreen] Background upload error:', err);
               },
-              onProgress: (cid, progress) => {
-                console.log('[CallAssignedDataScreen] Background upload progress:', progress + '%');
-              }
-            }
-          );
-
-          if (started) {
-            console.log('[CallAssignedDataScreen] Background upload started - AI analysis will begin soon');
-            setStatusMessage('Recording upload started...');
-
-            // Navigate back - upload continues in background
-            setTimeout(() => {
-              setStatusMessage('Done! Recording uploading in background.');
-              setTimeout(() => navigation.goBack(), 800);
-            }, 1000);
-
-            return;
-          }
+              onProgress: () => {},
+            })
+            .catch(err => console.warn('[CallAssignedDataScreen] Upload start failed:', err));
+        } else {
+          telecallerApi
+            .uploadAssignedDataRecording(data.id, callId, finalRecordingPath, finalDuration)
+            .catch(err => console.warn('[CallAssignedDataScreen] Upload failed:', err));
         }
-
-        // Fallback: use regular upload (blocks until complete)
-        console.log('[CallAssignedDataScreen] Fallback to regular upload');
-        await telecallerApi.uploadAssignedDataRecording(
-          data.id,
-          callId,
-          finalRecordingPath,
-          finalDuration,
-          (progress) => {
-            setStatusMessage(`Uploading... ${progress}%`);
-          }
-        );
-
-        console.log('[CallAssignedDataScreen] Recording uploaded - AI analysis started');
-        setStatusMessage('AI analyzing call...');
-
-        // Give backend a moment to start processing, then go back
-        setTimeout(() => {
-          setStatusMessage('Done! AI will update status shortly.');
-          setTimeout(() => navigation.goBack(), 800);
-        }, 1000);
-
-        return;
       } catch (uploadError: any) {
         console.warn('[CallAssignedDataScreen] Recording upload failed:', uploadError?.message);
-        setStatusMessage('Upload failed, using duration...');
       }
     }
 
-    // Fallback: Duration-based classification (when no recording or upload failed)
-    console.log('[CallAssignedDataScreen] Using duration-based classification');
-    const callAttempts = data.callAttempts || 1;
-    const { assignedDataStatus, callOutcome } = classifyCallOutcome(finalDuration, callAttempts);
-    console.log('[CallAssignedDataScreen] Auto-classified:', { assignedDataStatus, callOutcome });
+    // Save the duration so the modal handlers can include it when finalizing.
+    finalDurationRef.current = finalDuration;
 
-    setStatusMessage(`Setting status: ${assignedDataStatus.replace(/_/g, ' ')}`);
+    // Hand control to the telecaller: show the outcome popup instead of
+    // auto-classifying and bouncing back to the task list.
+    setIsEnding(false);
+    setShowOutcomeModal(true);
+  }, [data.id, callId, recordingPath, stopTimer, getCallDurationFromLog]);
+
+  // --- Outcome-disposition helpers ----------------------------------------
+  // Map the outcome button to (a) the rawImportRecord status the server
+  // validates and (b) the telecallerCall outcome enum.
+  const mapOutcomeToStatuses = (outcome: string): { assignedStatus: string; callOutcome: string } => {
+    switch (outcome) {
+      case 'INTERESTED':
+        return { assignedStatus: 'INTERESTED', callOutcome: 'INTERESTED' };
+      case 'NOT_INTERESTED':
+        return { assignedStatus: 'NOT_INTERESTED', callOutcome: 'NOT_INTERESTED' };
+      case 'CALLBACK':
+        return { assignedStatus: 'CALLBACK_REQUESTED', callOutcome: 'CALLBACK' };
+      case 'CONVERTED':
+        return { assignedStatus: 'INTERESTED', callOutcome: 'CONVERTED' };
+      case 'NO_ANSWER':
+        return { assignedStatus: 'NO_ANSWER', callOutcome: 'NO_ANSWER' };
+      case 'BUSY':
+        return { assignedStatus: 'CALLBACK_REQUESTED', callOutcome: 'BUSY' };
+      case 'WRONG_NUMBER':
+        return { assignedStatus: 'NOT_INTERESTED', callOutcome: 'WRONG_NUMBER' };
+      default:
+        return { assignedStatus: 'CALLBACK_REQUESTED', callOutcome: 'CALLBACK' };
+    }
+  };
+
+  const persistOutcome = async (
+    outcome: string,
+    extraNotes?: string,
+    alsoConvertToLead?: boolean
+  ) => {
+    const { assignedStatus, callOutcome } = mapOutcomeToStatuses(outcome);
+    const notes = [outcomeNotes, extraNotes].filter(Boolean).join(' | ') || undefined;
 
     try {
-      // Update the assigned data status
-      console.log('[CallAssignedDataScreen] Updating assigned data status to:', assignedDataStatus);
-      await telecallerApi.updateAssignedDataStatus(data.id, assignedDataStatus as any);
-      console.log('[CallAssignedDataScreen] Assigned data status updated');
-
-      // Also update the call record with the correct outcome
-      if (callId) {
-        try {
-          console.log('[CallAssignedDataScreen] Updating call record with outcome:', callOutcome);
-          await telecallerApi.updateCall(callId, {
-            outcome: callOutcome as any,
-            duration: finalDuration,
-            status: 'COMPLETED',
-          });
-          console.log('[CallAssignedDataScreen] Call record updated');
-        } catch (err) {
-          console.warn('[CallAssignedDataScreen] Failed to update call record:', err);
-        }
-      }
-
-      setStatusMessage('Done!');
-      setTimeout(() => navigation.goBack(), 500);
-    } catch (error) {
-      console.error('[CallAssignedDataScreen] Failed to update status:', error);
-      setStatusMessage('Update failed');
-      setTimeout(() => navigation.goBack(), 1000);
+      await telecallerApi.updateAssignedDataStatus(data.id, assignedStatus as any, notes);
+    } catch (e) {
+      console.warn('[CallAssignedDataScreen] updateAssignedDataStatus failed:', e);
     }
-  }, [data.id, data.callAttempts, callId, recordingPath, navigation, stopTimer, getCallDurationFromLog]);
+    if (callId) {
+      try {
+        await telecallerApi.updateCall(callId, {
+          outcome: callOutcome as any,
+          duration: finalDurationRef.current,
+          status: 'COMPLETED',
+          notes,
+        } as any);
+      } catch (e) {
+        console.warn('[CallAssignedDataScreen] updateCall failed:', e);
+      }
+    }
+    if (alsoConvertToLead) {
+      try {
+        await telecallerApi.convertToLead(data.id, notes);
+      } catch (e: any) {
+        console.warn('[CallAssignedDataScreen] convertToLead failed:', e?.message || e);
+        Alert.alert(
+          'Lead not created',
+          e?.message || 'Call outcome was saved, but creating the lead failed. You can convert from the assigned data list.'
+        );
+      }
+    }
+  };
+
+  const handleSelectOutcome = async (outcome: string) => {
+    if (outcome === 'CALLBACK' || outcome === 'INTERESTED' || outcome === 'CONVERTED') {
+      setPendingOutcome(outcome);
+      return;
+    }
+    setIsSubmittingOutcome(true);
+    await persistOutcome(outcome);
+    setIsSubmittingOutcome(false);
+    setShowOutcomeModal(false);
+    setPendingOutcome(null);
+    navigation.goBack();
+  };
+
+  const handleConfirmCallback = async () => {
+    if (callbackAt.getTime() <= Date.now()) {
+      Alert.alert('Pick a future time', 'Callback date/time must be in the future.');
+      return;
+    }
+    setIsSubmittingOutcome(true);
+    await persistOutcome('CALLBACK', `Callback scheduled for ${callbackAt.toLocaleString()}`);
+    setIsSubmittingOutcome(false);
+    setShowOutcomeModal(false);
+    setPendingOutcome(null);
+    navigation.goBack();
+  };
+
+  const handleConfirmConvert = async (convertToLead: boolean) => {
+    const outcome = pendingOutcome || 'INTERESTED';
+    setIsSubmittingOutcome(true);
+    await persistOutcome(outcome, undefined, convertToLead);
+    setIsSubmittingOutcome(false);
+    setShowOutcomeModal(false);
+    setPendingOutcome(null);
+    navigation.goBack();
+  };
+
+  const onCallbackDateChange = (_e: any, d?: Date) => {
+    setShowCallbackDatePicker(false);
+    if (d) {
+      const next = new Date(callbackAt);
+      next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+      setCallbackAt(next);
+    }
+  };
+  const onCallbackTimeChange = (_e: any, t?: Date) => {
+    setShowCallbackTimePicker(false);
+    if (t) {
+      const next = new Date(callbackAt);
+      next.setHours(t.getHours(), t.getMinutes(), 0, 0);
+      setCallbackAt(next);
+    }
+  };
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const OUTCOMES = [
+    { value: 'INTERESTED', label: 'Interested', icon: 'thumb-up', color: '#10B981' },
+    { value: 'NOT_INTERESTED', label: 'Not Interested', icon: 'thumb-down', color: '#EF4444' },
+    { value: 'CALLBACK', label: 'Callback', icon: 'phone-return', color: '#F59E0B' },
+    { value: 'CONVERTED', label: 'Converted', icon: 'check-circle', color: '#8B5CF6' },
+    { value: 'NO_ANSWER', label: 'No Answer', icon: 'phone-missed', color: '#6B7280' },
+    { value: 'BUSY', label: 'Busy', icon: 'phone-lock', color: '#6B7280' },
+    { value: 'WRONG_NUMBER', label: 'Wrong Number', icon: 'phone-cancel', color: '#EF4444' },
+  ];
 
   // Handle app state changes
   useEffect(() => {
@@ -645,9 +702,155 @@ const CallAssignedDataScreen: React.FC = () => {
           <Text style={styles.processingText}>{statusMessage}</Text>
         </View>
       )}
+
+      {/* Post-call outcome disposition modal */}
+      <Modal visible={showOutcomeModal} animationType="slide" transparent onRequestClose={() => {}}>
+        <View style={outcomeStyles.overlay}>
+          <View style={outcomeStyles.sheet}>
+            <View style={outcomeStyles.header}>
+              <Text style={outcomeStyles.title}>
+                {pendingOutcome === 'CALLBACK'
+                  ? 'Schedule Callback'
+                  : pendingOutcome === 'CONVERTED'
+                  ? 'Convert to Lead?'
+                  : pendingOutcome === 'INTERESTED'
+                  ? 'Interested — Convert to Lead?'
+                  : 'Call Outcome'}
+              </Text>
+              {pendingOutcome && !isSubmittingOutcome && (
+                <TouchableOpacity onPress={() => setPendingOutcome(null)}>
+                  <Icon name="arrow-left" size={22} color="#6B7280" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView style={outcomeStyles.body}>
+              {isSubmittingOutcome ? (
+                <View style={outcomeStyles.loading}>
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <Text style={outcomeStyles.loadingText}>Saving...</Text>
+                </View>
+              ) : pendingOutcome === 'CALLBACK' ? (
+                <View>
+                  <Text style={outcomeStyles.prompt}>
+                    When should we call {data.firstName || 'the customer'} back?
+                  </Text>
+                  <TouchableOpacity style={outcomeStyles.field} onPress={() => setShowCallbackDatePicker(true)}>
+                    <Icon name="calendar" size={22} color="#3B82F6" />
+                    <View style={outcomeStyles.fieldText}>
+                      <Text style={outcomeStyles.fieldLabel}>Date</Text>
+                      <Text style={outcomeStyles.fieldValue}>{fmtDate(callbackAt)}</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={outcomeStyles.field} onPress={() => setShowCallbackTimePicker(true)}>
+                    <Icon name="clock-outline" size={22} color="#F59E0B" />
+                    <View style={outcomeStyles.fieldText}>
+                      <Text style={outcomeStyles.fieldLabel}>Time</Text>
+                      <Text style={outcomeStyles.fieldValue}>{fmtTime(callbackAt)}</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={outcomeStyles.notes}
+                    placeholder="Notes for the callback (optional)..."
+                    placeholderTextColor="#9CA3AF"
+                    value={outcomeNotes}
+                    onChangeText={setOutcomeNotes}
+                    multiline
+                  />
+                  <TouchableOpacity
+                    style={[outcomeStyles.primaryBtn, { backgroundColor: '#F59E0B' }]}
+                    onPress={handleConfirmCallback}
+                  >
+                    <Text style={outcomeStyles.primaryBtnText}>Confirm Callback</Text>
+                  </TouchableOpacity>
+                  {showCallbackDatePicker && (
+                    <DateTimePicker value={callbackAt} mode="date" minimumDate={new Date()} onChange={onCallbackDateChange} />
+                  )}
+                  {showCallbackTimePicker && (
+                    <DateTimePicker value={callbackAt} mode="time" onChange={onCallbackTimeChange} />
+                  )}
+                </View>
+              ) : pendingOutcome === 'INTERESTED' || pendingOutcome === 'CONVERTED' ? (
+                <View>
+                  <Text style={outcomeStyles.prompt}>
+                    {pendingOutcome === 'CONVERTED'
+                      ? `Create a Lead record for ${data.firstName || 'this contact'}?`
+                      : `${data.firstName || 'This contact'} is interested. Convert to a Lead now so a counselor can follow up?`}
+                  </Text>
+                  <TextInput
+                    style={outcomeStyles.notes}
+                    placeholder="Conversion notes (optional)..."
+                    placeholderTextColor="#9CA3AF"
+                    value={outcomeNotes}
+                    onChangeText={setOutcomeNotes}
+                    multiline
+                  />
+                  <TouchableOpacity
+                    style={[outcomeStyles.primaryBtn, { backgroundColor: '#10B981' }]}
+                    onPress={() => handleConfirmConvert(true)}
+                  >
+                    <Text style={outcomeStyles.primaryBtnText}>Yes, Convert to Lead</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={outcomeStyles.secondaryBtn}
+                    onPress={() => handleConfirmConvert(false)}
+                  >
+                    <Text style={outcomeStyles.secondaryBtnText}>Save outcome only</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <Text style={outcomeStyles.prompt}>How did the call go?</Text>
+                  {OUTCOMES.map(item => (
+                    <TouchableOpacity
+                      key={item.value}
+                      style={outcomeStyles.outcomeRow}
+                      onPress={() => handleSelectOutcome(item.value)}
+                    >
+                      <Icon name={item.icon} size={24} color={item.color} />
+                      <Text style={outcomeStyles.outcomeLabel}>{item.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TextInput
+                    style={outcomeStyles.notes}
+                    placeholder="Add notes (optional)..."
+                    placeholderTextColor="#9CA3AF"
+                    value={outcomeNotes}
+                    onChangeText={setOutcomeNotes}
+                    multiline
+                  />
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
+
+const outcomeStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%', paddingBottom: 24 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  title: { fontSize: 18, fontWeight: '600', color: '#1F2937' },
+  body: { paddingHorizontal: 20, paddingTop: 12 },
+  prompt: { fontSize: 14, color: '#6B7280', marginBottom: 12 },
+  loading: { alignItems: 'center', padding: 30 },
+  loadingText: { fontSize: 14, color: '#6B7280', marginTop: 12 },
+  field: { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 10, backgroundColor: '#F9FAFB', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' },
+  fieldText: { marginLeft: 12, flex: 1 },
+  fieldLabel: { fontSize: 12, color: '#6B7280' },
+  fieldValue: { fontSize: 16, color: '#1F2937', fontWeight: '500' },
+  notes: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, marginTop: 4, marginBottom: 12, fontSize: 14, color: '#1F2937', minHeight: 60, textAlignVertical: 'top' },
+  primaryBtn: { padding: 14, borderRadius: 10, alignItems: 'center', marginBottom: 8 },
+  primaryBtnText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  secondaryBtn: { padding: 14, backgroundColor: '#F3F4F6', borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  secondaryBtnText: { fontSize: 15, fontWeight: '500', color: '#374151' },
+  outcomeRow: { flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' },
+  outcomeLabel: { fontSize: 16, fontWeight: '500', color: '#1F2937', marginLeft: 12 },
+});
 
 const styles = StyleSheet.create({
   container: {
