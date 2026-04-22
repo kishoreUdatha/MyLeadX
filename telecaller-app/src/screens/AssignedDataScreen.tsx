@@ -14,8 +14,9 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { telecallerApi } from '../api/telecaller';
-import { AssignedData, AssignedDataStats, RootStackParamList } from '../types';
+import { AssignedData, AssignedDataStats, RootStackParamList, STORAGE_KEYS, isTeamLeadOrAbove } from '../types';
 import DateRangeFilter, { DateRangeType } from '../components/DateRangeFilter';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -73,6 +74,26 @@ const AssignedDataScreen: React.FC = () => {
     startDate: null,
     endDate: null,
   });
+  const [userRole, setUserRole] = useState<string>('telecaller');
+  const [showTeamTasks, setShowTeamTasks] = useState(false);
+
+  const isTeamLead = isTeamLeadOrAbove(userRole);
+
+  // Load user role on mount
+  useEffect(() => {
+    const loadRole = async () => {
+      try {
+        const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
+        if (userData) {
+          const user = JSON.parse(userData);
+          setUserRole(user.role || 'telecaller');
+        }
+      } catch (e) {
+        console.log('[AssignedDataScreen] Error loading role:', e);
+      }
+    };
+    loadRole();
+  }, []);
 
   const newCount =
     stats?.new ?? ((stats?.pending || 0) + (stats?.assigned || 0) + (stats?.calling || 0));
@@ -246,6 +267,30 @@ const AssignedDataScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#FFF" barStyle="dark-content" />
+
+      {/* Team Toggle for Team Leads */}
+      {isTeamLead && (
+        <View style={styles.teamToggleContainer}>
+          <TouchableOpacity
+            style={[styles.teamToggleBtn, !showTeamTasks && styles.teamToggleBtnActive]}
+            onPress={() => setShowTeamTasks(false)}
+          >
+            <Icon name="account" size={16} color={!showTeamTasks ? '#FFFFFF' : '#6B7280'} />
+            <Text style={[styles.teamToggleText, !showTeamTasks && styles.teamToggleTextActive]}>
+              My Tasks
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.teamToggleBtn, showTeamTasks && styles.teamToggleBtnActive]}
+            onPress={() => setShowTeamTasks(true)}
+          >
+            <Icon name="account-group" size={16} color={showTeamTasks ? '#FFFFFF' : '#6B7280'} />
+            <Text style={[styles.teamToggleText, showTeamTasks && styles.teamToggleTextActive]}>
+              Team Tasks
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Date Range Filter */}
       <DateRangeFilter
@@ -495,6 +540,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9CA3AF',
     marginTop: 4,
+  },
+  // Team Toggle Styles
+  teamToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  teamToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    gap: 6,
+  },
+  teamToggleBtnActive: {
+    backgroundColor: '#4F46E5',
+  },
+  teamToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  teamToggleTextActive: {
+    color: '#FFFFFF',
   },
 });
 

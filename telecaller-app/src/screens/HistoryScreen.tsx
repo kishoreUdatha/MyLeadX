@@ -23,9 +23,11 @@ import {
   getOutcomeColor,
   formatPhoneNumber,
 } from '../utils/formatters';
-import { Call, CallOutcome, RootStackParamList } from '../types';
+import { Call, CallOutcome, RootStackParamList, isTeamLeadOrAbove } from '../types';
 import DateRangeFilter, { DateRangeType } from '../components/DateRangeFilter';
 import ConversationTranscript from '../components/ConversationTranscript';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -271,6 +273,26 @@ const HistoryScreen: React.FC = () => {
     startDate: null,
     endDate: null,
   });
+  const [userRole, setUserRole] = useState<string>('telecaller');
+  const [showTeamCalls, setShowTeamCalls] = useState(false);
+
+  const isTeamLead = isTeamLeadOrAbove(userRole);
+
+  // Load user role
+  useEffect(() => {
+    const loadRole = async () => {
+      try {
+        const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
+        if (userData) {
+          const user = JSON.parse(userData);
+          setUserRole(user.role || 'telecaller');
+        }
+      } catch (e) {
+        console.log('[HistoryScreen] Error loading role:', e);
+      }
+    };
+    loadRole();
+  }, []);
 
   const hasInitializedRef = useRef(false);
   const isLoadingRef = useRef(false);
@@ -475,6 +497,30 @@ const HistoryScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {/* Team Toggle for Team Leads */}
+      {isTeamLead && (
+        <View style={styles.teamToggleContainer}>
+          <TouchableOpacity
+            style={[styles.teamToggleBtn, !showTeamCalls && styles.teamToggleBtnActive]}
+            onPress={() => setShowTeamCalls(false)}
+          >
+            <Icon name="account" size={16} color={!showTeamCalls ? '#FFFFFF' : '#6B7280'} />
+            <Text style={[styles.teamToggleText, !showTeamCalls && styles.teamToggleTextActive]}>
+              My Calls
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.teamToggleBtn, showTeamCalls && styles.teamToggleBtnActive]}
+            onPress={() => setShowTeamCalls(true)}
+          >
+            <Icon name="account-group" size={16} color={showTeamCalls ? '#FFFFFF' : '#6B7280'} />
+            <Text style={[styles.teamToggleText, showTeamCalls && styles.teamToggleTextActive]}>
+              Team Calls
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Date Range Filter */}
       <DateRangeFilter
         selectedRange={dateRange}
@@ -752,6 +798,37 @@ const styles = StyleSheet.create({
   footer: {
     paddingVertical: 16,
     alignItems: 'center',
+  },
+  // Team Toggle Styles
+  teamToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  teamToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    gap: 6,
+  },
+  teamToggleBtnActive: {
+    backgroundColor: '#4F46E5',
+  },
+  teamToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  teamToggleTextActive: {
+    color: '#FFFFFF',
   },
 });
 

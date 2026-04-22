@@ -18,8 +18,9 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useLeads } from '../hooks/useLeads';
 import { useCallRecording } from '../hooks/useCallRecording';
 import LeadCard from '../components/LeadCard';
-import { Lead, LeadStatus, RootStackParamList } from '../types';
+import { Lead, LeadStatus, RootStackParamList, STORAGE_KEYS, isTeamLeadOrAbove } from '../types';
 import DateRangeFilter, { DateRangeType } from '../components/DateRangeFilter';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -89,9 +90,29 @@ const LeadsScreen: React.FC = () => {
     startDate: null,
     endDate: null,
   });
+  const [userRole, setUserRole] = useState<string>('telecaller');
+  const [showTeamLeads, setShowTeamLeads] = useState(false);
   const isLoadingRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const lastLoadTimeRef = useRef(0);
+
+  const isTeamLead = isTeamLeadOrAbove(userRole);
+
+  // Load user role
+  useEffect(() => {
+    const loadRole = async () => {
+      try {
+        const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
+        if (userData) {
+          const user = JSON.parse(userData);
+          setUserRole(user.role || 'telecaller');
+        }
+      } catch (e) {
+        console.log('[LeadsScreen] Error loading role:', e);
+      }
+    };
+    loadRole();
+  }, []);
 
   useEffect(() => {
     // Only load once on mount
@@ -278,6 +299,30 @@ const LeadsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {/* Team Toggle for Team Leads */}
+      {isTeamLead && (
+        <View style={styles.teamToggleContainer}>
+          <TouchableOpacity
+            style={[styles.teamToggleBtn, !showTeamLeads && styles.teamToggleBtnActive]}
+            onPress={() => setShowTeamLeads(false)}
+          >
+            <Icon name="account" size={16} color={!showTeamLeads ? '#FFFFFF' : '#6B7280'} />
+            <Text style={[styles.teamToggleText, !showTeamLeads && styles.teamToggleTextActive]}>
+              My Leads
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.teamToggleBtn, showTeamLeads && styles.teamToggleBtnActive]}
+            onPress={() => setShowTeamLeads(true)}
+          >
+            <Icon name="account-group" size={16} color={showTeamLeads ? '#FFFFFF' : '#6B7280'} />
+            <Text style={[styles.teamToggleText, showTeamLeads && styles.teamToggleTextActive]}>
+              Team Leads
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Date Range Filter */}
       <DateRangeFilter
         selectedRange={dateRange}
@@ -497,6 +542,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 8,
+  },
+  // Team Toggle Styles
+  teamToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  teamToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    gap: 6,
+  },
+  teamToggleBtnActive: {
+    backgroundColor: '#4F46E5',
+  },
+  teamToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  teamToggleTextActive: {
+    color: '#FFFFFF',
   },
 });
 
