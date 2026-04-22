@@ -127,15 +127,19 @@ const AssignedDataScreen: React.FC = () => {
       filtered = filtered.filter(r => r.status === tabKey);
     }
 
-    // Filter by date range (use assignedAt as primary date, fallback to lastCallAt)
+    // Filter by date range. Include a record if EITHER its last-call activity OR
+    // its assignment date falls in range, so "Today" correctly shows records the
+    // telecaller called today even when the record was assigned earlier.
     const dates = getDateRange(dateRange, customDates);
     if (dates) {
+      const inRange = (value?: string | null) => {
+        if (!value) return false;
+        const d = new Date(value);
+        return d >= dates.startDate && d <= dates.endDate;
+      };
       filtered = filtered.filter(r => {
-        // Use assignedAt for filtering (when the record was assigned to telecaller)
-        const dateStr = r.assignedAt || r.lastCallAt;
-        if (!dateStr) return true; // Include records without date (shouldn't happen)
-        const recordDate = new Date(dateStr);
-        return recordDate >= dates.startDate && recordDate <= dates.endDate;
+        if (!r.assignedAt && !r.lastCallAt) return true; // Keep records with no dates (shouldn't happen)
+        return inRange(r.lastCallAt) || inRange(r.assignedAt);
       });
     }
 

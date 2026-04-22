@@ -340,11 +340,22 @@ const CallAssignedDataScreen: React.FC = () => {
       try {
         await telecallerApi.convertToLead(data.id, notes);
       } catch (e: any) {
-        console.warn('[CallAssignedDataScreen] convertToLead failed:', e?.message || e);
-        Alert.alert(
-          'Lead not created',
-          e?.message || 'Call outcome was saved, but creating the lead failed. You can convert from the assigned data list.'
-        );
+        const message = (e?.message || '').toString();
+        // AI auto-conversion may already have created the Lead from this record.
+        // That's a success from the telecaller's POV — just inform them.
+        if (/already converted|not found or already/i.test(message)) {
+          console.log('[CallAssignedDataScreen] Record already converted to Lead — skipping re-convert.');
+          Alert.alert(
+            'Already a Lead',
+            'This contact is already in your Leads list (auto-converted from the call).'
+          );
+        } else {
+          console.warn('[CallAssignedDataScreen] convertToLead failed:', message || e);
+          Alert.alert(
+            'Lead not created',
+            message || 'Call outcome was saved, but creating the lead failed. You can convert from the assigned data list.'
+          );
+        }
       }
     }
   };

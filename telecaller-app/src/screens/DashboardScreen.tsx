@@ -18,7 +18,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import api from '../api';
-import { followUpApi, workSessionApi } from '../api/telecaller';
+import { followUpApi } from '../api/telecaller';
 import { useAppSelector } from '../store';
 import { MainTabParamList, RootStackParamList } from '../types';
 
@@ -137,10 +137,6 @@ const DashboardScreen: React.FC = () => {
   const [followUpSummary, setFollowUpSummary] = useState<FollowUpSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [onBreak, setOnBreak] = useState(false);
-  const [breakStartTime, setBreakStartTime] = useState<Date | null>(null);
-  const [breakDuration, setBreakDuration] = useState(0);
-  const [breakLoading, setBreakLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -192,65 +188,11 @@ const DashboardScreen: React.FC = () => {
     [navigation]
   );
 
-  const fetchSessionStatus = useCallback(async () => {
-    try {
-      const session = await workSessionApi.getCurrentSession();
-      if (session?.status === 'ON_BREAK') {
-        setOnBreak(true);
-        // Find active break (no endTime)
-        const activeBreak = session.breaks?.find((b) => !b.endTime);
-        if (activeBreak?.startTime) {
-          setBreakStartTime(new Date(activeBreak.startTime));
-        }
-      } else {
-        setOnBreak(false);
-        setBreakStartTime(null);
-        setBreakDuration(0);
-      }
-    } catch (err) {
-      console.log('[Dashboard] Failed to fetch session status:', err);
-    }
-  }, []);
-
-  const toggleBreak = useCallback(async () => {
-    if (breakLoading) return;
-    setBreakLoading(true);
-    try {
-      if (onBreak) {
-        await workSessionApi.endBreak();
-        setOnBreak(false);
-        setBreakStartTime(null);
-        setBreakDuration(0);
-      } else {
-        const breakRecord = await workSessionApi.startBreak('BREAK', 'Taking a break');
-        setOnBreak(true);
-        setBreakStartTime(new Date(breakRecord.startTime));
-      }
-    } catch (err: any) {
-      console.log('[Dashboard] Failed to toggle break:', err);
-    } finally {
-      setBreakLoading(false);
-    }
-  }, [onBreak, breakLoading]);
-
   useEffect(() => {
     fetchData();
-    fetchSessionStatus();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, [fetchData, fetchSessionStatus]);
-
-  // Update break duration every second when on break
-  useEffect(() => {
-    if (!onBreak || !breakStartTime) return;
-    const updateDuration = () => {
-      const elapsed = Math.floor((Date.now() - breakStartTime.getTime()) / 1000);
-      setBreakDuration(elapsed);
-    };
-    updateDuration();
-    const interval = setInterval(updateDuration, 1000);
-    return () => clearInterval(interval);
-  }, [onBreak, breakStartTime]);
+  }, [fetchData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -260,15 +202,9 @@ const DashboardScreen: React.FC = () => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchData(), fetchSessionStatus()]);
+    await fetchData();
     setRefreshing(false);
-  }, [fetchData, fetchSessionStatus]);
-
-  const formatBreakDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, [fetchData]);
 
   const firstName = user?.firstName
     ? user.firstName.charAt(0).toUpperCase() + user.firstName.slice(1).toLowerCase()
@@ -306,44 +242,15 @@ const DashboardScreen: React.FC = () => {
             </Text>
             <View style={styles.headerMeta}>
               <Text style={styles.headerDate}>{formatDate(new Date())}</Text>
-              {onBreak ? (
-                <View style={styles.breakBadge}>
-                  <Icon name="coffee" size={12} color="#DC2626" />
-                  <Text style={styles.breakText}>On Break {formatBreakDuration(breakDuration)}</Text>
-                </View>
-              ) : (
-                <View style={styles.liveBadge}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.liveText}>Live</Text>
-                </View>
-              )}
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>Live</Text>
+              </View>
             </View>
           </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              onPress={toggleBreak}
-              disabled={breakLoading}
-              style={[styles.breakBtn, onBreak && styles.breakBtnActive]}
-            >
-              {breakLoading ? (
-                <ActivityIndicator size="small" color={onBreak ? '#FFFFFF' : '#F59E0B'} />
-              ) : (
-                <>
-                  <Icon
-                    name={onBreak ? 'play' : 'coffee'}
-                    size={16}
-                    color={onBreak ? '#FFFFFF' : '#F59E0B'}
-                  />
-                  <Text style={[styles.breakBtnText, onBreak && styles.breakBtnTextActive]}>
-                    {onBreak ? 'Resume' : 'Break'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
-              <Icon name="refresh" size={20} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+            <Icon name="refresh" size={20} color="#6B7280" />
+          </TouchableOpacity>
         </View>
 
         {loading && !stats ? (

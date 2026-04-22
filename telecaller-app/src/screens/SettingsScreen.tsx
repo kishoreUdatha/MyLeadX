@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,16 @@ import {
   Switch,
   Alert,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../hooks/useAuth';
 import { getInitials } from '../utils/formatters';
 import { openAppSettings } from '../utils/permissions';
 import { RootStackParamList } from '../types';
+import { workSessionApi } from '../api/telecaller';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -62,6 +64,100 @@ const SettingsScreen: React.FC = () => {
   const { user, logout } = useAuth();
 
   const [highQualityRecording, setHighQualityRecording] = useState(false);
+
+  // --- Break tracking ------------------------------------------------------
+  const [onBreak, setOnBreak] = useState(false);
+  const [breakStartTime, setBreakStartTime] = useState<Date | null>(null);
+  const [breakDuration, setBreakDuration] = useState(0);
+  const [breakLoading, setBreakLoading] = useState(false);
+
+  // Backend uses Prisma column names `startedAt` / `endedAt`; older call sites
+  // read `startTime` / `endTime`. Accept both so we never produce Invalid Date.
+  const parseBreakStart = (b: any): Date | null => {
+    const raw = b?.startedAt || b?.startTime;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const parseBreakEnd = (b: any) => b?.endedAt ?? b?.endTime ?? null;
+
+  const formatBreakDuration = (seconds: number) => {
+    if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const ensureActiveSession = useCallback(async () => {
+    try {
+      const existing = await workSessionApi.getCurrentSession();
+      if (existing && (existing.status === 'ACTIVE' || existing.status === 'ON_BREAK')) {
+        return existing;
+      }
+      return await workSessionApi.startSession();
+    } catch (err) {
+      console.log('[Settings] ensureActiveSession failed:', err);
+      return null;
+    }
+  }, []);
+
+  const fetchSessionStatus = useCallback(async () => {
+    try {
+      const session = await ensureActiveSession();
+      if (session?.status === 'ON_BREAK') {
+        setOnBreak(true);
+        const activeBreak = session.breaks?.find((b: any) => !parseBreakEnd(b));
+        setBreakStartTime(activeBreak ? parseBreakStart(activeBreak) : null);
+      } else {
+        setOnBreak(false);
+        setBreakStartTime(null);
+        setBreakDuration(0);
+      }
+    } catch (err) {
+      console.log('[Settings] Failed to fetch session status:', err);
+    }
+  }, [ensureActiveSession]);
+
+  const toggleBreak = useCallback(async () => {
+    if (breakLoading) return;
+    setBreakLoading(true);
+    try {
+      await ensureActiveSession();
+      if (onBreak) {
+        await workSessionApi.endBreak();
+        setOnBreak(false);
+        setBreakStartTime(null);
+        setBreakDuration(0);
+      } else {
+        // Backend BreakType enum: SHORT | LUNCH | MEETING | PERSONAL | OTHER
+        const breakRecord = await workSessionApi.startBreak('SHORT', 'Taking a break');
+        setOnBreak(true);
+        setBreakStartTime(parseBreakStart(breakRecord) ?? new Date());
+      }
+    } catch (err: any) {
+      console.log('[Settings] Failed to toggle break:', err?.message || err);
+      Alert.alert('Break not updated', err?.message || 'Could not update break status. Try again.');
+    } finally {
+      setBreakLoading(false);
+    }
+  }, [onBreak, breakLoading, ensureActiveSession]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSessionStatus();
+    }, [fetchSessionStatus])
+  );
+
+  useEffect(() => {
+    if (!onBreak || !breakStartTime) return;
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - breakStartTime.getTime()) / 1000);
+      setBreakDuration(elapsed);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [onBreak, breakStartTime]);
 
   const handleLogout = useCallback(() => {
     Alert.alert(
@@ -201,6 +297,31 @@ const SettingsScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Break toggle — lives right above Logout per the mobile workflow */}
+      <TouchableOpacity
+        style={[styles.breakButton, onBreak && styles.breakButtonActive]}
+        onPress={toggleBreak}
+        disabled={breakLoading}
+        activeOpacity={0.7}
+      >
+        {breakLoading ? (
+          <ActivityIndicator size="small" color={onBreak ? '#FFFFFF' : '#F59E0B'} />
+        ) : (
+          <>
+            <Icon
+              name={onBreak ? 'play-circle' : 'coffee'}
+              size={20}
+              color={onBreak ? '#FFFFFF' : '#F59E0B'}
+            />
+            <Text style={[styles.breakButtonText, onBreak && styles.breakButtonTextActive]}>
+              {onBreak
+                ? `Resume Work  ·  ${formatBreakDuration(breakDuration)}`
+                : 'Take a Break'}
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+
       {/* Logout */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Icon name="logout" size={20} color="#EF4444" />
@@ -310,12 +431,37 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 2,
   },
+  breakButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+    marginTop: 24,
+    marginHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  breakButtonActive: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#D97706',
+  },
+  breakButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#B45309',
+    marginLeft: 8,
+  },
+  breakButtonTextActive: {
+    color: '#FFFFFF',
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    marginTop: 24,
+    marginTop: 12,
     marginHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 12,

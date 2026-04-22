@@ -237,8 +237,15 @@ const CallSummaryScreen: React.FC = () => {
     [isPlaying, recordingFullUrl, startPositionPolling]
   );
 
-  const fmtTime = (s: number) =>
-    `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const fmtTime = (s: number) => {
+    // Native player returns fractional seconds (e.g. 3.456). Floor before
+    // the modulo so the "seconds" part is always an integer and the output
+    // stays in clean M:SS form instead of "0:3.456".
+    const total = Math.max(0, Math.floor(Number.isFinite(s) ? s : 0));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // ===== Loading state =====
   if (loading && !a) {

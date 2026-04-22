@@ -852,9 +852,14 @@ export const followUpApi = {
 
 // ==================== WORK SESSION & BREAKS ====================
 
+// Backend sends Prisma field names: startedAt / endedAt. The optional
+// startTime / endTime aliases keep older call sites compiling while we
+// migrate them to the canonical names.
 export interface UserBreak {
   id: string;
-  startTime: string;
+  startedAt: string;
+  endedAt?: string;
+  startTime?: string;
   endTime?: string;
   breakType?: string;
   reason?: string;
@@ -864,7 +869,9 @@ export interface UserBreak {
 export interface WorkSession {
   id: string;
   status: 'ACTIVE' | 'ENDED' | 'ON_BREAK';
-  startTime: string;
+  startedAt: string;
+  endedAt?: string;
+  startTime?: string;
   endTime?: string;
   breaks?: UserBreak[];
 }
@@ -879,6 +886,20 @@ export const workSessionApi = {
       return response.data.data;
     } catch (error) {
       console.error('[WorkSessionAPI] Error getting current session:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Start a new work session. No-op on the server if one is already active
+   * (the route is additive) — always safe to call on dashboard mount.
+   */
+  startSession: async (metadata?: Record<string, any>): Promise<WorkSession | null> => {
+    try {
+      const response = await api.post<ApiResponse<WorkSession>>('/work-sessions/start', { metadata });
+      return response.data.data;
+    } catch (error) {
+      console.error('[WorkSessionAPI] Error starting session:', error);
       return null;
     }
   },
