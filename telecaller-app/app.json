@@ -1,8 +1,8 @@
 {
   "name": "TelecallerAppTemp",
-  "displayName": "Telecaller CRM",
+  "displayName": "MyLeadX",
   "expo": {
-    "name": "Telecaller CRM",
+    "name": "MyLeadX",
     "slug": "telecaller-app",
     "version": "1.0.0",
     "orientation": "portrait",
