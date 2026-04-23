@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Clean rounded background -->
+  <rect width="512" height="512" rx="108" fill="url(#purpleGrad)"/>
+
+  <!-- Simple M shape -->
+  <path d="M110 390 L110 150 L180 150 L256 270 L332 150 L402 150 L402 390 L340 390 L340 250 L280 340 L232 340 L172 250 L172 390 Z"
+        fill="white"/>
+
+  <!-- X mark in green -->
+  <circle cx="400" cy="120" r="55" fill="#10B981"/>
+  <path d="M375 95 L425 145 M425 95 L375 145"
+        stroke="white" stroke-width="16" stroke-linecap="round" fill="none"/>
+</svg>

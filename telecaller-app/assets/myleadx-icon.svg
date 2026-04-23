@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded Square Background -->
+  <rect x="0" y="0" width="512" height="512" rx="100" fill="url(#bg)"/>
+
+  <!-- M Letter Stylized -->
+  <path d="M120 380 L120 180 L200 280 L256 200 L312 280 L392 180 L392 380 L340 380 L340 280 L280 360 L232 360 L172 280 L172 380 Z"
+        fill="#FFFFFF"/>
+
+  <!-- X Accent -->
+  <path d="M350 120 L410 180 M410 120 L350 180"
+        fill="none" stroke="#10B981" stroke-width="20" stroke-linecap="round"/>
+</svg>

@@ -24,9 +24,11 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         <div className="relative z-10 flex flex-col justify-center px-12 lg:px-16 xl:px-24">
           {/* Logo */}
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/25">
-              <SparklesIcon className="w-7 h-7 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="MyLeadX"
+              className="w-12 h-12 rounded-2xl shadow-lg shadow-primary-500/25"
+            />
             <span className="text-2xl font-bold text-white">MyLeadX</span>
           </div>
 
@@ -70,9 +72,11 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         <div className="w-full max-w-md mx-auto">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/25">
-              <SparklesIcon className="w-6 h-6 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="MyLeadX"
+              className="w-10 h-10 rounded-xl shadow-lg shadow-primary-500/25"
+            />
             <span className="text-xl font-bold text-slate-900">MyLeadX</span>
           </div>
 
