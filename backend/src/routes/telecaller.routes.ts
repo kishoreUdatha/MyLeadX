@@ -1508,9 +1508,13 @@ router.get('/calls/:id/summary', async (req: TenantRequest, res: Response) => {
 router.post('/calls', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
+    const userRole = req.user!.roleSlug;
     const { leadId, phoneNumber, contactName, callType } = req.body;
 
+    console.log(`[Telecaller/Calls] POST /calls - User: ${req.user!.email}, Role: ${userRole}, LeadId: ${leadId}, Phone: ${phoneNumber}`);
+
     if (!phoneNumber) {
+      console.log(`[Telecaller/Calls] ERROR: Phone number is required`);
       return ApiResponse.error(res, 'Phone number is required', 400);
     }
 
@@ -1521,6 +1525,7 @@ router.post('/calls', async (req: TenantRequest, res: Response) => {
       : 'OUTBOUND';
 
     // Create call record
+    console.log(`[Telecaller/Calls] Creating call record for user ${userId}...`);
     const call = await prisma.telecallerCall.create({
       data: {
         organizationId: req.organization!.id,
@@ -1533,6 +1538,7 @@ router.post('/calls', async (req: TenantRequest, res: Response) => {
         startedAt: new Date(),
       },
     });
+    console.log(`[Telecaller/Calls] Call created successfully: ${call.id}`);
 
     // Log activity on lead if exists
     if (leadId) {
@@ -1549,6 +1555,7 @@ router.post('/calls', async (req: TenantRequest, res: Response) => {
 
     ApiResponse.success(res, 'Call initiated', call, 201);
   } catch (error) {
+    console.error(`[Telecaller/Calls] ERROR creating call:`, error);
     ApiResponse.error(res, (error as Error).message, 500);
   }
 });
