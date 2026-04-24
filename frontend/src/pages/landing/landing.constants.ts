@@ -211,9 +211,9 @@ export const FOOTER_SECTIONS: FooterSection[] = [
   {
     title: 'Legal',
     links: [
-      { label: 'Privacy Policy', href: '#' },
-      { label: 'Terms of Service', href: '#' },
-      { label: 'TRAI Compliance', href: '#' },
+      { label: 'Privacy Policy', href: '/privacy-policy.html' },
+      { label: 'Terms of Service', href: '/terms-of-service.html' },
+      { label: 'TRAI Compliance', href: '/privacy-policy.html#compliance' },
     ],
   },
 ];

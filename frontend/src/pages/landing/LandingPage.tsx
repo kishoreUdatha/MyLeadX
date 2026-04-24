@@ -13,6 +13,7 @@ import {
   TestimonialsSection,
   SecuritySection,
   PricingPreviewSection,
+  MobileAppSection,
   CTASection,
   Footer,
 } from './components';
@@ -39,6 +40,7 @@ export default function LandingPage() {
       <TestimonialsSection />
       <SecuritySection />
       <PricingPreviewSection tiers={PRICING_TIERS} />
+      <MobileAppSection />
       <CTASection />
       <Footer sections={FOOTER_SECTIONS} />
     </div>

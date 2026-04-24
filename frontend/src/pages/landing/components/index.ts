@@ -13,6 +13,7 @@ export {
   TestimonialsSection,
   SecuritySection,
   PricingPreviewSection,
+  MobileAppSection,
   CTASection,
   Footer,
 } from './LandingComponents';

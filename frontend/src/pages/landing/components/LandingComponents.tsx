@@ -661,6 +661,144 @@ export const PricingPreviewSection: React.FC<PricingPreviewSectionProps> = ({ ti
   </section>
 );
 
+// Mobile App Section
+export const MobileAppSection: React.FC = () => (
+  <section className="py-24 bg-gradient-to-br from-violet-50 via-indigo-50 to-purple-50">
+    <div className="max-w-7xl mx-auto px-6">
+      <div className="grid lg:grid-cols-2 gap-16 items-center">
+        {/* Content */}
+        <div>
+          <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-700 px-4 py-2 rounded-full text-sm font-semibold mb-6">
+            <Phone className="w-4 h-4" />
+            Telecaller App
+          </div>
+          <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-6">
+            Empower your team with <br />
+            <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">MyLeadX Mobile</span>
+          </h2>
+          <p className="text-xl text-slate-600 mb-8 leading-relaxed">
+            Give your telecallers a dedicated app for managing leads, making calls, and tracking performance - all from their mobile device.
+          </p>
+
+          <ul className="space-y-4 mb-10">
+            {[
+              'One-tap calling with auto-duration tracking',
+              'Smart lead queue with priority sorting',
+              'Call outcome logging with notes',
+              'Callback scheduling & reminders',
+              'Offline support - sync when online',
+              'Real-time performance dashboard',
+            ].map((feature, idx) => (
+              <li key={idx} className="flex items-center gap-3 text-slate-700">
+                <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex items-center justify-center">
+                  <Check className="w-4 h-4 text-white" />
+                </div>
+                {feature}
+              </li>
+            ))}
+          </ul>
+
+          {/* Download Button */}
+          <a
+            href="https://play.google.com/store/apps/details?id=com.crmleads.telecaller"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-4 bg-slate-900 text-white px-8 py-4 rounded-2xl hover:bg-slate-800 transition-colors shadow-xl"
+          >
+            <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current">
+              <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.198l2.807 1.626a1 1 0 010 1.73l-2.808 1.626L15.206 12l2.492-2.491zM5.864 2.658L16.8 8.99l-2.302 2.302-8.634-8.634z"/>
+            </svg>
+            <div className="text-left">
+              <div className="text-xs text-slate-400 uppercase tracking-wider">Get it on</div>
+              <div className="text-xl font-bold">Google Play</div>
+            </div>
+          </a>
+        </div>
+
+        {/* Phone Mockup */}
+        <div className="relative flex justify-center">
+          <div className="relative">
+            {/* Phone Frame */}
+            <div className="w-72 h-[580px] bg-slate-900 rounded-[3rem] p-3 shadow-2xl shadow-violet-500/20">
+              <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
+                {/* Status Bar */}
+                <div className="h-12 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">12:00</span>
+                </div>
+
+                {/* App Header */}
+                <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-6 text-white">
+                  <h3 className="text-xl font-bold">Good Morning, Rahul</h3>
+                  <p className="text-violet-200 text-sm">Today's Statistics</p>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="p-4 grid grid-cols-2 gap-3">
+                  <div className="bg-violet-600 rounded-2xl p-4 text-center text-white">
+                    <div className="text-2xl font-bold">24</div>
+                    <div className="text-xs text-violet-200">LEADS</div>
+                  </div>
+                  <div className="bg-emerald-500 rounded-2xl p-4 text-center text-white">
+                    <div className="text-2xl font-bold">18</div>
+                    <div className="text-xs text-emerald-200">CALLS</div>
+                  </div>
+                  <div className="bg-amber-500 rounded-2xl p-4 text-center text-white">
+                    <div className="text-2xl font-bold">5</div>
+                    <div className="text-xs text-amber-200">CALLBACKS</div>
+                  </div>
+                  <div className="bg-purple-600 rounded-2xl p-4 text-center text-white">
+                    <div className="text-2xl font-bold">67%</div>
+                    <div className="text-xs text-purple-200">CONV.</div>
+                  </div>
+                </div>
+
+                {/* Lead Preview */}
+                <div className="px-4">
+                  <p className="text-sm font-bold text-slate-800 mb-3">Recent Leads</p>
+                  <div className="space-y-3">
+                    <div className="bg-slate-100 rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 bg-violet-600 rounded-full flex items-center justify-center text-white font-bold">R</div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-800">Rajesh Kumar</p>
+                        <p className="text-xs text-slate-500">+91 98765...</p>
+                      </div>
+                      <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
+                        <Phone className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                    <div className="bg-slate-100 rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold">P</div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-800">Priya Sharma</p>
+                        <p className="text-xs text-slate-500">+91 87654...</p>
+                      </div>
+                      <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
+                        <Phone className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Nav */}
+                <div className="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex justify-around items-center px-6">
+                  <div className="w-10 h-10 bg-violet-600 rounded-xl"></div>
+                  <div className="w-10 h-10 bg-slate-200 rounded-xl"></div>
+                  <div className="w-10 h-10 bg-slate-200 rounded-xl"></div>
+                  <div className="w-10 h-10 bg-slate-200 rounded-xl"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Decorative Elements */}
+            <div className="absolute -top-8 -right-8 w-24 h-24 bg-gradient-to-br from-violet-400 to-indigo-400 rounded-full blur-2xl opacity-60"></div>
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full blur-2xl opacity-40"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
 // CTA Section
 export const CTASection: React.FC = () => (
   <section className="py-24 bg-white">
@@ -725,15 +863,33 @@ export const Footer: React.FC<FooterProps> = ({ sections }) => (
             The AI-powered platform for enterprise lead conversion. Transform your sales today.
           </p>
           <div className="flex gap-3">
-            {['T', 'L', 'Y'].map((letter, i) => (
-              <a
-                key={i}
-                href="#"
-                className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-sm font-bold hover:bg-violet-600 transition-colors"
-              >
-                {letter}
-              </a>
-            ))}
+            <a
+              href="https://twitter.com/myleadx"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-sm font-bold hover:bg-violet-600 transition-colors"
+              title="Twitter"
+            >
+              𝕏
+            </a>
+            <a
+              href="https://linkedin.com/company/myleadx"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-sm font-bold hover:bg-violet-600 transition-colors"
+              title="LinkedIn"
+            >
+              in
+            </a>
+            <a
+              href="https://youtube.com/@myleadx"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-sm font-bold hover:bg-violet-600 transition-colors"
+              title="YouTube"
+            >
+              ▶
+            </a>
           </div>
         </div>
 
@@ -760,9 +916,9 @@ export const Footer: React.FC<FooterProps> = ({ sections }) => (
       <div className="pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
         <p className="text-sm">&copy; {new Date().getFullYear()} MyLeadX. All rights reserved.</p>
         <div className="flex items-center gap-6 text-sm">
-          <a href="#" className="hover:text-violet-400 transition-colors">Privacy</a>
-          <a href="#" className="hover:text-violet-400 transition-colors">Terms</a>
-          <a href="#" className="hover:text-violet-400 transition-colors">Security</a>
+          <a href="/privacy-policy.html" className="hover:text-violet-400 transition-colors">Privacy</a>
+          <a href="/terms-of-service.html" className="hover:text-violet-400 transition-colors">Terms</a>
+          <a href="/privacy-policy.html#security" className="hover:text-violet-400 transition-colors">Security</a>
         </div>
       </div>
     </div>
