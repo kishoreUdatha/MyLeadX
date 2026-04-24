@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convert SVG to PNG - MyLeadX Assets</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 40px;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            color: #374151;
+            margin-bottom: 5px;
+        }
+        .card .dimensions {
+            color: #9ca3af;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .preview {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 200px;
+        }
+        .preview img {
+            max-width: 100%;
+            max-height: 300px;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(79, 70, 229, 0.3);
+        }
+        canvas { display: none; }
+        .instructions {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .instructions h3 {
+            color: #92400e;
+            margin-bottom: 10px;
+        }
+        .instructions ol {
+            color: #78350f;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MyLeadX - Play Store Assets</h1>
+        <p class="subtitle">Convert SVG files to PNG for Google Play Console</p>
+
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Click the "Download PNG" button for each asset</li>
+                <li>Upload <strong>app-icon.png</strong> (512x512) as your App Icon in Play Console</li>
+                <li>Upload <strong>feature-graphic.png</strong> (1024x500) as your Feature Graphic</li>
+            </ol>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <h2>App Icon</h2>
+                <p class="dimensions">512 x 512 pixels (Required)</p>
+                <div class="preview">
+                    <img id="icon-preview" src="assets/app-icon.svg" alt="App Icon">
+                </div>
+                <button class="btn" onclick="downloadPNG('assets/app-icon.svg', 512, 512, 'myleadx-app-icon.png')">
+                    Download PNG (512x512)
+                </button>
+            </div>
+
+            <div class="card">
+                <h2>Feature Graphic</h2>
+                <p class="dimensions">1024 x 500 pixels (Required)</p>
+                <div class="preview">
+                    <img id="feature-preview" src="assets/feature-graphic.svg" alt="Feature Graphic">
+                </div>
+                <button class="btn" onclick="downloadPNG('assets/feature-graphic.svg', 1024, 500, 'myleadx-feature-graphic.png')">
+                    Download PNG (1024x500)
+                </button>
+            </div>
+        </div>
+
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        function downloadPNG(svgPath, width, height, filename) {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
+
+            const img = new Image();
+            img.onload = function() {
+                ctx.clearRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            };
+            img.src = svgPath;
+        }
+    </script>
+</body>
+</html>
