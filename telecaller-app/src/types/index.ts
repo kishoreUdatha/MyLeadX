@@ -42,6 +42,15 @@ export type LeadStatus =
   | 'CONVERTED'
   | 'LOST';
 
+export interface LeadStage {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  order: number;
+  journeyOrder?: number;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -49,6 +58,8 @@ export interface Lead {
   phone: string;
   company?: string;
   status: LeadStatus;
+  stageId?: string;
+  stage?: LeadStage;
   source?: string;
   assignedTo?: string;
   notes?: string;
@@ -129,6 +140,7 @@ export interface UpdateCallPayload {
   notes?: string;
   duration: number;
   callbackAt?: string; // ISO date string for callback scheduling
+  alternatePhone?: string; // Customer's alternate phone number
 }
 
 // Dashboard Stats

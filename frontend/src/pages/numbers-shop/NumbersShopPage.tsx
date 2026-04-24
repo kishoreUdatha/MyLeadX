@@ -13,11 +13,29 @@ import {
   TrashIcon,
   ShoppingCartIcon,
   GlobeAltIcon,
+  UserIcon,
+  SparklesIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { useNumbersShop } from './hooks';
 import { AddFundsModal } from './components';
 import numbersShopService from '../../services/numbers-shop.service';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
+
+interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+interface VoiceAgent {
+  id: string;
+  name: string;
+}
+
+type AssignType = 'user' | 'agent';
 
 export default function NumbersShopPage() {
   const {
@@ -42,6 +60,83 @@ export default function NumbersShopPage() {
   const [selectedCountry, setSelectedCountry] = useState('IN');
   const [selectedType, setSelectedType] = useState<'local' | 'mobile' | 'tollfree'>('local');
   const [purchasingNumber, setPurchasingNumber] = useState<string | null>(null);
+
+  // Assignment state
+  const [users, setUsers] = useState<User[]>([]);
+  const [voiceAgents, setVoiceAgents] = useState<VoiceAgent[]>([]);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedNumber, setSelectedNumber] = useState<any>(null);
+  const [assignType, setAssignType] = useState<AssignType>('user');
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+
+  // Load users and voice agents
+  useEffect(() => {
+    const loadAssignmentData = async () => {
+      try {
+        const [usersRes, agentsRes] = await Promise.all([
+          api.get('/users'),
+          api.get('/voice-ai/agents'),
+        ]);
+        const allUsers = usersRes.data?.data || usersRes.data?.users || [];
+        const callableUsers = allUsers.filter((u: any) =>
+          ['telecaller', 'team_lead', 'manager', 'counselor'].includes(u.role?.slug || u.roleSlug || '')
+        );
+        setUsers(callableUsers);
+        setVoiceAgents(agentsRes.data?.data || agentsRes.data?.agents || []);
+      } catch (error) {
+        console.error('Failed to load assignment data:', error);
+      }
+    };
+    loadAssignmentData();
+  }, []);
+
+  // Open assign modal
+  const openAssignModal = (num: any) => {
+    setSelectedNumber(num);
+    setSelectedUserId(num.assignedToUserId || '');
+    setSelectedAgentId(num.assignedToAgentId || '');
+    setAssignType(num.assignedToAgentId ? 'agent' : 'user');
+    setShowAssignModal(true);
+  };
+
+  // Handle assignment
+  const handleAssign = async () => {
+    if (!selectedNumber) return;
+    try {
+      if (assignType === 'user') {
+        if (!selectedUserId) return;
+        await api.post(`/phone-numbers/${selectedNumber.id}/assign-user`, { userId: selectedUserId });
+      } else {
+        if (!selectedAgentId) return;
+        await api.post(`/phone-numbers/${selectedNumber.id}/assign`, { agentId: selectedAgentId });
+      }
+      toast.success('Phone number assigned successfully');
+      setShowAssignModal(false);
+      setSelectedNumber(null);
+      setSelectedUserId('');
+      setSelectedAgentId('');
+      refreshData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to assign phone number');
+    }
+  };
+
+  // Handle unassign
+  const handleUnassign = async (numberId: string, type: 'user' | 'agent') => {
+    if (!confirm('Remove assignment from this phone number?')) return;
+    try {
+      if (type === 'user') {
+        await api.post(`/phone-numbers/${numberId}/unassign-user`);
+      } else {
+        await api.post(`/phone-numbers/${numberId}/unassign`);
+      }
+      toast.success('Assignment removed');
+      refreshData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to unassign');
+    }
+  };
 
   // Load marketplace data
   const loadMarketplaceData = async () => {
@@ -235,21 +330,49 @@ export default function NumbersShopPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {num.assignedAgent ? (
-                            <span className="text-sm text-slate-900">{num.assignedAgent.name}</span>
+                          {num.assignedUser ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <UserIcon className="w-3 h-3 text-indigo-600" />
+                              </div>
+                              <span className="text-sm text-slate-900">
+                                {num.assignedUser.firstName} {num.assignedUser.lastName}
+                              </span>
+                            </div>
+                          ) : num.assignedAgent ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                                <SparklesIcon className="w-3 h-3 text-purple-600" />
+                              </div>
+                              <span className="text-sm text-purple-700">{num.assignedAgent.name}</span>
+                            </div>
                           ) : (
                             <span className="text-sm text-slate-400">Not assigned</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition">
-                              <PencilSquareIcon className="w-4 h-4" />
+                            <button
+                              onClick={() => openAssignModal(num)}
+                              className="p-1.5 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded transition"
+                              title="Assign"
+                            >
+                              <UserIcon className="w-4 h-4" />
                             </button>
+                            {(num.assignedToUserId || num.assignedToAgentId) && (
+                              <button
+                                onClick={() => handleUnassign(num.id, num.assignedToAgentId ? 'agent' : 'user')}
+                                className="p-1.5 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded transition"
+                                title="Unassign"
+                              >
+                                <XMarkIcon className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleReleaseNumber(num.id)}
                               disabled={num.status === 'ASSIGNED'}
                               className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Delete"
                             >
                               <TrashIcon className="w-4 h-4" />
                             </button>
@@ -535,6 +658,114 @@ export default function NumbersShopPage() {
           onAddFunds={handleAddFunds}
           onClose={() => setShowAddFundsModal(false)}
         />
+      )}
+
+      {/* Assign Modal */}
+      {showAssignModal && selectedNumber && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl mx-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">
+              Assign Phone Number
+            </h3>
+            <p className="text-sm text-slate-500 mb-5">
+              {selectedNumber.displayNumber || selectedNumber.number}
+            </p>
+
+            {/* Assignment Type Toggle */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Assign to
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setAssignType('user'); setSelectedAgentId(''); }}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                    assignType === 'user'
+                      ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <UserIcon className="w-4 h-4" />
+                  Telecaller
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAssignType('agent'); setSelectedUserId(''); }}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                    assignType === 'agent'
+                      ? 'bg-purple-50 border-purple-500 text-purple-700'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <SparklesIcon className="w-4 h-4" />
+                  Voice Agent
+                </button>
+              </div>
+            </div>
+
+            {/* Selection Dropdown */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                {assignType === 'user' ? 'Select Telecaller' : 'Select Voice Agent'}
+              </label>
+              {assignType === 'user' ? (
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                >
+                  <option value="">-- Select Telecaller --</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.firstName} {user.lastName} ({user.email})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  value={selectedAgentId}
+                  onChange={(e) => setSelectedAgentId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                >
+                  <option value="">-- Select Voice Agent --</option>
+                  {voiceAgents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {assignType === 'user' && users.length === 0 && (
+                <p className="text-sm text-slate-500 mt-2">No telecallers found.</p>
+              )}
+              {assignType === 'agent' && voiceAgents.length === 0 && (
+                <p className="text-sm text-slate-500 mt-2">No voice agents found. Create one first.</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setSelectedNumber(null);
+                  setSelectedUserId('');
+                  setSelectedAgentId('');
+                }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAssign}
+                disabled={assignType === 'user' ? !selectedUserId : !selectedAgentId}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                Assign
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

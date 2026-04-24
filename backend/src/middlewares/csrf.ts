@@ -88,6 +88,16 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
+  // Skip for Plivo routes (webhooks and answer callbacks)
+  if (req.path.includes('/plivo/')) {
+    return next();
+  }
+
+  // Skip for Exotel routes
+  if (req.path.includes('/exotel/')) {
+    return next();
+  }
+
   // Skip for softphone callbacks from telephony providers (Plivo/Exotel webhooks)
   if (req.path.includes('/softphone/') && (
     req.path.includes('/answer/') ||

@@ -111,7 +111,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
             >
               <Icon
                 name={filter.icon}
-                size={14}
+                size={12}
                 color={isActive ? filter.color : '#6B7280'}
               />
               <Text
@@ -159,29 +159,28 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   filtersList: {
     paddingHorizontal: 12,
-    gap: 6,
   },
   filterTab: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: 'transparent',
     marginRight: 6,
-    gap: 4,
+    gap: 3,
   },
   filterTabText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
   },
   modalOverlay: {

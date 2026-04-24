@@ -43,12 +43,15 @@ import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import CallRecordingSetupScreen from '../screens/CallRecordingSetupScreen';
 import CallSummaryScreen from '../screens/CallSummaryScreen';
 import api from '../api';
+import { useAppDispatch } from '../store';
+import { checkAuth } from '../store/slices/authSlice';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 // Login Screen with actual API call
 const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => {
+  const dispatch = useAppDispatch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -82,13 +85,27 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
         await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, accessToken);
 
         if (responseData.user) {
-          await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(responseData.user));
+          // Transform user data to ensure firstName/lastName are properly set
+          const rawUser = responseData.user;
+          const userData: User = {
+            id: rawUser.id,
+            email: rawUser.email,
+            firstName: rawUser.firstName || rawUser.name?.split(' ')[0] || '',
+            lastName: rawUser.lastName || rawUser.name?.split(' ').slice(1).join(' ') || '',
+            organizationId: rawUser.organizationId,
+            organizationName: rawUser.organizationName,
+            role: rawUser.role || 'telecaller',
+          };
+          await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
         }
         if (responseData.refreshToken) {
           await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, responseData.refreshToken);
         }
 
-        console.log('[Login] Login successful, navigating...');
+        console.log('[Login] Login successful, syncing to Redux...');
+        // Sync user data to Redux store so Dashboard can display firstName
+        await dispatch(checkAuth());
+        console.log('[Login] Redux synced, navigating...');
         onLoginSuccess();
       } else {
         Alert.alert('Login Failed', data.message || 'Invalid credentials');
@@ -124,7 +141,7 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
 
   return (
     <View style={styles.loginContainer}>
-      <Text style={styles.title}>CRM Telecaller</Text>
+      <Text style={styles.title}>MyLeadX</Text>
       <Text style={styles.subtitle}>Login to continue</Text>
 
       <TextInput

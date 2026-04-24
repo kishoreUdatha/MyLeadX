@@ -7,6 +7,7 @@ import { prisma } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config';
 import { exotelService } from '../integrations/exotel.service';
+import { plivoVoiceService } from '../integrations/plivo-voice.service';
 import { voiceMinutesService } from './voice-minutes.service';
 import { complianceService } from './compliance.service';
 import { parseVariables, extractInstitutionContext, VariableContext } from '../utils/variableParser';
@@ -158,7 +159,37 @@ class CallExecutionService {
     try {
       const baseUrl = config.baseUrl;
 
-      if (CALL_PROVIDER === 'exotel' && exotelService.isConfigured()) {
+      if (CALL_PROVIDER === 'plivo' && plivoVoiceService.isConfigured()) {
+        // Use Plivo for outbound calls
+        const plivoResult = await plivoVoiceService.makeCall({
+          to: plivoVoiceService.formatIndianNumber(data.phone),
+          answerUrl: `${baseUrl}/api/plivo/answer/${call.id}`,
+          hangupUrl: `${baseUrl}/api/plivo/webhook/hangup`,
+          callbackUrl: `${baseUrl}/api/plivo/webhook/status`,
+          ringTimeout: 30,
+          machineDetection: false,
+        });
+
+        if (plivoResult.success) {
+          await prisma.outboundCall.update({
+            where: { id: call.id },
+            data: {
+              twilioCallSid: plivoResult.callUuid, // Store Plivo call UUID in the same field
+              status: 'QUEUED',
+            },
+          });
+
+          return {
+            callId: call.id,
+            exotelSid: plivoResult.callUuid,
+            conversationId,
+            status: 'QUEUED',
+            provider: 'plivo',
+          };
+        } else {
+          throw new Error(plivoResult.error || 'Plivo call failed');
+        }
+      } else if (CALL_PROVIDER === 'exotel' && exotelService.isConfigured()) {
         const exotelResult = await exotelService.makeCall({
           to: data.phone,
           customField: JSON.stringify({ callId: call.id, conversationId, phone: data.phone }),
@@ -191,7 +222,12 @@ class CallExecutionService {
           throw new Error(exotelResult.error || 'Exotel call failed');
         }
       } else {
-        throw new Error('Exotel is not configured. Please set EXOTEL_ACCOUNT_SID, EXOTEL_API_KEY, EXOTEL_API_TOKEN, and EXOTEL_CALLER_ID environment variables.');
+        const provider = CALL_PROVIDER;
+        if (provider === 'plivo') {
+          throw new Error('Plivo is not configured. Please set PLIVO_AUTH_ID, PLIVO_AUTH_TOKEN, and PLIVO_PHONE_NUMBER environment variables.');
+        } else {
+          throw new Error('Exotel is not configured. Please set EXOTEL_ACCOUNT_SID, EXOTEL_API_KEY, EXOTEL_API_TOKEN, and EXOTEL_CALLER_ID environment variables.');
+        }
       }
     } catch (error) {
       await prisma.outboundCall.update({

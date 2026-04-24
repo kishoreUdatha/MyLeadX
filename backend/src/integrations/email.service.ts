@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 import { MessageDirection, MessageStatus } from '@prisma/client';
 import { emailTrackingService } from '../services/email-tracking.service';
 import { emailSettingsService } from '../services/emailSettings.service';
+import { resendService } from '../services/resend.service';
 
 interface SendEmailInput {
   to: string;
@@ -188,18 +189,272 @@ export class EmailService {
 
   async sendPasswordResetEmail(email: string, resetToken: string) {
     const resetUrl = `${config.frontendUrl}/reset-password?token=${resetToken}`;
+    const currentYear = new Date().getFullYear();
+    const expiryTime = '1 hour';
 
+    const plainTextBody = `
+Password Reset Request
+
+We received a request to reset the password for your account associated with ${email}.
+
+Click the link below to reset your password:
+${resetUrl}
+
+This link will expire in ${expiryTime} for security reasons.
+
+If you didn't request a password reset, please ignore this email or contact support if you have concerns about your account security.
+
+For security tips:
+- Never share your password with anyone
+- Use a strong, unique password
+- Enable two-factor authentication if available
+
+Best regards,
+The MyLeadX Team
+
+---
+This is an automated message. Please do not reply directly to this email.
+    `.trim();
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Reset Your Password</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f7fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f4f7fa;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <!-- Main Container -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08); overflow: hidden;">
+
+          <!-- Header with Gradient -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 40px 50px 40px; text-align: center;">
+              <!-- Logo/Icon -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                <tr>
+                  <td style="background-color: rgba(255, 255, 255, 0.2); border-radius: 50%; padding: 16px;">
+                    <img src="https://img.icons8.com/fluency/48/lock-2.png" alt="Security" width="48" height="48" style="display: block;">
+                  </td>
+                </tr>
+              </table>
+              <h1 style="color: #ffffff; font-size: 28px; font-weight: 700; margin: 24px 0 8px 0; letter-spacing: -0.5px;">Password Reset</h1>
+              <p style="color: rgba(255, 255, 255, 0.9); font-size: 16px; margin: 0;">Secure your account in just a few clicks</p>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <!-- Greeting -->
+              <p style="color: #1a1a2e; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+                Hello,
+              </p>
+
+              <p style="color: #4a5568; font-size: 15px; line-height: 1.7; margin: 0 0 24px 0;">
+                We received a request to reset the password for your account associated with <strong style="color: #667eea;">${email}</strong>.
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 32px auto;">
+                <tr>
+                  <td style="border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);">
+                    <a href="${resetUrl}" target="_blank" style="display: inline-block; padding: 16px 48px; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; letter-spacing: 0.5px;">
+                      Reset My Password
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Timer Notice -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #fef3c7; border-radius: 12px; margin: 24px 0;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="vertical-align: middle; padding-right: 12px;">
+                          <img src="https://img.icons8.com/fluency/24/time.png" alt="Time" width="24" height="24">
+                        </td>
+                        <td style="vertical-align: middle;">
+                          <p style="color: #92400e; font-size: 14px; margin: 0; font-weight: 500;">
+                            This link will expire in <strong>${expiryTime}</strong> for security reasons.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Alternative Link -->
+              <p style="color: #718096; font-size: 13px; line-height: 1.6; margin: 24px 0 0 0;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="background-color: #f7fafc; border-radius: 8px; padding: 12px 16px; margin: 8px 0 24px 0; word-break: break-all;">
+                <a href="${resetUrl}" style="color: #667eea; font-size: 13px; text-decoration: none;">${resetUrl}</a>
+              </p>
+
+              <!-- Divider -->
+              <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 32px 0;">
+
+              <!-- Security Notice -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f0fdf4; border-radius: 12px; border-left: 4px solid #22c55e;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
+                      Didn't request this?
+                    </p>
+                    <p style="color: #15803d; font-size: 13px; line-height: 1.6; margin: 0;">
+                      If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged and your account is secure.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Security Tips -->
+              <div style="margin-top: 32px;">
+                <p style="color: #1a1a2e; font-size: 14px; font-weight: 600; margin: 0 0 16px 0;">
+                  Security Tips:
+                </p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width: 100%;">
+                  <tr>
+                    <td style="padding: 8px 0;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="vertical-align: top; padding-right: 12px;">
+                            <span style="color: #667eea; font-size: 16px;">&#10003;</span>
+                          </td>
+                          <td style="color: #4a5568; font-size: 13px; line-height: 1.5;">
+                            Never share your password with anyone
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="vertical-align: top; padding-right: 12px;">
+                            <span style="color: #667eea; font-size: 16px;">&#10003;</span>
+                          </td>
+                          <td style="color: #4a5568; font-size: 13px; line-height: 1.5;">
+                            Use a strong, unique password with letters, numbers, and symbols
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="vertical-align: top; padding-right: 12px;">
+                            <span style="color: #667eea; font-size: 16px;">&#10003;</span>
+                          </td>
+                          <td style="color: #4a5568; font-size: 13px; line-height: 1.5;">
+                            Enable two-factor authentication for extra security
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 32px 40px; border-top: 1px solid #e2e8f0;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width: 100%;">
+                <tr>
+                  <td align="center">
+                    <p style="color: #64748b; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">
+                      MyLeadX
+                    </p>
+                    <p style="color: #94a3b8; font-size: 12px; line-height: 1.6; margin: 0 0 16px 0;">
+                      Smart CRM for Lead Generation & Sales Automation
+                    </p>
+                    <!-- Social Links -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto 16px auto;">
+                      <tr>
+                        <td style="padding: 0 8px;">
+                          <a href="#" style="text-decoration: none;">
+                            <img src="https://img.icons8.com/fluency/24/twitter.png" alt="Twitter" width="24" height="24">
+                          </a>
+                        </td>
+                        <td style="padding: 0 8px;">
+                          <a href="#" style="text-decoration: none;">
+                            <img src="https://img.icons8.com/fluency/24/linkedin.png" alt="LinkedIn" width="24" height="24">
+                          </a>
+                        </td>
+                        <td style="padding: 0 8px;">
+                          <a href="#" style="text-decoration: none;">
+                            <img src="https://img.icons8.com/fluency/24/facebook-new.png" alt="Facebook" width="24" height="24">
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="color: #94a3b8; font-size: 11px; margin: 0;">
+                      &copy; ${currentYear} MyLeadX. All rights reserved.
+                    </p>
+                    <p style="color: #cbd5e1; font-size: 11px; margin: 8px 0 0 0;">
+                      This is an automated message. Please do not reply directly to this email.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `.trim();
+
+    // Try Resend first (more reliable), then fallback to SMTP
+    if (resendService.isConfigured()) {
+      console.log('[Email] Sending password reset via Resend to:', email);
+      const result = await resendService.sendEmail({
+        to: email,
+        subject: 'Reset Your Password - MyLeadX',
+        body: plainTextBody,
+        html: htmlBody,
+      });
+
+      if (result.success) {
+        console.log('[Email] Password reset email sent via Resend:', result.messageId);
+        return { success: true, messageId: result.messageId };
+      } else {
+        console.error('[Email] Resend failed, trying SMTP:', result.error);
+      }
+    }
+
+    // Fallback to SMTP
+    console.log('[Email] Sending password reset via SMTP to:', email);
     return this.sendEmail({
       to: email,
-      subject: 'Password Reset Request',
-      body: `You requested a password reset. Click here to reset your password: ${resetUrl}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.`,
-      html: `
-        <h2>Password Reset Request</h2>
-        <p>You requested a password reset. Click the button below to reset your password:</p>
-        <p><a href="${resetUrl}" style="display: inline-block; padding: 10px 20px; background-color: #3b82f6; color: white; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
-        <p>This link expires in 1 hour.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-      `,
+      subject: 'Reset Your Password - MyLeadX',
+      body: plainTextBody,
+      html: htmlBody,
       userId: 'system',
     });
   }

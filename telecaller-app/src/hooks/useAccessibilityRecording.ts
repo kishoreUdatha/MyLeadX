@@ -159,7 +159,7 @@ export const promptEnableAccessibility = async (): Promise<boolean> => {
       'Enable Call Recording',
       'To record calls, you need to enable the Accessibility Service.\n\n' +
       '1. Tap "Open Settings"\n' +
-      '2. Find "Telecaller CRM" in the list\n' +
+      '2. Find "MyLeadX" in the list\n' +
       '3. Enable the service\n' +
       '4. Return to the app',
       [

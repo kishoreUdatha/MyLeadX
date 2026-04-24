@@ -176,6 +176,12 @@ export class LeadService {
     const lead = await prisma.lead.findFirst({
       where: { id, organizationId },
       include: {
+        stage: {
+          select: { id: true, name: true, slug: true, color: true, order: true, journeyOrder: true },
+        },
+        pipelineStage: {
+          select: { id: true, name: true, color: true, stageType: true },
+        },
         assignments: {
           where: { isActive: true },
           include: {

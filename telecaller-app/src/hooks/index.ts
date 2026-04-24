@@ -6,5 +6,6 @@
 export { useAuth, default as useAuthDefault } from './useAuth';
 export { useLeads, default as useLeadsDefault } from './useLeads';
 export { useCallRecording, default as useCallRecordingDefault } from './useCallRecording';
+export { useDirectCall, default as useDirectCallDefault } from './useDirectCall';
 export { useOfflineQueue, default as useOfflineQueueDefault } from './useOfflineQueue';
 export { useNotifications, default as useNotificationsDefault } from './useNotifications';

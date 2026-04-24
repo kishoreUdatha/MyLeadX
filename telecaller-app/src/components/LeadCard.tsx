@@ -43,7 +43,8 @@ const AVATAR_GRADIENTS: Array<[string, string]> = [
 ];
 
 const pickGradient = (name: string): [string, string] => {
-  const sum = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const safeName = name || 'Unknown';
+  const sum = safeName.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
   return AVATAR_GRADIENTS[sum % AVATAR_GRADIENTS.length];
 };
 
@@ -62,9 +63,14 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onCall, onPress, style }) => 
     }).start();
 
   const getInitials = (name: string) => {
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return name.substring(0, 2).toUpperCase();
+    if (!name || name === 'undefined' || name === 'null') return '??';
+    const cleanName = name.trim();
+    if (!cleanName) return '??';
+    const parts = cleanName.split(' ').filter(p => p.length > 0);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return cleanName.substring(0, 2).toUpperCase();
   };
 
   const getTimeAgo = (dateStr?: string) => {

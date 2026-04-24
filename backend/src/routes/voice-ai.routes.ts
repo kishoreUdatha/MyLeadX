@@ -1499,10 +1499,20 @@ router.post('/test-call', async (req: TenantRequest, res: Response) => {
 
     // Import services dynamically
     const { exotelService } = await import('../integrations/exotel.service');
+    const { plivoVoiceService } = await import('../integrations/plivo-voice.service');
     const { outboundCallService } = await import('../integrations/outbound-call.service');
 
-    if (!exotelService.isConfigured()) {
+    const voiceProvider = process.env.VOICE_PROVIDER || 'exotel';
+    const isPlivoConfigured = plivoVoiceService.isConfigured();
+    const isExotelConfigured = exotelService.isConfigured();
+
+    // Check if the correct provider is configured
+    if (voiceProvider === 'plivo' && !isPlivoConfigured) {
+      return ApiResponse.error(res, 'Plivo is not configured. Please check PLIVO_AUTH_ID, PLIVO_AUTH_TOKEN, PLIVO_PHONE_NUMBER.', 400);
+    } else if (voiceProvider === 'exotel' && !isExotelConfigured) {
       return ApiResponse.error(res, 'Exotel is not configured. Please check EXOTEL_ACCOUNT_SID, EXOTEL_API_KEY, EXOTEL_API_TOKEN.', 400);
+    } else if (!isPlivoConfigured && !isExotelConfigured) {
+      return ApiResponse.error(res, 'No voice provider configured. Please configure Plivo or Exotel.', 400);
     }
 
     // Get agent for the call

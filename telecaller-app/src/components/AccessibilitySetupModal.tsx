@@ -54,7 +54,7 @@ const AccessibilitySetupModal: React.FC<AccessibilitySetupModalProps> = ({
         PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
         {
           title: 'Phone Permission',
-          message: 'Telecaller CRM needs access to detect incoming and outgoing calls.',
+          message: 'MyLeadX needs access to detect incoming and outgoing calls.',
           buttonPositive: 'Allow',
           buttonNegative: 'Deny',
         }
@@ -65,7 +65,7 @@ const AccessibilitySetupModal: React.FC<AccessibilitySetupModalProps> = ({
         PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
         {
           title: 'Call Log Permission',
-          message: 'Telecaller CRM needs access to call logs to track call history and duration.',
+          message: 'MyLeadX needs access to call logs to track call history and duration.',
           buttonPositive: 'Allow',
           buttonNegative: 'Deny',
         }
@@ -76,7 +76,7 @@ const AccessibilitySetupModal: React.FC<AccessibilitySetupModalProps> = ({
         PermissionsAndroid.PERMISSIONS.CALL_PHONE,
         {
           title: 'Make Calls Permission',
-          message: 'Telecaller CRM needs permission to make calls directly from the app.',
+          message: 'MyLeadX needs permission to make calls directly from the app.',
           buttonPositive: 'Allow',
           buttonNegative: 'Deny',
         }
@@ -89,7 +89,7 @@ const AccessibilitySetupModal: React.FC<AccessibilitySetupModalProps> = ({
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
           {
             title: 'Notifications Permission',
-            message: 'Telecaller CRM needs permission to send you notifications about leads and calls.',
+            message: 'MyLeadX needs permission to send you notifications about leads and calls.',
             buttonPositive: 'Allow',
             buttonNegative: 'Deny',
           }
@@ -280,7 +280,7 @@ const AccessibilitySetupModal: React.FC<AccessibilitySetupModalProps> = ({
                   <View style={styles.stepNumber}>
                     <Text style={styles.stepNumberText}>2</Text>
                   </View>
-                  <Text style={styles.stepText}>Tap on "Telecaller CRM"</Text>
+                  <Text style={styles.stepText}>Tap on "MyLeadX"</Text>
                 </View>
 
                 <View style={styles.stepItem}>

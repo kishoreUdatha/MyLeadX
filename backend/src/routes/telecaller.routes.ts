@@ -434,7 +434,7 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
     const { id } = req.params;
     const userId = req.user!.id;
     const organizationId = req.organization!.id;
-    const { status, notes, callSummary, interestLevel, duration, callbackAt } = req.body;
+    const { status, notes, callSummary, interestLevel, duration, callbackAt, alternatePhone } = req.body;
 
     // Validate status
     const validStatuses = ['CALLING', 'INTERESTED', 'NOT_INTERESTED', 'NO_ANSWER', 'CALLBACK_REQUESTED'];
@@ -467,10 +467,15 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
         ...(notes && { notes }),
         ...(callSummary && { callSummary }),
         ...(interestLevel && { interestLevel }),
+        ...(alternatePhone && { alternatePhone }),
         lastCallAt: new Date(),
         callAttempts: { increment: 1 },
       },
     });
+
+    if (alternatePhone) {
+      console.log(`[Telecaller] Saved alternate phone ${alternatePhone} to raw record ${id}`);
+    }
 
     // Also log to telecallerCall table for proper call tracking
     // Map rawImportRecord status to telecallerCall outcome (valid enum values)
@@ -1610,7 +1615,7 @@ router.put('/calls/:id', async (req: TenantRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
     const organizationId = req.organization!.id;
-    const { status, outcome, notes, duration, endedAt, callbackAt } = req.body;
+    const { status, outcome, notes, duration, endedAt, callbackAt, alternatePhone } = req.body;
 
     const existing = await prisma.telecallerCall.findFirst({
       where: { id, telecallerId: userId },
@@ -1697,6 +1702,16 @@ router.put('/calls/:id', async (req: TenantRequest, res: Response) => {
           data: { nextFollowUpAt: scheduledAt },
         });
       }
+    }
+
+    // Update alternate phone if provided (for Lead calls)
+    if (alternatePhone && existing.leadId) {
+      console.log(`[Telecaller] Updating alternate phone: ${alternatePhone} for lead ${existing.leadId}`);
+      await prisma.lead.update({
+        where: { id: existing.leadId },
+        data: { alternatePhone },
+      });
+      console.log(`[Telecaller] Updated lead with alternate phone`);
     }
 
     // Track active time in work session (for user activity reports)

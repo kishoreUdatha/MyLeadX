@@ -156,14 +156,14 @@ class PlivoVoiceService {
     const response = new (plivo.Response as any)();
     const voiceConfig = PLIVO_INDIA_VOICES[options.language || 'en-IN'] || PLIVO_INDIA_VOICES['en-IN'];
 
+    // Plivo GetDigits only supports DTMF input - remove invalid attributes
     const getDigits = response.addGetDigits({
       action: options.action,
       method: options.method || 'POST',
       timeout: options.timeout || 10,
-      numDigits: options.numDigits || 1,
-      inputType: options.inputType || 'dtmf speech',
-      speechEndTimeout: options.speechEndTimeout || 2000,
-      language: voiceConfig.language,
+      numDigits: options.numDigits || 10,
+      retries: 1,
+      redirect: true,
     });
 
     getDigits.addSpeak(options.text, {
@@ -172,6 +172,61 @@ class PlivoVoiceService {
     });
 
     return response.toXML();
+  }
+
+  // Generate XML for speech input using Plivo's GetInput element
+  generateSpeechInputXML(options: {
+    text: string;
+    language?: string;
+    action: string;
+    method?: string;
+    executionTimeout?: number;
+    speechEndTimeout?: number;
+    finishOnKey?: string;
+  }): string {
+    const voiceConfig = PLIVO_INDIA_VOICES[options.language || 'en-IN'] || PLIVO_INDIA_VOICES['en-IN'];
+
+    // Build XML manually for GetInput (speech recognition)
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <GetInput action="${options.action}" method="${options.method || 'POST'}" inputType="speech" executionTimeout="${options.executionTimeout || 15}" speechEndTimeout="${options.speechEndTimeout || 3}" log="true" redirect="true">
+    <Speak voice="${voiceConfig.voice}" language="${voiceConfig.language}">${this.escapeXml(options.text)}</Speak>
+  </GetInput>
+</Response>`;
+
+    return xml;
+  }
+
+  // Generate simple speak XML followed by GetDigits for conversation flow
+  // Note: Using GetDigits as fallback since GetInput may not be available in SDK
+  generateConversationXML(options: {
+    text: string;
+    language?: string;
+    action: string;
+    timeout?: number;
+  }): string {
+    const voiceConfig = PLIVO_INDIA_VOICES[options.language || 'en-IN'] || PLIVO_INDIA_VOICES['en-IN'];
+
+    // Build XML manually for GetInput (speech recognition)
+    // Plivo SDK may not have addGetInput, so we construct raw XML
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <GetInput action="${options.action}" method="POST" inputType="speech" executionTimeout="${options.timeout || 20}" speechEndTimeout="3" log="true" redirect="true">
+    <Speak voice="${voiceConfig.voice}" language="${voiceConfig.language}">${this.escapeXml(options.text)}</Speak>
+  </GetInput>
+</Response>`;
+
+    return xml;
+  }
+
+  // Helper to escape XML special characters
+  private escapeXml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
   }
 
   generateTransferXML(options: {
@@ -362,6 +417,10 @@ class PlivoVoiceService {
   }
 
   // ==================== UTILITY ====================
+
+  isConfigured(): boolean {
+    return !!this.client && !!process.env.PLIVO_AUTH_ID && !!process.env.PLIVO_AUTH_TOKEN && !!process.env.PLIVO_PHONE_NUMBER;
+  }
 
   isIndianNumber(phone: string): boolean {
     // Remove all non-digits

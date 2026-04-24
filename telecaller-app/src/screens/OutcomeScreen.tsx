@@ -39,6 +39,18 @@ const OUTCOME_OPTIONS: OutcomeOption[] = [
   { outcome: 'VOICEMAIL', label: 'Voicemail', icon: 'voicemail' },
 ];
 
+// Outcome-specific reason prompts
+const OUTCOME_REASON_PROMPTS: Record<CallOutcome, string> = {
+  INTERESTED: 'What are they interested in? Any specific requirements?',
+  NOT_INTERESTED: 'Why are they not interested? (e.g., budget, timing, already have solution)',
+  CALLBACK: 'Why are they requesting callback? When is convenient for them?',
+  CONVERTED: 'What convinced them? Any special terms discussed?',
+  NO_ANSWER: 'How many attempts? Best time to reach them?',
+  BUSY: 'Did they say when to call back?',
+  WRONG_NUMBER: 'Any additional info? (e.g., correct number if provided)',
+  VOICEMAIL: 'What message did you leave?',
+};
+
 const OutcomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<OutcomeRouteProp>();
@@ -48,6 +60,7 @@ const OutcomeScreen: React.FC = () => {
 
   const [selectedOutcome, setSelectedOutcome] = useState<CallOutcome | null>(null);
   const [notes, setNotes] = useState('');
+  const [alternatePhone, setAlternatePhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Callback scheduling state
@@ -150,7 +163,8 @@ const OutcomeScreen: React.FC = () => {
       const success = await submitOutcome(
         selectedOutcome,
         finalNotes || undefined,
-        selectedOutcome === 'CALLBACK' ? callbackDate.toISOString() : undefined
+        selectedOutcome === 'CALLBACK' ? callbackDate.toISOString() : undefined,
+        alternatePhone.trim() || undefined
       );
 
       if (success) {
@@ -214,6 +228,33 @@ const OutcomeScreen: React.FC = () => {
               {recordingPath ? 'Captured' : 'Not Available'}
             </Text>
           </View>
+        </View>
+
+        {/* Alternate Phone - Customer provided different number */}
+        <View style={styles.alternatePhoneSection}>
+          <Text style={styles.sectionTitle}>
+            <Icon name="phone-plus" size={18} color="#10B981" /> Alternate Phone (Optional)
+          </Text>
+          <View style={styles.alternatePhoneContainer}>
+            <Icon name="phone-outline" size={20} color="#6B7280" style={styles.phoneIcon} />
+            <TextInput
+              style={styles.alternatePhoneInput}
+              placeholder="Customer's alternate number (if provided)"
+              placeholderTextColor="#9CA3AF"
+              value={alternatePhone}
+              onChangeText={setAlternatePhone}
+              keyboardType="phone-pad"
+              maxLength={15}
+            />
+            {alternatePhone.length > 0 && (
+              <TouchableOpacity onPress={() => setAlternatePhone('')}>
+                <Icon name="close-circle" size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.alternatePhoneHint}>
+            If customer said "Call me on different number", enter it here
+          </Text>
         </View>
 
         {/* Outcome Selection */}
@@ -295,20 +336,33 @@ const OutcomeScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Notes */}
-        <Text style={styles.sectionTitle}>Notes (Optional)</Text>
-        <View style={styles.notesContainer}>
+        {/* Contextual Reason/Notes based on outcome */}
+        <Text style={styles.sectionTitle}>
+          <Icon name="note-text" size={18} color="#6366F1" />{' '}
+          {selectedOutcome ? 'Reason / Details' : 'Notes (Select outcome first)'}
+        </Text>
+        <View style={[styles.notesContainer, selectedOutcome && styles.notesContainerActive]}>
           <TextInput
             style={styles.notesInput}
-            placeholder="Add notes about the call..."
-            placeholderTextColor="#9CA3AF"
+            placeholder={
+              selectedOutcome
+                ? OUTCOME_REASON_PROMPTS[selectedOutcome]
+                : 'Select an outcome above to see what details to capture...'
+            }
+            placeholderTextColor={selectedOutcome ? '#6B7280' : '#9CA3AF'}
             value={notes}
             onChangeText={setNotes}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
+            editable={!!selectedOutcome}
           />
         </View>
+        {selectedOutcome && (
+          <Text style={styles.notesHint}>
+            <Icon name="information-outline" size={14} color="#6B7280" /> Recording the reason helps in follow-ups
+          </Text>
+        )}
 
         {/* Submit Button */}
         <TouchableOpacity
@@ -410,17 +464,57 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   notesContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  notesContainerActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#6366F1',
+    borderWidth: 1.5,
   },
   notesInput: {
     padding: 16,
     fontSize: 16,
     color: '#1F2937',
     minHeight: 120,
+  },
+  notesHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 24,
+    marginLeft: 4,
+  },
+  // Alternate Phone styles
+  alternatePhoneSection: {
+    marginBottom: 24,
+  },
+  alternatePhoneContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  phoneIcon: {
+    marginRight: 10,
+  },
+  alternatePhoneInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    paddingVertical: 14,
+  },
+  alternatePhoneHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 6,
+    marginLeft: 4,
   },
   submitButton: {
     flexDirection: 'row',

@@ -279,7 +279,6 @@ const settingsNavigation: NavItem[] = [
   { name: 'Pipeline', href: '/settings/pipeline', icon: FunnelIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
   { name: 'Lead Tags', href: '/settings/tags', icon: TagIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
   { name: 'Commission', href: '/settings/commission', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
-  { name: 'Phone Numbers', href: '/settings/telecaller-numbers', icon: PhoneIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'settings_general' }, // Assign numbers to telecallers
   { name: 'Notifications', href: '/settings/notification-preferences', icon: BellIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller', 'counselor'] }, // Everyone can manage their notifications
   { name: 'Billing', href: '/subscription', icon: CreditCardIcon, roles: ['super_admin', 'admin'], permission: 'settings_general' },
 ];

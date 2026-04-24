@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
+  Phone,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { Node, Edge } from 'reactflow';
@@ -69,6 +70,9 @@ export function ConversationalAIAgentDetail() {
   const [knowledgeUrl, setKnowledgeUrl] = useState('');
   const [knowledgeSources, setKnowledgeSources] = useState<{id: string; type: string; name: string}[]>([]);
   const [isRagPanelOpen, setIsRagPanelOpen] = useState(false);
+
+  // Phone Numbers state
+  const [agentPhoneNumbers, setAgentPhoneNumbers] = useState<{id: string; number: string; displayNumber?: string}[]>([]);
   const [ragSettings, setRagSettings] = useState({
     chunkSize: 1000,
     chunkOverlap: 200,
@@ -294,6 +298,20 @@ export function ConversationalAIAgentDetail() {
 
   useEffect(() => {
     loadAgent();
+  }, [agentId]);
+
+  // Fetch phone numbers assigned to this agent
+  useEffect(() => {
+    const fetchAgentPhoneNumbers = async () => {
+      if (!agentId) return;
+      try {
+        const response = await api.get(`/phone-numbers/agent/${agentId}`);
+        setAgentPhoneNumbers(response.data?.data || []);
+      } catch (error) {
+        console.error('Failed to fetch agent phone numbers:', error);
+      }
+    };
+    fetchAgentPhoneNumbers();
   }, [agentId]);
 
   // Fetch tool connection status
@@ -3612,6 +3630,55 @@ export function ConversationalAIAgentDetail() {
                     </div>
                     <span className="text-sm text-gray-500">Add additional languages</span>
                   </button>
+                </div>
+              </div>
+
+              {/* Phone Numbers Section */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-900 mb-1">Phone Numbers</h3>
+                <p className="text-sm text-gray-500 mb-2">
+                  Numbers assigned to this agent for calls.
+                </p>
+
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {agentPhoneNumbers.length === 0 ? (
+                    <div className="px-3 py-4 text-center">
+                      <Phone className="w-5 h-5 text-gray-300 mx-auto mb-1" />
+                      <p className="text-xs text-gray-500">No numbers assigned</p>
+                      <a
+                        href="/numbers-shop"
+                        className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                      >
+                        Assign a number
+                      </a>
+                    </div>
+                  ) : (
+                    agentPhoneNumbers.map((num) => (
+                      <div
+                        key={num.id}
+                        className="flex items-center gap-2 px-2.5 py-2 border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Phone className="w-3 h-3 text-green-600" />
+                        </div>
+                        <span className="text-sm font-mono text-gray-900">
+                          {num.displayNumber || num.number}
+                        </span>
+                      </div>
+                    ))
+                  )}
+
+                  {/* Manage Numbers Link */}
+                  <a
+                    href="/numbers-shop"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 transition-colors text-left border-t border-gray-100"
+                  >
+                    <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                      <Settings className="w-3 h-3 text-gray-400" />
+                    </div>
+                    <span className="text-sm text-gray-500">Manage numbers</span>
+                    <ChevronRight className="w-3 h-3 text-gray-400 ml-auto" />
+                  </a>
                 </div>
               </div>
 

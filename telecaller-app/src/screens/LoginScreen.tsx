@@ -104,7 +104,7 @@ const LoginScreen: React.FC = () => {
               <Icon name="phone-in-talk" size={48} color={colors.neutral[0]} />
             </View>
             <Text style={styles.title}>VoiceBridge</Text>
-            <Text style={styles.subtitle}>Telecaller CRM</Text>
+            <Text style={styles.subtitle}>MyLeadX</Text>
           </View>
 
           {/* Form Card */}
@@ -237,7 +237,7 @@ const LoginScreen: React.FC = () => {
 
           {/* Footer */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>VoiceBridge Telecaller CRM</Text>
+            <Text style={styles.footerText}>MyLeadX</Text>
             <Text style={styles.versionText}>Version 1.0.0</Text>
           </View>
         </ScrollView>

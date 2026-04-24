@@ -14,20 +14,12 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { RootStackParamList, LeadStatus, LeadFormData } from '../types';
+import { RootStackParamList, LeadFormData } from '../types';
 import { useAppSelector, useAppDispatch } from '../store';
 import { fetchLeadById, updateLead } from '../store/slices/leadsSlice';
+import stagesApi, { LeadStage } from '../api/stages';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditLead'>;
-
-const STATUS_OPTIONS: LeadStatus[] = [
-  'NEW',
-  'CONTACTED',
-  'QUALIFIED',
-  'NEGOTIATION',
-  'CONVERTED',
-  'LOST',
-];
 
 const SOURCE_OPTIONS = [
   'Website',
@@ -45,6 +37,11 @@ const EditLeadScreen: React.FC<Props> = ({ route, navigation }) => {
   const dispatch = useAppDispatch();
   const { selectedLead, isLoading } = useAppSelector((state) => state.leads);
 
+  // Stages from API
+  const [stages, setStages] = useState<LeadStage[]>([]);
+  const [loadingStages, setLoadingStages] = useState(true);
+  const [selectedStageId, setSelectedStageId] = useState<string>('');
+
   const [formData, setFormData] = useState<LeadFormData>({
     name: '',
     phone: '',
@@ -52,12 +49,31 @@ const EditLeadScreen: React.FC<Props> = ({ route, navigation }) => {
     company: '',
     source: '',
     notes: '',
-    status: 'NEW',
   });
-  const [errors, setErrors] = useState<Partial<LeadFormData>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showStagePicker, setShowStagePicker] = useState(false);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
+
+  // Load stages from API
+  useEffect(() => {
+    const loadStages = async () => {
+      try {
+        setLoadingStages(true);
+        const { progressStages, lostStage } = await stagesApi.getJourneyStages();
+        // Combine progress stages and lost stage
+        const allStages = [...progressStages];
+        if (lostStage) {
+          allStages.push(lostStage);
+        }
+        setStages(allStages);
+      } catch (error) {
+        console.error('Error loading stages:', error);
+      } finally {
+        setLoadingStages(false);
+      }
+    };
+    loadStages();
+  }, []);
 
   useEffect(() => {
     dispatch(fetchLeadById(leadId));
@@ -72,40 +88,37 @@ const EditLeadScreen: React.FC<Props> = ({ route, navigation }) => {
         company: selectedLead.company || '',
         source: selectedLead.source || '',
         notes: selectedLead.notes || '',
-        status: selectedLead.status,
       });
+      // Set selected stage from lead data
+      if ((selectedLead as any).stageId) {
+        setSelectedStageId((selectedLead as any).stageId);
+      } else if ((selectedLead as any).stage?.id) {
+        setSelectedStageId((selectedLead as any).stage.id);
+      }
     }
   }, [selectedLead]);
 
-  const validateForm = (): boolean => {
-    const newErrors: Partial<LeadFormData> = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
-    }
-
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^[+]?[\d\s-]{10,}$/.test(formData.phone.trim())) {
-      newErrors.phone = 'Invalid phone number';
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email address';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const handleSave = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
     setIsSaving(true);
     try {
-      await dispatch(updateLead({ leadId, data: formData })).unwrap();
+      // Only update notes and source - not basic details
+      await dispatch(updateLead({
+        leadId,
+        data: {
+          source: formData.source,
+          notes: formData.notes,
+        }
+      })).unwrap();
+
+      // Update stage if changed
+      if (selectedStageId && selectedStageId !== (selectedLead as any)?.stageId) {
+        try {
+          await stagesApi.updateLeadStage(leadId, selectedStageId);
+        } catch (stageError) {
+          console.error('Error updating stage:', stageError);
+        }
+      }
+
       Alert.alert('Success', 'Lead updated successfully', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -118,9 +131,24 @@ const EditLeadScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const updateField = (field: keyof LeadFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const getSelectedStage = () => {
+    return stages.find(s => s.id === selectedStageId);
+  };
+
+  const getCurrentStageName = () => {
+    const stage = getSelectedStage();
+    if (stage) return stage.name;
+    // Fallback to lead's stage name if available
+    if ((selectedLead as any)?.stage?.name) {
+      return (selectedLead as any).stage.name;
     }
+    return 'Select Stage';
+  };
+
+  const getStageColor = (stage: LeadStage) => {
+    return stage.color || '#6B7280';
   };
 
   if (isLoading && !selectedLead) {
@@ -137,116 +165,137 @@ const EditLeadScreen: React.FC<Props> = ({ route, navigation }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Name Field */}
+        {/* Read-only notice */}
+        <View style={styles.noticeCard}>
+          <Icon name="information" size={20} color="#3B82F6" />
+          <Text style={styles.noticeText}>
+            Basic details can only be edited by managers. You can update the stage, source, and notes.
+          </Text>
+        </View>
+
+        {/* Name Field - Read Only */}
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Name *</Text>
-          <View style={[styles.inputContainer, errors.name ? styles.inputError : undefined]}>
-            <Icon name="account" size={20} color="#6B7280" style={styles.inputIcon} />
+          <Text style={styles.label}>Name</Text>
+          <View style={[styles.inputContainer, styles.readOnlyInput]}>
+            <Icon name="account" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.readOnlyText]}
               value={formData.name}
-              onChangeText={(value) => updateField('name', value)}
-              placeholder="Enter name"
+              editable={false}
+              placeholder="Name"
               placeholderTextColor="#9CA3AF"
             />
+            <Icon name="lock" size={16} color="#9CA3AF" />
           </View>
-          {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
         </View>
 
-        {/* Phone Field */}
+        {/* Phone Field - Read Only */}
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Phone *</Text>
-          <View style={[styles.inputContainer, errors.phone ? styles.inputError : undefined]}>
-            <Icon name="phone" size={20} color="#6B7280" style={styles.inputIcon} />
+          <Text style={styles.label}>Phone</Text>
+          <View style={[styles.inputContainer, styles.readOnlyInput]}>
+            <Icon name="phone" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.readOnlyText]}
               value={formData.phone}
-              onChangeText={(value) => updateField('phone', value)}
-              placeholder="Enter phone number"
+              editable={false}
+              placeholder="Phone"
               placeholderTextColor="#9CA3AF"
-              keyboardType="phone-pad"
             />
+            <Icon name="lock" size={16} color="#9CA3AF" />
           </View>
-          {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
         </View>
 
-        {/* Email Field */}
+        {/* Email Field - Read Only */}
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Email</Text>
-          <View style={[styles.inputContainer, errors.email ? styles.inputError : undefined]}>
-            <Icon name="email" size={20} color="#6B7280" style={styles.inputIcon} />
+          <View style={[styles.inputContainer, styles.readOnlyInput]}>
+            <Icon name="email" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput
-              style={styles.input}
-              value={formData.email}
-              onChangeText={(value) => updateField('email', value)}
-              placeholder="Enter email"
+              style={[styles.input, styles.readOnlyText]}
+              value={formData.email || 'Not provided'}
+              editable={false}
+              placeholder="Email"
               placeholderTextColor="#9CA3AF"
-              keyboardType="email-address"
-              autoCapitalize="none"
             />
+            <Icon name="lock" size={16} color="#9CA3AF" />
           </View>
-          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
         </View>
 
-        {/* Company Field */}
+        {/* Company Field - Read Only */}
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Company</Text>
-          <View style={styles.inputContainer}>
-            <Icon name="domain" size={20} color="#6B7280" style={styles.inputIcon} />
+          <View style={[styles.inputContainer, styles.readOnlyInput]}>
+            <Icon name="domain" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput
-              style={styles.input}
-              value={formData.company}
-              onChangeText={(value) => updateField('company', value)}
-              placeholder="Enter company name"
+              style={[styles.input, styles.readOnlyText]}
+              value={formData.company || 'Not provided'}
+              editable={false}
+              placeholder="Company"
               placeholderTextColor="#9CA3AF"
             />
+            <Icon name="lock" size={16} color="#9CA3AF" />
           </View>
         </View>
 
-        {/* Status Picker */}
+        {/* Stage Picker - Editable */}
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Status</Text>
+          <Text style={styles.label}>Lead Stage</Text>
           <TouchableOpacity
             style={styles.pickerButton}
-            onPress={() => setShowStatusPicker(!showStatusPicker)}
+            onPress={() => setShowStagePicker(!showStagePicker)}
+            disabled={loadingStages}
           >
-            <Icon name="tag" size={20} color="#6B7280" style={styles.inputIcon} />
-            <Text style={styles.pickerText}>{formData.status}</Text>
-            <Icon
-              name={showStatusPicker ? 'chevron-up' : 'chevron-down'}
-              size={20}
-              color="#6B7280"
-            />
+            {loadingStages ? (
+              <ActivityIndicator size="small" color="#6B7280" />
+            ) : (
+              <>
+                <View style={[styles.stageDot, { backgroundColor: getSelectedStage()?.color || '#6B7280' }]} />
+                <Text style={styles.pickerText}>{getCurrentStageName()}</Text>
+                <Icon
+                  name={showStagePicker ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color="#6B7280"
+                />
+              </>
+            )}
           </TouchableOpacity>
-          {showStatusPicker && (
+          {showStagePicker && (
             <View style={styles.optionsList}>
-              {STATUS_OPTIONS.map((status) => (
-                <TouchableOpacity
-                  key={status}
-                  style={[
-                    styles.optionItem,
-                    formData.status === status && styles.optionItemActive,
-                  ]}
-                  onPress={() => {
-                    updateField('status', status);
-                    setShowStatusPicker(false);
-                  }}
-                >
-                  <Text
+              {stages.map((stage) => {
+                const isSelected = selectedStageId === stage.id;
+                const isLost = (stage.journeyOrder || 0) < 0;
+                return (
+                  <TouchableOpacity
+                    key={stage.id}
                     style={[
-                      styles.optionText,
-                      formData.status === status && styles.optionTextActive,
+                      styles.optionItem,
+                      isSelected && styles.optionItemActive,
+                      isLost && styles.lostStageOption,
                     ]}
+                    onPress={() => {
+                      setSelectedStageId(stage.id);
+                      setShowStagePicker(false);
+                    }}
                   >
-                    {status}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <View style={[styles.stageDot, { backgroundColor: stage.color || '#6B7280' }]} />
+                    <Text
+                      style={[
+                        styles.optionText,
+                        isSelected && styles.optionTextActive,
+                        isLost && styles.lostStageText,
+                      ]}
+                    >
+                      {stage.name}
+                    </Text>
+                    {isSelected && <Icon name="check" size={18} color="#3B82F6" />}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
 
-        {/* Source Picker */}
+        {/* Source Picker - Editable */}
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Source</Text>
           <TouchableOpacity
@@ -291,7 +340,7 @@ const EditLeadScreen: React.FC<Props> = ({ route, navigation }) => {
           )}
         </View>
 
-        {/* Notes Field */}
+        {/* Notes Field - Editable */}
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Notes</Text>
           <View style={[styles.inputContainer, styles.textAreaContainer]}>
@@ -346,6 +395,23 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  noticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1E40AF',
+    lineHeight: 18,
+  },
   fieldContainer: {
     marginBottom: 16,
   },
@@ -364,8 +430,12 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     paddingHorizontal: 12,
   },
-  inputError: {
-    borderColor: '#EF4444',
+  readOnlyInput: {
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
+  },
+  readOnlyText: {
+    color: '#6B7280',
   },
   inputIcon: {
     marginRight: 8,
@@ -383,11 +453,6 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 100,
     paddingTop: 0,
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 4,
   },
   pickerButton: {
     flexDirection: 'row',
@@ -407,6 +472,12 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#9CA3AF',
   },
+  stageDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 10,
+  },
   optionsList: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -414,8 +485,11 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     marginTop: 8,
     overflow: 'hidden',
+    maxHeight: 300,
   },
   optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -424,7 +498,16 @@ const styles = StyleSheet.create({
   optionItemActive: {
     backgroundColor: '#EBF5FF',
   },
+  lostStageOption: {
+    backgroundColor: '#FEF2F2',
+    borderTopWidth: 2,
+    borderTopColor: '#FECACA',
+  },
+  lostStageText: {
+    color: '#DC2626',
+  },
   optionText: {
+    flex: 1,
     fontSize: 14,
     color: '#374151',
   },

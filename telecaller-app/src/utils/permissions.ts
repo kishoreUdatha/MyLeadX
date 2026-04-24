@@ -198,7 +198,7 @@ export const openAppSettings = async (): Promise<void> => {
     console.error('Error opening settings:', error);
     Alert.alert(
       'Error',
-      'Unable to open app settings. Please go to Settings > Apps > Telecaller CRM to manage permissions.'
+      'Unable to open app settings. Please go to Settings > Apps > MyLeadX to manage permissions.'
     );
   }
 };

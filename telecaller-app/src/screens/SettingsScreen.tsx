@@ -329,7 +329,7 @@ const SettingsScreen: React.FC = () => {
       </TouchableOpacity>
 
       {/* Version */}
-      <Text style={styles.version}>Telecaller CRM v1.0.0</Text>
+      <Text style={styles.version}>MyLeadX v1.0.0</Text>
     </ScrollView>
   );
 };

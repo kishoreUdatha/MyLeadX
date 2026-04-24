@@ -12,6 +12,7 @@ import AuthLayout from './layouts/AuthLayout';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 
 // Dashboard Pages
 import DashboardPage from './pages/dashboard/DashboardPage';
@@ -432,6 +433,15 @@ function App() {
               <ForgotPasswordPage />
             </AuthLayout>
           </PublicRoute>
+        }
+      />
+      {/* Reset password should be accessible regardless of auth state */}
+      <Route
+        path="/reset-password"
+        element={
+          <AuthLayout>
+            <ResetPasswordPage />
+          </AuthLayout>
         }
       />
 
