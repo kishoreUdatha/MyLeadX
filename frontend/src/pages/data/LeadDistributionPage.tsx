@@ -220,7 +220,7 @@ export default function LeadDistributionPage() {
               {selectedTelecaller.telecallerName}'s Assigned Data
             </h1>
             <p className="text-xs text-gray-500">
-              {selectedTelecaller.totalAssigned} total leads assigned
+              {selectedTelecaller.totalAssigned} total records assigned
             </p>
           </div>
           <button
@@ -420,7 +420,7 @@ export default function LeadDistributionPage() {
         <div className="flex items-center gap-2">
           <div>
             <h1 className="text-lg font-semibold text-gray-900">Shared Data</h1>
-            <p className="text-xs text-gray-500">View shared lead data by telecaller</p>
+            <p className="text-xs text-gray-500">View assigned records by telecaller</p>
           </div>
           {isFilteringToday && (
             <span className="px-2 py-1 bg-violet-100 text-violet-700 text-xs font-medium rounded-full">
@@ -454,7 +454,7 @@ export default function LeadDistributionPage() {
         <div className="bg-white rounded-lg border p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[10px] text-gray-500 uppercase">Total Leads</p>
+              <p className="text-[10px] text-gray-500 uppercase">Assigned Records</p>
               <p className="text-xl font-bold text-gray-900">{totalAssigned}</p>
             </div>
             <div className="p-2 bg-purple-100 rounded-lg">
@@ -466,7 +466,7 @@ export default function LeadDistributionPage() {
         <div className="bg-white rounded-lg border p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[10px] text-gray-500 uppercase">Pending</p>
+              <p className="text-[10px] text-gray-500 uppercase">Not Called</p>
               <p className="text-xl font-bold text-blue-600">{totalPending}</p>
             </div>
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -490,7 +490,7 @@ export default function LeadDistributionPage() {
         <div className="bg-white rounded-lg border p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[10px] text-gray-500 uppercase">Converted</p>
+              <p className="text-[10px] text-gray-500 uppercase">To Leads</p>
               <p className="text-xl font-bold text-primary-600">{totalConverted}</p>
             </div>
             <div className="p-2 bg-primary-100 rounded-lg">
@@ -506,7 +506,7 @@ export default function LeadDistributionPage() {
           <div className="flex items-center gap-2">
             <ClockIcon className="h-5 w-5 text-yellow-600" />
             <span className="text-sm text-yellow-800">
-              <strong>{stats.unassignedCount}</strong> leads are pending assignment
+              <strong>{stats.unassignedCount}</strong> records are pending assignment
             </span>
           </div>
           <button
