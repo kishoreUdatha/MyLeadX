@@ -313,7 +313,7 @@ export default function NumbersShopPage() {
                               <PhoneIcon className="w-4 h-4 text-blue-600" />
                             </div>
                             <span className="font-mono text-sm font-medium text-slate-900">
-                              {num.displayNumber}
+                              {num.displayNumber || num.number || '-'}
                             </span>
                           </div>
                         </td>
@@ -668,7 +668,7 @@ export default function NumbersShopPage() {
               Assign Phone Number
             </h3>
             <p className="text-sm text-slate-500 mb-5">
-              {selectedNumber.displayNumber || selectedNumber.number}
+              {selectedNumber.displayNumber || selectedNumber.number || '-'}
             </p>
 
             {/* Assignment Type Toggle */}
