@@ -1479,7 +1479,7 @@ export const OutboundCallsPage: React.FC = () => {
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={(e) => { e.stopPropagation(); viewTelecallerCallSummary(call.id); }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-primary-600 bg-primary-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary-100"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100"
                       >
                         View
                         <ArrowRightIcon className="h-3 w-3" />
