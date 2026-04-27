@@ -47,6 +47,10 @@ services:
       EXOTEL_SID: ${EXOTEL_SID:-}
       EXOTEL_SUBDOMAIN: ${EXOTEL_SUBDOMAIN:-}
       EXOTEL_CALLER_ID: ${EXOTEL_CALLER_ID:-}
+      # Plivo
+      PLIVO_AUTH_ID: ${PLIVO_AUTH_ID:-}
+      PLIVO_AUTH_TOKEN: ${PLIVO_AUTH_TOKEN:-}
+      PLIVO_PHONE_NUMBER: ${PLIVO_PHONE_NUMBER:-}
       # OpenAI
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Razorpay
