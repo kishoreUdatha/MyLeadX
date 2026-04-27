@@ -1184,249 +1184,161 @@ export const OutboundCallsPage: React.FC = () => {
 
       {/* Telecaller Calls Table */}
       {activeTab === 'telecaller-calls' && (
-      <div className="card overflow-hidden">
-        {/* Compact Header with Filters */}
-        <div className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-200 px-4 py-3">
-          {/* Top Row: Title + Export */}
-          <div className="flex justify-between items-center mb-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-gray-900">
+      <div className="card overflow-hidden border-0 shadow-lg">
+        {/* Clean Header */}
+        <div className="px-5 py-4 bg-white border-b border-gray-100">
+          {/* Title Row */}
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-base font-semibold text-gray-800">
                 {isTelecaller ? 'My Calls' : (isTeamManager ? 'Team Calls' : 'Telecaller Calls')}
               </h2>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white border border-gray-200 rounded-full shadow-sm">
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                <span className="text-[11px] font-semibold text-gray-700">{telecallerCallsTotal}</span>
-              </div>
+              <span className="px-2.5 py-1 text-xs font-medium text-primary-700 bg-primary-50 rounded-full">
+                {telecallerCallsTotal} calls
+              </span>
             </div>
             <button
               onClick={exportToCSV}
               disabled={exporting || telecallerCalls.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 hover:shadow transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
             >
               <ArrowDownTrayIcon className="h-4 w-4" />
-              {exporting ? 'Exporting...' : 'Export'}
+              Export
             </button>
           </div>
 
-          {/* Filter Bar - Two Rows Layout */}
-          <div className="space-y-2">
-            {/* Row 1: Search + Quick Date Pills */}
-            <div className="flex items-center gap-3">
-              {/* Search */}
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search name or phone..."
-                  value={tcFilterSearch}
-                  onChange={(e) => setTcFilterSearch(e.target.value)}
-                  className="w-44 pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
-                />
-              </div>
+          {/* Single Line Filters */}
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search..."
+                value={tcFilterSearch}
+                onChange={(e) => setTcFilterSearch(e.target.value)}
+                className="w-32 pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
+              />
+            </div>
 
-              {/* Quick Date Pills */}
-              <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 p-0.5 shadow-sm">
-                {[
-                  { value: 'today', label: 'Today' },
-                  { value: 'yesterday', label: 'Yesterday' },
-                  { value: 'last7days', label: '7 Days' },
-                  { value: 'thismonth', label: 'This Month' },
-                ].map((preset) => (
-                  <button
-                    key={preset.value}
-                    onClick={() => applyDatePreset(tcFilterDatePreset === preset.value ? '' : preset.value)}
-                    className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all ${
-                      tcFilterDatePreset === preset.value
-                        ? 'bg-primary-600 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Clear All - Only show when filters active */}
-              {(tcFilterTelecaller || tcFilterOutcome || tcFilterCallType || tcFilterDuration || tcFilterSearch || tcFilterDatePreset || tcFilterBranch || tcFilterReportingTo) && (
+            {/* Date Tabs */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+              {[
+                { value: '', label: 'All' },
+                { value: 'today', label: 'Today' },
+                { value: 'last7days', label: '7D' },
+                { value: 'thismonth', label: 'Month' },
+              ].map((preset) => (
                 <button
-                  onClick={clearTcFilters}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                  key={preset.value}
+                  onClick={() => applyDatePreset(preset.value)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                    tcFilterDatePreset === preset.value || (preset.value === '' && !tcFilterDatePreset)
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
                 >
-                  <XMarkIcon className="h-3.5 w-3.5" />
-                  Clear All
+                  {preset.label}
                 </button>
-              )}
+              ))}
             </div>
 
-            {/* Row 2: Dropdown Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Telecaller Filter */}
-              {canViewAllCalls && (
-                <select
-                  value={tcFilterTelecaller}
-                  onChange={(e) => setTcFilterTelecaller(e.target.value)}
-                  className={`text-[11px] border rounded-lg px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm cursor-pointer ${
-                    tcFilterTelecaller ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-white text-gray-600'
-                  }`}
-                >
-                  <option value="">All Telecallers</option>
-                  {telecallers.map((tc) => (
-                    <option key={tc.id} value={tc.id}>{tc.firstName} {tc.lastName}</option>
-                  ))}
-                </select>
-              )}
-
-              {/* Branch Filter */}
-              {isFullAdmin && branches.length > 0 && (
-                <select
-                  value={tcFilterBranch}
-                  onChange={(e) => setTcFilterBranch(e.target.value)}
-                  className={`text-[11px] border rounded-lg px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm cursor-pointer ${
-                    tcFilterBranch ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-white text-gray-600'
-                  }`}
-                >
-                  <option value="">All Branches</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
-              )}
-
-              {/* Manager Filter */}
-              {isFullAdmin && managers.length > 0 && (
-                <select
-                  value={tcFilterReportingTo}
-                  onChange={(e) => setTcFilterReportingTo(e.target.value)}
-                  className={`text-[11px] border rounded-lg px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm cursor-pointer ${
-                    tcFilterReportingTo ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-white text-gray-600'
-                  }`}
-                >
-                  <option value="">All Managers</option>
-                  {managers.map((manager) => (
-                    <option key={manager.id} value={manager.id}>{manager.firstName} {manager.lastName}</option>
-                  ))}
-                </select>
-              )}
-
-              {/* Outcome Filter */}
+            {/* All Dropdown Filters in Single Line */}
+            {canViewAllCalls && (
               <select
-                value={tcFilterOutcome}
-                onChange={(e) => setTcFilterOutcome(e.target.value)}
-                className={`text-[11px] border rounded-lg px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm cursor-pointer ${
-                  tcFilterOutcome ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-white text-gray-600'
+                value={tcFilterTelecaller}
+                onChange={(e) => setTcFilterTelecaller(e.target.value)}
+                className={`text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer ${
+                  tcFilterTelecaller ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
                 }`}
               >
-                <option value="">All Outcomes</option>
-                <option value="INTERESTED">Interested</option>
-                <option value="NOT_INTERESTED">Not Interested</option>
-                <option value="CALLBACK_REQUESTED">Callback</option>
-                <option value="NO_ANSWER">No Answer</option>
-                <option value="CONVERTED">Converted</option>
+                <option value="">Telecaller</option>
+                {telecallers.map((tc) => (
+                  <option key={tc.id} value={tc.id}>{tc.firstName}</option>
+                ))}
               </select>
+            )}
 
-              {/* Type Filter */}
+            {isFullAdmin && branches.length > 0 && (
               <select
-                value={tcFilterCallType}
-                onChange={(e) => setTcFilterCallType(e.target.value)}
-                className={`text-[11px] border rounded-lg px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm cursor-pointer ${
-                  tcFilterCallType ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-white text-gray-600'
+                value={tcFilterBranch}
+                onChange={(e) => setTcFilterBranch(e.target.value)}
+                className={`text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer ${
+                  tcFilterBranch ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
                 }`}
               >
-                <option value="">All Types</option>
-                <option value="OUTBOUND">Outbound</option>
-                <option value="INBOUND">Inbound</option>
+                <option value="">Branch</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
               </select>
+            )}
 
-              {/* Duration Filter */}
+            {isFullAdmin && managers.length > 0 && (
               <select
-                value={tcFilterDuration}
-                onChange={(e) => setTcFilterDuration(e.target.value)}
-                className={`text-[11px] border rounded-lg px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm cursor-pointer ${
-                  tcFilterDuration ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-white text-gray-600'
+                value={tcFilterReportingTo}
+                onChange={(e) => setTcFilterReportingTo(e.target.value)}
+                className={`text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer ${
+                  tcFilterReportingTo ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
                 }`}
               >
-                <option value="">All Durations</option>
-                <option value="short">&lt; 30 sec</option>
-                <option value="medium">30s - 2 min</option>
-                <option value="long">&gt; 2 min</option>
+                <option value="">Manager</option>
+                {managers.map((manager) => (
+                  <option key={manager.id} value={manager.id}>{manager.firstName}</option>
+                ))}
               </select>
-            </div>
+            )}
+
+            <select
+              value={tcFilterOutcome}
+              onChange={(e) => setTcFilterOutcome(e.target.value)}
+              className={`text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer ${
+                tcFilterOutcome ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
+              }`}
+            >
+              <option value="">Outcome</option>
+              <option value="INTERESTED">Interested</option>
+              <option value="NOT_INTERESTED">Not Interested</option>
+              <option value="CALLBACK_REQUESTED">Callback</option>
+              <option value="NO_ANSWER">No Answer</option>
+              <option value="CONVERTED">Converted</option>
+            </select>
+
+            <select
+              value={tcFilterCallType}
+              onChange={(e) => setTcFilterCallType(e.target.value)}
+              className={`text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer ${
+                tcFilterCallType ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
+              }`}
+            >
+              <option value="">Type</option>
+              <option value="OUTBOUND">Out</option>
+              <option value="INBOUND">In</option>
+            </select>
+
+            <select
+              value={tcFilterDuration}
+              onChange={(e) => setTcFilterDuration(e.target.value)}
+              className={`text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer ${
+                tcFilterDuration ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
+              }`}
+            >
+              <option value="">Duration</option>
+              <option value="short">&lt;30s</option>
+              <option value="medium">30s-2m</option>
+              <option value="long">&gt;2m</option>
+            </select>
+
+            {/* Clear Filters */}
+            {(tcFilterTelecaller || tcFilterOutcome || tcFilterCallType || tcFilterDuration || tcFilterSearch || tcFilterBranch || tcFilterReportingTo) && (
+              <button
+                onClick={clearTcFilters}
+                className="text-xs text-red-500 hover:text-red-600"
+              >
+                Clear
+              </button>
+            )}
           </div>
-
-          {/* Active Filters - Compact chips */}
-          {(tcFilterTelecaller || tcFilterOutcome || tcFilterCallType || tcFilterDuration || tcFilterSearch || tcFilterDatePreset || tcFilterBranch || tcFilterReportingTo) && (
-            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              {tcFilterSearch && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                  "{tcFilterSearch}"
-                  <button onClick={() => setTcFilterSearch('')} className="hover:bg-blue-600 rounded-full p-0.5">
-                    <XMarkIcon className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              )}
-              {tcFilterTelecaller && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                  {telecallers.find(t => t.id === tcFilterTelecaller)?.firstName}
-                  <button onClick={() => setTcFilterTelecaller('')} className="hover:bg-purple-600 rounded-full p-0.5">
-                    <XMarkIcon className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              )}
-              {tcFilterBranch && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                  {branches.find(b => b.id === tcFilterBranch)?.name}
-                  <button onClick={() => setTcFilterBranch('')} className="hover:bg-indigo-600 rounded-full p-0.5">
-                    <XMarkIcon className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              )}
-              {tcFilterReportingTo && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                  {managers.find(m => m.id === tcFilterReportingTo)?.firstName}
-                  <button onClick={() => setTcFilterReportingTo('')} className="hover:bg-teal-600 rounded-full p-0.5">
-                    <XMarkIcon className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              )}
-              {tcFilterOutcome && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                  {outcomeLabels[tcFilterOutcome] || tcFilterOutcome}
-                  <button onClick={() => setTcFilterOutcome('')} className="hover:bg-green-600 rounded-full p-0.5">
-                    <XMarkIcon className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              )}
-              {tcFilterCallType && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-sky-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                  {tcFilterCallType === 'INBOUND' ? 'In' : 'Out'}
-                  <button onClick={() => setTcFilterCallType('')} className="hover:bg-sky-600 rounded-full p-0.5">
-                    <XMarkIcon className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              )}
-              {tcFilterDuration && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                  {tcFilterDuration === 'short' ? '<30s' : tcFilterDuration === 'medium' ? '30s-2m' : '>2m'}
-                  <button onClick={() => setTcFilterDuration('')} className="hover:bg-amber-600 rounded-full p-0.5">
-                    <XMarkIcon className="h-2.5 w-2.5" />
-                  </button>
-                  </span>
-                )}
-                {tcFilterDatePreset && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500 text-white text-[10px] font-medium rounded-full shadow-sm">
-                    {tcFilterDatePreset === 'today' ? 'Today' :
-                     tcFilterDatePreset === 'yesterday' ? 'Yest' :
-                     tcFilterDatePreset === 'last7days' ? '7D' :
-                     tcFilterDatePreset === 'thismonth' ? 'Month' :
-                     tcFilterDatePreset === 'lastmonth' ? 'Last M' :
-                     tcFilterDatePreset === 'lastweek' ? 'Last W' : 'Custom'}
-                    <button onClick={() => { setTcFilterDatePreset(''); setTcFilterDateFrom(''); setTcFilterDateTo(''); }} className="hover:bg-orange-600 rounded-full p-0.5">
-                      <XMarkIcon className="h-2.5 w-2.5" />
-                    </button>
-                  </span>
-                )}
-              </div>
-          )}
         </div>
 
         {/* Table with improved styling */}
