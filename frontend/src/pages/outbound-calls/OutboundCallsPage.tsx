@@ -628,25 +628,38 @@ export const OutboundCallsPage: React.FC = () => {
                    'View all telecaller call history'))}
           </p>
         </div>
-        {/* Only show campaign controls for full admins */}
-        {isFullAdmin && (
-          <div className="flex gap-1.5">
+        <div className="flex gap-1.5">
+          {/* Export button for telecaller calls */}
+          {activeTab === 'telecaller' && (
             <button
-              onClick={() => navigate('/outbound-calls/single')}
+              onClick={exportToCSV}
+              disabled={exporting || telecallerCalls.length === 0}
               className="btn btn-outline btn-sm flex items-center gap-1 text-xs"
             >
-              <PhoneIcon className="h-4 w-4" />
-              Single Call
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              Export
             </button>
-            <button
-              onClick={() => navigate('/outbound-calls/campaigns/create')}
-              className="btn btn-primary btn-sm flex items-center gap-1 text-xs"
-            >
-              <PlusIcon className="h-4 w-4" />
-              New Campaign
-            </button>
-          </div>
-        )}
+          )}
+          {/* Only show campaign controls for full admins */}
+          {isFullAdmin && (
+            <>
+              <button
+                onClick={() => navigate('/outbound-calls/single')}
+                className="btn btn-outline btn-sm flex items-center gap-1 text-xs"
+              >
+                <PhoneIcon className="h-4 w-4" />
+                Single Call
+              </button>
+              <button
+                onClick={() => navigate('/outbound-calls/campaigns/create')}
+                className="btn btn-primary btn-sm flex items-center gap-1 text-xs"
+              >
+                <PlusIcon className="h-4 w-4" />
+                New Campaign
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards - Tab-specific View */}
@@ -1189,15 +1202,6 @@ export const OutboundCallsPage: React.FC = () => {
         <div className="px-5 py-4 bg-white border-b border-gray-100">
           {/* Single Line Filters */}
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Export Button */}
-            <button
-              onClick={exportToCSV}
-              disabled={exporting || telecallerCalls.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
-            >
-              <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-              Export
-            </button>
             {/* Search */}
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
