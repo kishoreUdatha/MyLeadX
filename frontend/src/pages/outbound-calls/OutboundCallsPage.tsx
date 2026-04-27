@@ -1185,25 +1185,19 @@ export const OutboundCallsPage: React.FC = () => {
       {/* Telecaller Calls Table */}
       {activeTab === 'telecaller-calls' && (
       <div className="card overflow-hidden border-0 shadow-lg">
-        {/* Clean Header */}
+        {/* Filters Header */}
         <div className="px-5 py-4 bg-white border-b border-gray-100">
-          {/* Title Row */}
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-base font-semibold text-gray-800">
-              {isTelecaller ? 'My Calls' : (isTeamManager ? 'Team Calls' : 'Telecaller Calls')}
-            </h2>
+          {/* Single Line Filters */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Export Button */}
             <button
               onClick={exportToCSV}
               disabled={exporting || telecallerCalls.length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
             >
-              <ArrowDownTrayIcon className="h-4 w-4" />
+              <ArrowDownTrayIcon className="h-3.5 w-3.5" />
               Export
             </button>
-          </div>
-
-          {/* Single Line Filters */}
-          <div className="flex items-center gap-3">
             {/* Search */}
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -1365,7 +1359,7 @@ export const OutboundCallsPage: React.FC = () => {
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Outcome</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">AI</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Date</th>
-                <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-600 uppercase tracking-wider"></th>
+                <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-600 uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
