@@ -139,10 +139,11 @@ class FollowUpReportsService {
   }
 
   /**
-   * 1. FOLLOW-UP SUMMARY
+   * 1. FOLLOW-UP SUMMARY (no date range filter - shows ALL follow-ups)
    */
   async getSummary(filters: ReportFilters): Promise<FollowUpSummary> {
-    const where = await this.buildWhereClause(filters);
+    // Skip date range filter to show ALL follow-ups in the organization
+    const where = await this.buildWhereClause(filters, true);
     const now = new Date();
 
     const [total, pending, overdue, completed, missed, rescheduled] = await Promise.all([
@@ -571,6 +572,53 @@ class FollowUpReportsService {
   }
 
   /**
+   * GET ALL PENDING FOLLOW-UPS (future dated, no date range limit)
+   */
+  async getAllPendingFollowUps(filters: ReportFilters, limit = 200): Promise<ScheduledFollowUp[]> {
+    // Skip date range filter - get ALL future follow-ups
+    const where = await this.buildWhereClause(filters, true);
+    const now = new Date();
+
+    const followUps = await prisma.followUp.findMany({
+      where: {
+        ...where,
+        status: 'UPCOMING',
+        scheduledAt: { gte: now },
+      },
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true, phone: true, source: true, lastContactedAt: true, firstResponseAt: true, updatedAt: true } },
+        assignee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            manager: { select: { firstName: true, lastName: true } }
+          }
+        },
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: limit,
+    });
+
+    return followUps.map(f => ({
+      id: f.id,
+      leadId: f.leadId,
+      leadName: `${f.lead.firstName || ''} ${f.lead.lastName || ''}`.trim() || 'Unknown',
+      leadPhone: f.lead.phone || '',
+      leadSource: f.lead.source || 'Unknown',
+      lastContactedAt: f.lead.lastContactedAt || f.lead.firstResponseAt || f.lead.updatedAt,
+      scheduledAt: f.scheduledAt,
+      message: f.message,
+      notes: f.notes,
+      assigneeName: `${f.assignee.firstName} ${f.assignee.lastName}`.trim(),
+      reportingManager: f.assignee.manager ? `${f.assignee.manager.firstName} ${f.assignee.manager.lastName}`.trim() : '-',
+      followUpType: f.followUpType,
+      attemptCount: f.attemptCount,
+      lastAttemptAt: f.lastAttemptAt,
+      isOverdue: false,
+    }));
+  }
+
+  /**
    * COMPREHENSIVE FOLLOW-UP REPORT
    */
   async getComprehensiveReport(filters: ReportFilters): Promise<{
@@ -578,13 +626,15 @@ class FollowUpReportsService {
     byEmployee: FollowUpsByEmployee[];
     schedule: Awaited<ReturnType<typeof this.getNextFollowUpSchedule>>;
     overdue: ScheduledFollowUp[];
+    allPending: ScheduledFollowUp[];
     noResponse: NoResponseLead[];
   }> {
-    const [summary, byEmployee, schedule, overdue, noResponse] = await Promise.all([
+    const [summary, byEmployee, schedule, overdue, allPending, noResponse] = await Promise.all([
       this.getSummary(filters),
       this.getFollowUpsByEmployee(filters),
       this.getNextFollowUpSchedule(filters),
-      this.getOverdueFollowUps(filters, 100),
+      this.getOverdueFollowUps(filters, 200),
+      this.getAllPendingFollowUps(filters, 200),
       this.getNoResponseLeads(filters),
     ]);
 
@@ -593,6 +643,7 @@ class FollowUpReportsService {
       byEmployee,
       schedule,
       overdue,
+      allPending,
       noResponse,
     };
   }

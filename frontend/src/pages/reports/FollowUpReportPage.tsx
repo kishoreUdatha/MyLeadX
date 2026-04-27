@@ -56,25 +56,15 @@ export default function FollowUpReportPage() {
       const report = response.data.data.report;
       const now = new Date();
 
-      // Combine all follow-ups from schedule and overdue
+      // Combine ALL pending follow-ups (future) and ALL overdue follow-ups
       const allFollowUps: any[] = [];
 
-      // Add today's follow-ups
-      if (report.schedule?.today) {
-        report.schedule.today.forEach((f: any) => allFollowUps.push({ ...f, status: 'Pending' }));
+      // Add ALL pending/upcoming follow-ups (future dated)
+      if (report.allPending) {
+        report.allPending.forEach((f: any) => allFollowUps.push({ ...f, status: 'Pending' }));
       }
 
-      // Add tomorrow's follow-ups
-      if (report.schedule?.tomorrow) {
-        report.schedule.tomorrow.forEach((f: any) => allFollowUps.push({ ...f, status: 'Pending' }));
-      }
-
-      // Add this week's follow-ups
-      if (report.schedule?.thisWeek) {
-        report.schedule.thisWeek.forEach((f: any) => allFollowUps.push({ ...f, status: 'Pending' }));
-      }
-
-      // Add overdue follow-ups
+      // Add ALL overdue follow-ups (past dated, not completed)
       if (report.overdue) {
         report.overdue.forEach((f: any) => allFollowUps.push({ ...f, status: 'Missed' }));
       }
