@@ -1353,12 +1353,12 @@ export const OutboundCallsPage: React.FC = () => {
                 {canViewAllCalls && (
                   <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Telecaller</th>
                 )}
-                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Type</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Duration</th>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Outcome</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">AI</th>
-                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-600 uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-600 uppercase tracking-wider">Action</th>
               </tr>
             </thead>
@@ -1416,14 +1416,10 @@ export const OutboundCallsPage: React.FC = () => {
                       </td>
                     )}
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        call.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                        call.status === 'FAILED' ? 'bg-red-100 text-red-700' :
-                        call.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                        {call.status === 'COMPLETED' ? '✓' : call.status === 'FAILED' ? '✗' : '●'} {statusLabels[call.status] || call.status}
-                      </span>
+                      <div>
+                        <p className="text-[11px] font-medium text-gray-700">{new Date(call.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</p>
+                        <p className="text-[10px] text-gray-400">{new Date(call.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -1435,6 +1431,16 @@ export const OutboundCallsPage: React.FC = () => {
                     <td className="px-4 py-3">
                       <span className="text-xs font-mono text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded">
                         {call.duration ? formatDuration(call.duration) : '--:--'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        call.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                        call.status === 'FAILED' ? 'bg-red-100 text-red-700' :
+                        call.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {call.status === 'COMPLETED' ? '✓' : call.status === 'FAILED' ? '✗' : '●'} {statusLabels[call.status] || call.status}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -1469,12 +1475,6 @@ export const OutboundCallsPage: React.FC = () => {
                       ) : (
                         <span className="text-[10px] text-gray-300">—</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-right">
-                        <p className="text-[11px] font-medium text-gray-700">{new Date(call.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</p>
-                        <p className="text-[10px] text-gray-400">{new Date(call.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
-                      </div>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
