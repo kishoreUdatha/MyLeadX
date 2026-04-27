@@ -14,6 +14,7 @@ import {
   AI4BharatLanguageCode,
 } from '../integrations/ai4bharat.service';
 import { agentSecurityService, SecurityContext } from './agent-security.service';
+import { voiceLeadIntegrationService } from './voice-lead-integration.service';
 import {
   RealtimeSession,
   RealtimeStatus,
@@ -28,6 +29,10 @@ import {
   TranscriptEntry,
   QualificationData,
 } from '../types/realtime.types';
+
+// TTS retry configuration
+const TTS_MAX_RETRIES = 3;
+const TTS_RETRY_DELAY_MS = 500;
 
 // OpenAI client for hybrid mode (GPT for AI responses)
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
@@ -77,6 +82,14 @@ function getGenderFromVoiceId(voiceId: string): 'male' | 'female' {
 interface ActiveSession extends RealtimeSession {
   socket: Socket;
   connection?: OpenAIRealtimeConnection;
+  // Agent configuration (from database)
+  agentConfig: {
+    llmProvider: string;
+    llmModel: string;
+    voiceId: string;
+    language: string;
+    temperature: number;
+  };
   // Hybrid mode properties
   isHybridMode?: boolean;
   hybridLanguage?: AI4BharatLanguageCode;
@@ -237,7 +250,7 @@ class RealtimeVoiceService {
     organizationId?: string,
     securityContext?: SecurityContext
   ): Promise<RealtimeStartedPayload> {
-    const { agentId, mode = 'REALTIME', leadId, visitorInfo } = payload;
+    const { agentId, mode = 'REALTIME', leadId, visitorInfo, testMode = false } = payload;
 
     // Validate agent exists and is configured for realtime
     const agent = await prisma.voiceAgent.findUnique({
@@ -250,8 +263,12 @@ class RealtimeVoiceService {
     }
 
     // ==================== PUBLISH STATUS CHECK ====================
-    // Only allow published agents to handle live sessions
-    if (agent.status !== 'PUBLISHED') {
+    // Allow test mode for authenticated users (dashboard testing)
+    // Test mode bypasses PUBLISHED check for internal testing
+    if (testMode && userId) {
+      console.log(`[RealtimeVoice] TEST MODE: Agent ${agentId} (status: ${agent.status}) - bypassing publish check for user ${userId}`);
+    } else if (agent.status !== 'PUBLISHED') {
+      // Only allow published agents to handle live sessions
       console.log(`[RealtimeVoice] Agent ${agentId} is not published (status: ${agent.status})`);
       throw new Error('This agent is not published yet. Please publish the agent to enable live conversations.');
     }
@@ -279,12 +296,13 @@ class RealtimeVoiceService {
     console.log(`[RealtimeVoice] Security checks passed for agent ${agentId}`);
     // ==================== END SECURITY CHECKS ====================
 
+    // Check if mode is enabled for this agent (based on agent configuration)
     if (mode === 'REALTIME' && !agent.realtimeEnabled) {
-      throw new Error('Realtime mode not enabled for this agent');
+      throw new Error('Realtime mode not enabled for this agent. Enable it in Agent Settings > Advanced.');
     }
 
     if (mode === 'WEBRTC' && !agent.webrtcEnabled) {
-      throw new Error('WebRTC mode not enabled for this agent');
+      throw new Error('WebRTC mode not enabled for this agent. Enable it in Agent Settings > Advanced.');
     }
 
     // Check if OpenAI API key is configured
@@ -352,6 +370,14 @@ class RealtimeVoiceService {
       qualification: {},
       interruptionCount: 0,
       socket,
+      // Agent configuration from database
+      agentConfig: {
+        llmProvider: agent.llmProvider || 'openai',
+        llmModel: agent.llmModel || 'gpt-4o-mini',
+        voiceId: agent.voiceId || 'alloy',
+        language: agent.language || 'en',
+        temperature: agent.temperature || 0.7,
+      },
       // Hybrid mode properties
       isHybridMode: useHybridMode,
       hybridLanguage,
@@ -439,6 +465,7 @@ class RealtimeVoiceService {
     // Map the agent's voice to a valid OpenAI voice
     const openAIVoice = mapToOpenAIVoice(agent.voiceId);
     console.log(`[RealtimeVoice] Using OpenAI voice "${openAIVoice}" (agent voiceId: "${agent.voiceId}")`);
+    console.log(`[RealtimeVoice] Agent language: "${agent.language || 'en'}"`);
 
     const connection = openaiRealtimeService.createConnection(session.id, {
       apiKey: config.openai.apiKey!,
@@ -446,6 +473,7 @@ class RealtimeVoiceService {
       temperature: agent.temperature || 0.8,
       instructions: this.buildInstructions(agent),
       silenceDurationMs, // Pass to OpenAI config
+      language: agent.language || 'en', // Pass language for better transcription
     });
 
     session.connection = connection;
@@ -915,23 +943,27 @@ ${instructions}`;
   }
 
   /**
-   * Get AI response using GPT for hybrid mode
+   * Get AI response using LLM for hybrid mode
+   * Uses agent's configured llmModel and temperature
    */
   private async getHybridAIResponse(session: ActiveSession): Promise<string> {
     const messages = session.hybridConversationHistory || [];
+    const { llmModel, temperature } = session.agentConfig;
+
+    console.log(`[RealtimeVoice] Using LLM: ${llmModel}, temperature: ${temperature}`);
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: llmModel,
       messages: messages as any,
       max_tokens: 300,
-      temperature: 0.7,
+      temperature: temperature,
     });
 
     return response.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
   }
 
   /**
-   * Speak text using AI4Bharat TTS in hybrid mode
+   * Speak text using AI4Bharat TTS in hybrid mode with retry logic
    */
   private async speakHybridResponse(session: ActiveSession, text: string): Promise<void> {
     if (!session.hybridLanguage) {
@@ -942,41 +974,119 @@ ${instructions}`;
     session.status = 'speaking';
     this.emitStatus(session.socket, 'speaking');
 
-    try {
-      // Generate audio using AI4Bharat TTS
-      const ttsResult = await ai4bharatService.synthesize(
-        text,
-        session.hybridLanguage,
-        session.hybridGender || 'female',
-        24000 // 24kHz for better quality
-      );
+    let lastError: Error | null = null;
 
-      console.log(`[RealtimeVoice] Hybrid TTS: Generated ${ttsResult.audio.length} bytes`);
+    // Try AI4Bharat TTS with retries
+    for (let attempt = 1; attempt <= TTS_MAX_RETRIES; attempt++) {
+      try {
+        // Generate audio using AI4Bharat TTS
+        const ttsResult = await ai4bharatService.synthesize(
+          text,
+          session.hybridLanguage,
+          session.hybridGender || 'female',
+          24000 // 24kHz for better quality
+        );
 
-      // Convert WAV to PCM16 for streaming
-      let pcmData = ttsResult.audio;
-      if (ttsResult.format === 'wav') {
-        // Skip WAV header (44 bytes)
-        pcmData = ttsResult.audio.slice(44);
+        console.log(`[RealtimeVoice] Hybrid TTS (attempt ${attempt}): Generated ${ttsResult.audio.length} bytes`);
+
+        // Convert WAV to PCM16 for streaming
+        let pcmData = ttsResult.audio;
+        if (ttsResult.format === 'wav') {
+          // Skip WAV header (44 bytes)
+          pcmData = ttsResult.audio.slice(44);
+        }
+
+        // Stream audio in chunks to frontend
+        await this.streamAudioToSocket(session.socket, pcmData, 24000);
+        return; // Success - exit the function
+
+      } catch (error: any) {
+        lastError = error;
+        console.error(`[RealtimeVoice] AI4Bharat TTS attempt ${attempt}/${TTS_MAX_RETRIES} failed:`, error.message);
+
+        if (attempt < TTS_MAX_RETRIES) {
+          // Exponential backoff before retry
+          const delay = TTS_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+          console.log(`[RealtimeVoice] Retrying AI4Bharat TTS in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
+    }
 
-      // Stream audio in chunks to frontend
-      const chunkSize = 4096; // 4KB chunks
-      for (let i = 0; i < pcmData.length; i += chunkSize) {
-        const chunk = pcmData.slice(i, i + chunkSize);
-        const audioResponse: RealtimeAudioResponsePayload = {
-          audio: chunk.toString('base64'),
-          format: 'pcm16',
-          sampleRate: 24000,
-        };
-        session.socket.emit('realtime:audio', audioResponse);
+    // AI4Bharat failed after all retries, try OpenAI TTS with retries
+    console.log('[RealtimeVoice] AI4Bharat TTS failed after all retries, falling back to OpenAI TTS...');
 
-        // Small delay between chunks to prevent buffer overflow
-        await new Promise(resolve => setTimeout(resolve, 10));
+    for (let attempt = 1; attempt <= TTS_MAX_RETRIES; attempt++) {
+      try {
+        const openaiTTSResponse = await openai.audio.speech.create({
+          model: 'tts-1',
+          voice: session.hybridGender === 'male' ? 'echo' : 'shimmer',
+          input: text,
+          response_format: 'pcm',
+          speed: 1.0,
+        });
+
+        const audioArrayBuffer = await openaiTTSResponse.arrayBuffer();
+        const pcmData = Buffer.from(audioArrayBuffer);
+
+        console.log(`[RealtimeVoice] OpenAI fallback TTS (attempt ${attempt}): Generated ${pcmData.length} bytes`);
+
+        // Stream audio in chunks
+        await this.streamAudioToSocket(session.socket, pcmData, 24000);
+        return; // Success - exit the function
+
+      } catch (fallbackError: any) {
+        lastError = fallbackError;
+        console.error(`[RealtimeVoice] OpenAI TTS attempt ${attempt}/${TTS_MAX_RETRIES} failed:`, fallbackError.message);
+
+        if (attempt < TTS_MAX_RETRIES) {
+          const delay = TTS_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+          console.log(`[RealtimeVoice] Retrying OpenAI TTS in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
+    }
 
-    } catch (error: any) {
-      console.error('[RealtimeVoice] Hybrid TTS error:', error.message);
+    // All TTS attempts failed - notify the user
+    console.error('[RealtimeVoice] All TTS providers failed after retries');
+    session.socket.emit('realtime:error', {
+      code: 'TTS_FAILED',
+      message: 'Unable to generate voice response. Please try again.',
+      recoverable: true,
+    } as RealtimeErrorPayload);
+
+    // Send the text as a transcription so user can still see the response
+    session.socket.emit('realtime:transcription', {
+      role: 'assistant',
+      text: `[Voice unavailable] ${text}`,
+      isFinal: true,
+      itemId: `tts-fallback-${Date.now()}`,
+    } as RealtimeTranscriptionPayload);
+
+    // Log the TTS failure event
+    await this.logEvent(session.id, 'tts_failed', {
+      provider: 'ai4bharat+openai',
+      error: lastError?.message,
+      text: text.substring(0, 100),
+    });
+  }
+
+  /**
+   * Stream audio buffer to socket in chunks
+   */
+  private async streamAudioToSocket(socket: Socket, pcmData: Buffer, sampleRate: number): Promise<void> {
+    const chunkSize = 16384; // 16KB chunks (larger = fewer chunks = smoother playback)
+    for (let i = 0; i < pcmData.length; i += chunkSize) {
+      const chunk = pcmData.slice(i, i + chunkSize);
+      const audioResponse: RealtimeAudioResponsePayload = {
+        audio: chunk.toString('base64'),
+        format: 'pcm16',
+        sampleRate,
+      };
+      socket.emit('realtime:audio', audioResponse);
+
+      // Small delay between chunks to prevent buffer overflow
+      await new Promise(resolve => setTimeout(resolve, 5));
     }
   }
 
@@ -1200,6 +1310,10 @@ ${instructions}`;
     return { summary, sentiment };
   }
 
+  /**
+   * Create lead from session using the consolidated voice-lead-integration service
+   * This provides: deduplication, webhooks, notifications, CRM integration, drip campaigns, etc.
+   */
   private async createLeadFromSession(
     session: ActiveSession
   ): Promise<{ id: string } | null> {
@@ -1209,27 +1323,64 @@ ${instructions}`;
 
     if (!agent) return null;
 
-    const qual = session.qualification as QualificationData;
-
-    const lead = await prisma.lead.create({
-      data: {
-        organizationId: agent.organizationId,
-        firstName: qual.name || 'Voice Lead',
-        phone: qual.phone || 'unknown',
-        email: qual.email,
-        source: 'CHATBOT',
-        sourceDetails: `Voice AI (Realtime) - ${agent.name}`,
-        customFields: session.qualification as Prisma.InputJsonValue,
-      },
-    });
-
-    // Link session to lead
-    await prisma.voiceSession.update({
+    // Get the full session with agent data for the integration service
+    const fullSession = await prisma.voiceSession.findUnique({
       where: { id: session.id },
-      data: { leadId: lead.id },
+      include: { agent: true },
     });
 
-    return lead;
+    if (!fullSession) return null;
+
+    // Prepare session data for the integration service
+    const sessionData = {
+      id: session.id,
+      agentId: session.agentId,
+      agent: agent,
+      qualification: session.qualification,
+      visitorName: fullSession.visitorName,
+      visitorEmail: fullSession.visitorEmail,
+      visitorPhone: fullSession.visitorPhone,
+      duration: fullSession.duration,
+      sentiment: fullSession.sentiment,
+      summary: fullSession.summary,
+      transcripts: session.transcripts,
+      createdAt: fullSession.createdAt,
+      endedAt: fullSession.endedAt,
+      status: fullSession.status,
+      leadId: session.leadId,
+    };
+
+    // Use the consolidated voice-lead-integration service
+    // This handles: deduplication, webhooks, notifications, call logs, activities,
+    // follow-ups, appointments, drip campaigns, calendar sync
+    try {
+      const lead = await voiceLeadIntegrationService.createLeadFromSession(sessionData);
+      return lead ? { id: lead.id } : null;
+    } catch (error) {
+      console.error('[RealtimeVoice] Failed to create lead via integration service:', error);
+
+      // Fallback to simple lead creation if integration service fails
+      const qual = session.qualification as QualificationData;
+      const fallbackLead = await prisma.lead.create({
+        data: {
+          organizationId: agent.organizationId,
+          firstName: qual.name || 'Voice Lead',
+          phone: qual.phone || 'unknown',
+          email: qual.email,
+          source: 'CHATBOT',
+          sourceDetails: `Voice AI (Realtime) - ${agent.name}`,
+          customFields: session.qualification as Prisma.InputJsonValue,
+        },
+      });
+
+      // Link session to lead
+      await prisma.voiceSession.update({
+        where: { id: session.id },
+        data: { leadId: fallbackLead.id },
+      });
+
+      return fallbackLead;
+    }
   }
 
   private async logEvent(

@@ -39,6 +39,7 @@ import { toast } from 'react-hot-toast';
 import api from '../../../../services/api';
 import { RealtimeVoiceWidget } from '../../../../components/RealtimeVoiceWidget';
 import { VoiceTestModal } from './VoiceTestModal';
+import { WebRTCTestModal } from './WebRTCTestModal';
 
 interface TestCase {
   id: string;
@@ -163,6 +164,7 @@ export function TestsTab({
   // Voice test state
   const [showVoiceWidget, setShowVoiceWidget] = useState(false);
   const [showStandardVoiceTest, setShowStandardVoiceTest] = useState(false);
+  const [showWebRTCTest, setShowWebRTCTest] = useState(false);
 
   // New test modal
   const [showNewTestModal, setShowNewTestModal] = useState(false);
@@ -682,7 +684,46 @@ export function TestsTab({
 
       {/* Voice Test View */}
       {activeView === 'voice' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* WebRTC Test (FREE - Recommended) */}
+          <div className="bg-white rounded-2xl border-2 border-violet-200 p-6 relative overflow-hidden">
+            <div className="absolute top-3 right-3">
+              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">FREE</span>
+            </div>
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/20">
+                <Zap className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">WebRTC Test</h3>
+                <p className="text-sm text-gray-500">Browser-based - No phone charges</p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-6 mb-4">
+              <div className="flex items-center gap-3 mb-4">
+                <CheckCircle2 className="w-5 h-5 text-violet-600" />
+                <span className="text-sm font-medium text-violet-800">No phone minutes consumed</span>
+              </div>
+              <div className="flex items-center gap-3 mb-4">
+                <CheckCircle2 className="w-5 h-5 text-violet-600" />
+                <span className="text-sm font-medium text-violet-800">Works with DRAFT agents</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-violet-600" />
+                <span className="text-sm font-medium text-violet-800">Real-time streaming audio</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowWebRTCTest(true)}
+              className="w-full py-4 rounded-xl font-semibold text-white bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 transition-all shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2"
+            >
+              <PlayCircle className="w-5 h-5" />
+              Start WebRTC Test (FREE)
+            </button>
+          </div>
+
           {/* Realtime Voice Test */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <div className="flex items-center gap-4 mb-6">
@@ -710,12 +751,25 @@ export function TestsTab({
               </div>
             </div>
 
+            {/* Show warning for non-English languages */}
+            {language && !language.startsWith('en') && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center gap-2 text-amber-800 text-sm">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>Your agent uses <strong>{language}</strong>. Use <strong>Indian Voice Test</strong> below for Indian languages.</span>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={() => setShowVoiceWidget(!showVoiceWidget)}
+              disabled={language && !language.startsWith('en')}
               className={`w-full py-4 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2 ${
                 showVoiceWidget
                   ? 'bg-red-500 hover:bg-red-600'
-                  : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg shadow-green-500/20'
+                  : language && !language.startsWith('en')
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg shadow-green-500/20'
               }`}
             >
               {showVoiceWidget ? (
@@ -733,13 +787,18 @@ export function TestsTab({
           </div>
 
           {/* Standard Voice Test (Indian Languages) */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+          <div className={`bg-white rounded-2xl border p-6 ${language && !language.startsWith('en') ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4 mb-6">
               <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
                 <Volume2 className="w-7 h-7 text-white" />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Indian Voice Test</h3>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-gray-900">Indian Voice Test</h3>
+                  {language && !language.startsWith('en') && (
+                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">Recommended</span>
+                  )}
+                </div>
                 <p className="text-sm text-gray-500">AI4Bharat & Sarvam - Indian languages</p>
               </div>
             </div>
@@ -1271,6 +1330,7 @@ export function TestsTab({
           position="bottom-right"
           startExpanded={true}
           theme={{ primaryColor: '#10B981' }}
+          testMode={true}
         />
       )}
 
@@ -1284,6 +1344,17 @@ export function TestsTab({
           systemPrompt={systemPrompt || ''}
           voiceId={voiceId}
           language={language || 'en-US'}
+        />
+      )}
+
+      {/* WebRTC Test Modal (FREE - No phone charges) */}
+      {showWebRTCTest && agentId && (
+        <WebRTCTestModal
+          isOpen={showWebRTCTest}
+          onClose={() => setShowWebRTCTest(false)}
+          agentId={agentId}
+          agentName={agentName || 'Agent'}
+          agentStatus="DRAFT"
         />
       )}
     </div>

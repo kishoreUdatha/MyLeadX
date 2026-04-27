@@ -32,6 +32,7 @@ export interface OpenAIRealtimeConfig {
   temperature?: number;
   tools?: RealtimeTool[];
   silenceDurationMs?: number; // Agent-specific silence timeout
+  language?: string; // Language hint for better transcription (e.g., 'en', 'hi', 'te')
 }
 
 export interface RealtimeConnectionEvents {
@@ -338,6 +339,9 @@ export class OpenAIRealtimeConnection extends EventEmitter {
 
   private configureSession(): void {
     // Use minimal config first, then update with full config after connection is stable
+    // Extract language code (e.g., 'en-US' -> 'en', 'hi-IN' -> 'hi')
+    const langCode = this.config.language?.split('-')[0] || undefined;
+
     const sessionConfig: Partial<RealtimeSessionConfig> = {
       modalities: ['text', 'audio'],
       voice: this.config.voice || 'alloy',
@@ -346,6 +350,8 @@ export class OpenAIRealtimeConnection extends EventEmitter {
       output_audio_format: 'pcm16',
       input_audio_transcription: {
         model: 'whisper-1' as const,
+        // Add language hint for better transcription accuracy
+        ...(langCode && { language: langCode }),
       },
       turn_detection: {
         type: 'server_vad',
@@ -355,6 +361,8 @@ export class OpenAIRealtimeConnection extends EventEmitter {
       },
       temperature: this.config.temperature || 0.8,
     };
+
+    console.log(`[OpenAI Realtime] Configuring session with language: ${langCode || 'auto-detect'}`);
 
     console.log('[OpenAI Realtime] Sending session config (without tools first)');
 

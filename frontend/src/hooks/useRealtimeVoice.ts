@@ -19,13 +19,14 @@ interface UseRealtimeVoiceOptions {
   agentId: string;
   mode?: VoiceSessionMode;
   autoStart?: boolean;
+  testMode?: boolean; // Allow testing DRAFT agents from dashboard
   onSessionEnd?: (result: RealtimeEndedPayload) => void;
   onError?: (error: RealtimeErrorPayload) => void;
   onTranscription?: (transcription: RealtimeTranscriptionPayload) => void;
 }
 
 export function useRealtimeVoice(options: UseRealtimeVoiceOptions) {
-  const { agentId, mode = 'REALTIME', autoStart = false, onSessionEnd, onError, onTranscription } = options;
+  const { agentId, mode = 'REALTIME', autoStart = false, testMode = false, onSessionEnd, onError, onTranscription } = options;
 
   const socketRef = useRef<Socket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -33,6 +34,9 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions) {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioQueueRef = useRef<ArrayBuffer[]>([]);
   const isPlayingRef = useRef(false);
+  const audioBufferPoolRef = useRef<ArrayBuffer[]>([]); // Pre-buffer for smooth playback
+  const MIN_BUFFER_SIZE = 3; // Minimum chunks before starting playback (jitter buffer)
+  const bufferTimeoutRef = useRef<number | null>(null); // Timeout to start playback even with fewer chunks
   const analyserRef = useRef<AnalyserNode | null>(null);
   const vadIntervalRef = useRef<number | null>(null);
   const lastSpeechTimeRef = useRef<number>(0);
@@ -242,7 +246,7 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions) {
 
   // Start session
   const startSession = useCallback(async (visitorInfo?: { name?: string; email?: string; phone?: string }) => {
-    console.log('[RealtimeVoice] startSession called, connected:', socketRef.current?.connected);
+    console.log('[RealtimeVoice] startSession called, connected:', socketRef.current?.connected, 'testMode:', testMode);
 
     if (!socketRef.current?.connected) {
       console.log('[RealtimeVoice] Not connected, calling connect()...');
@@ -263,11 +267,12 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions) {
       agentId,
       mode,
       visitorInfo,
+      testMode, // Allow testing DRAFT agents from dashboard
     };
 
     console.log('[RealtimeVoice] Emitting realtime:start with payload:', payload);
     socketRef.current.emit('realtime:start', payload);
-  }, [connect, agentId, mode, updateState]);
+  }, [connect, agentId, mode, testMode, updateState]);
 
   // Start recording with client-side VAD for interruption detection
   const startRecording = useCallback(async () => {
@@ -429,7 +434,26 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions) {
     }
 
     isPlayingRef.current = true;
-    const audioData = audioQueueRef.current.shift()!;
+
+    // Combine multiple chunks for smoother playback (reduces gaps)
+    const chunksToPlay = Math.min(audioQueueRef.current.length, 4); // Play up to 4 chunks at once
+    const combinedChunks: ArrayBuffer[] = [];
+    let totalLength = 0;
+
+    for (let i = 0; i < chunksToPlay; i++) {
+      const chunk = audioQueueRef.current.shift()!;
+      combinedChunks.push(chunk);
+      totalLength += chunk.byteLength;
+    }
+
+    // Merge chunks into single buffer
+    const mergedBuffer = new ArrayBuffer(totalLength);
+    const mergedView = new Uint8Array(mergedBuffer);
+    let offset = 0;
+    for (const chunk of combinedChunks) {
+      mergedView.set(new Uint8Array(chunk), offset);
+      offset += chunk.byteLength;
+    }
 
     try {
       // Use separate playback context so we can close it independently for interruption
@@ -438,7 +462,7 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions) {
       }
 
       // Convert PCM16 to Float32
-      const pcm16 = new Int16Array(audioData);
+      const pcm16 = new Int16Array(mergedBuffer);
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
         float32[i] = pcm16[i] / 32768;
@@ -480,8 +504,25 @@ export function useRealtimeVoice(options: UseRealtimeVoiceOptions) {
     audioQueueRef.current.push(audioData);
 
     if (!isPlayingRef.current) {
-      // Use ref to call playNextChunk (in case this callback is stale)
-      playNextChunkRef.current();
+      // Wait for minimum buffer before starting playback (jitter buffer)
+      // This prevents choppy audio from network latency variations
+      if (audioQueueRef.current.length >= MIN_BUFFER_SIZE) {
+        // Clear any pending timeout since we have enough chunks
+        if (bufferTimeoutRef.current) {
+          clearTimeout(bufferTimeoutRef.current);
+          bufferTimeoutRef.current = null;
+        }
+        // Use ref to call playNextChunk (in case this callback is stale)
+        playNextChunkRef.current();
+      } else if (!bufferTimeoutRef.current) {
+        // Set a timeout to start playback even with fewer chunks (max 150ms wait)
+        bufferTimeoutRef.current = window.setTimeout(() => {
+          bufferTimeoutRef.current = null;
+          if (!isPlayingRef.current && audioQueueRef.current.length > 0) {
+            playNextChunkRef.current();
+          }
+        }, 150);
+      }
     }
   }, []);
 
