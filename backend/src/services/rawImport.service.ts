@@ -627,6 +627,11 @@ export class RawImportService {
       throw new BadRequestError('Record already converted to lead');
     }
 
+    // IMPORTANT: Only allow conversion if record is assigned to a user
+    if (!record.assignedToId) {
+      throw new BadRequestError('Cannot convert to lead: Record must be assigned to a user first');
+    }
+
     // Get the first stage for the organization (lowest positive journeyOrder)
     const firstStage = await prisma.leadStage.findFirst({
       where: {
@@ -651,6 +656,17 @@ export class RawImportService {
         priority: additionalData?.priority || 'MEDIUM',
         stageId: firstStage?.id, // Assign first stage
         customFields: record.customFields || {},
+      },
+    });
+
+    // IMPORTANT: Carry over the assignment from raw record to lead
+    // This ensures lead is assigned to the same user who was handling the raw record
+    await prisma.leadAssignment.create({
+      data: {
+        leadId: lead.id,
+        assignedToId: record.assignedToId,
+        assignedById: record.assignedById || convertedById,
+        isActive: true,
       },
     });
 
@@ -693,19 +709,20 @@ export class RawImportService {
     organizationId: string,
     convertedById: string
   ) {
-    // Get records that are INTERESTED and not yet converted
+    // Get records that are INTERESTED, assigned to a user, and not yet converted
     const records = await prisma.rawImportRecord.findMany({
       where: {
         id: { in: recordIds },
         organizationId,
         status: 'INTERESTED',
         convertedLeadId: null,
+        assignedToId: { not: null }, // IMPORTANT: Only convert assigned records
       },
       include: { bulkImport: true },
     });
 
     if (records.length === 0) {
-      throw new BadRequestError('No eligible records found for conversion');
+      throw new BadRequestError('No eligible records found for conversion. Records must be assigned to a user first.');
     }
 
     const convertedLeads = [];
