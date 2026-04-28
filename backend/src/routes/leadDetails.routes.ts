@@ -1171,11 +1171,24 @@ router.get(
       return res.status(404).json({ success: false, message: 'Lead not found' });
     }
 
-    // Fetch both telecaller calls AND AI outbound calls
+    // Get lead's phone number to also search by phone (calls may not have leadId linked)
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { phone: true },
+    });
+    const leadPhone = lead?.phone;
+
+    // Fetch both telecaller calls AND AI outbound calls (by leadId OR phone number)
     const [telecallerCalls, outboundCalls] = await Promise.all([
       // Manual telecaller calls
       prisma.telecallerCall.findMany({
-        where: { leadId },
+        where: {
+          organizationId,
+          OR: [
+            { leadId },
+            ...(leadPhone ? [{ phoneNumber: leadPhone }] : []),
+          ],
+        },
         include: {
           lead: {
             select: { id: true, firstName: true, lastName: true, phone: true },
@@ -1188,7 +1201,12 @@ router.get(
       }),
       // AI voice agent outbound calls
       prisma.outboundCall.findMany({
-        where: { leadId },
+        where: {
+          OR: [
+            { leadId },
+            ...(leadPhone ? [{ phoneNumber: leadPhone }] : []),
+          ],
+        },
         include: {
           lead: {
             select: { id: true, firstName: true, lastName: true, phone: true },
