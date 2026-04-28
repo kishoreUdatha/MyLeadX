@@ -32,6 +32,25 @@ function cleanupTempFile(filePath: string): void {
   }
 }
 
+// Helper to clean duplicate names (e.g., "BUDHIL BUDHIL" -> "BUDHIL")
+function cleanDuplicateNames(firstName?: string | null, lastName?: string | null): { firstName?: string; lastName?: string | null } {
+  if (!firstName || !lastName) {
+    return { firstName: firstName || undefined, lastName };
+  }
+  const firstNameUpper = firstName.toUpperCase().trim();
+  const lastNameUpper = lastName.toUpperCase().trim();
+
+  // If firstName contains lastName, remove lastName
+  if (firstNameUpper.includes(lastNameUpper) || firstNameUpper.endsWith(lastNameUpper)) {
+    return { firstName, lastName: null };
+  }
+  // If lastName contains firstName and is longer, use lastName as firstName
+  if (lastNameUpper.includes(firstNameUpper) && lastNameUpper.length > firstNameUpper.length) {
+    return { firstName: lastName, lastName: null };
+  }
+  return { firstName, lastName };
+}
+
 const router = Router();
 
 // Configure multer for audio file uploads - use memory storage for S3 upload
@@ -810,21 +829,31 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
       orderBy: { journeyOrder: 'asc' },
     });
 
+    // Get default pipeline and entry stage for unified pipeline system
+    const defaultPipeline = await leadPipelineService.getDefaultPipeline(organizationId);
+    const entryStage = defaultPipeline ? await leadPipelineService.getEntryStage(defaultPipeline.id) : null;
+
+    // Clean duplicate names (e.g., "BUDHIL BUDHIL" -> "BUDHIL")
+    const cleanedNames = cleanDuplicateNames(record.firstName, record.lastName);
+
     // Use transaction to ensure atomicity - all operations succeed or all fail
     const result = await prisma.$transaction(async (tx) => {
-      // Create lead with first stage assigned
+      // Create lead with first stage assigned + pipeline stage
       const lead = await tx.lead.create({
         data: {
           organizationId,
-          firstName: record.firstName,
-          lastName: record.lastName || undefined,
+          firstName: cleanedNames.firstName,
+          lastName: cleanedNames.lastName || undefined,
           email: record.email || undefined,
           phone: record.phone,
           alternatePhone: record.alternatePhone || undefined,
           source: 'BULK_UPLOAD',
           sourceDetails: `Bulk Import: ${record.bulkImport?.fileName || 'Unknown'}`,
           priority,
-          stageId: firstStage?.id || undefined, // Assign first stage
+          stageId: firstStage?.id || undefined, // Assign first stage (old system)
+          pipelineStageId: entryStage?.id || undefined, // Assign pipeline stage (unified system)
+          pipelineEnteredAt: entryStage ? new Date() : undefined,
+          pipelineDaysInStage: entryStage ? 0 : undefined,
           customFields: record.customFields || undefined,
         },
       });
@@ -881,15 +910,40 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
         });
       }
 
+      // Create pipeline record for tracking (if pipeline stage was assigned)
+      if (entryStage && defaultPipeline) {
+        await tx.pipelineRecord.create({
+          data: {
+            pipelineId: defaultPipeline.id,
+            stageId: entryStage.id,
+            entityType: 'LEAD',
+            entityId: lead.id,
+            enteredStageAt: new Date(),
+            daysInStage: 0,
+            totalDaysInPipeline: 0,
+          },
+        });
+
+        // Log pipeline assignment in lead activity
+        await tx.leadActivity.create({
+          data: {
+            leadId: lead.id,
+            type: 'STAGE_CHANGED',
+            title: 'Added to pipeline',
+            description: `Added to pipeline "${defaultPipeline.name}" at stage "${entryStage.name}"`,
+            userId,
+            metadata: {
+              pipelineId: defaultPipeline.id,
+              pipelineName: defaultPipeline.name,
+              stageId: entryStage.id,
+              stageName: entryStage.name,
+            },
+          },
+        });
+      }
+
       return lead;
     });
-
-    // Auto-assign lead to default pipeline (Unified Pipeline System)
-    try {
-      await leadPipelineService.assignLeadToPipeline(result.id, organizationId);
-    } catch (err) {
-      console.warn('[Telecaller] Failed to assign lead to pipeline:', err);
-    }
 
     ApiResponse.success(res, 'Converted to lead successfully', { lead: result, rawRecordId: id }, 201);
   } catch (error) {
