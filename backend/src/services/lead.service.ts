@@ -120,7 +120,32 @@ export class LeadService {
     });
   }
 
+  // Helper: Clean duplicate names (e.g., firstName="JOHN DOE", lastName="DOE" -> clear lastName)
+  private cleanDuplicateNames(firstName?: string, lastName?: string): { firstName?: string; lastName?: string } {
+    if (!firstName || !lastName) {
+      return { firstName, lastName };
+    }
+
+    const firstNameUpper = firstName.toUpperCase().trim();
+    const lastNameUpper = lastName.toUpperCase().trim();
+
+    // If lastName is contained in firstName, it's a duplicate - clear lastName
+    if (firstNameUpper.includes(lastNameUpper) || firstNameUpper.endsWith(lastNameUpper)) {
+      return { firstName, lastName: undefined };
+    }
+
+    // If firstName is contained in lastName (rare), swap and clear
+    if (lastNameUpper.includes(firstNameUpper) && lastNameUpper.length > firstNameUpper.length) {
+      return { firstName: lastName, lastName: undefined };
+    }
+
+    return { firstName, lastName };
+  }
+
   async create(input: CreateLeadInput) {
+    // Clean duplicate names before saving
+    const cleanedNames = this.cleanDuplicateNames(input.firstName, input.lastName);
+
     // If no stageId provided, get the first stage for the organization
     let stageId = input.stageId;
     if (!stageId) {
@@ -138,8 +163,8 @@ export class LeadService {
     const lead = await prisma.lead.create({
       data: {
         organizationId: input.organizationId,
-        firstName: input.firstName,
-        lastName: input.lastName,
+        firstName: cleanedNames.firstName || input.firstName,
+        lastName: cleanedNames.lastName,
         email: input.email,
         phone: input.phone,
         alternatePhone: input.alternatePhone,
@@ -710,6 +735,13 @@ export class LeadService {
       const existingCustomFields = (lead.customFields as Record<string, unknown>) || {};
       modelData.customFields = { ...existingCustomFields, ...extraFields };
     }
+
+    // Clean duplicate names before updating
+    const newFirstName = modelData.firstName as string | undefined || lead.firstName;
+    const newLastName = modelData.lastName as string | undefined || lead.lastName;
+    const cleanedNames = this.cleanDuplicateNames(newFirstName, newLastName);
+    if (cleanedNames.firstName) modelData.firstName = cleanedNames.firstName;
+    if (cleanedNames.lastName !== undefined) modelData.lastName = cleanedNames.lastName;
 
     const updatedLead = await prisma.lead.update({
       where: { id },

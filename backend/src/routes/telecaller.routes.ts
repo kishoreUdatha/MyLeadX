@@ -12,6 +12,7 @@ import { telecallerCallFinalizationService } from '../services/telecaller-call-f
 import { calendarService } from '../services/calendar.service';
 import { workSessionService } from '../services/work-session.service';
 import { uploadRecordingToS3, getPlayableRecordingUrl } from '../services/s3.service';
+import { leadPipelineService } from '../services/lead-pipeline.service';
 
 // Helper to save buffer to temp file for AI processing
 function saveTempFile(buffer: Buffer, ext: string): string {
@@ -882,6 +883,13 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
 
       return lead;
     });
+
+    // Auto-assign lead to default pipeline (Unified Pipeline System)
+    try {
+      await leadPipelineService.assignLeadToPipeline(result.id, organizationId);
+    } catch (err) {
+      console.warn('[Telecaller] Failed to assign lead to pipeline:', err);
+    }
 
     ApiResponse.success(res, 'Converted to lead successfully', { lead: result, rawRecordId: id }, 201);
   } catch (error) {

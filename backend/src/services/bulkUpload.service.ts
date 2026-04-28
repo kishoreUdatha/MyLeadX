@@ -322,16 +322,21 @@ export class BulkUploadService {
         }
       }
 
-      // FIX: Handle duplicate name issue when full name contains lastName
-      // If firstName came from a "full name" column and lastName is set,
-      // check if lastName is already part of firstName (duplicate data entry)
-      if (nameSourceIsFullName && lead.lastName && lead.firstName) {
-        const firstNameUpper = lead.firstName.toUpperCase();
-        const lastNameUpper = lead.lastName.toUpperCase();
+      // FIX: Handle duplicate name issue - ALWAYS check if lastName is duplicated in firstName
+      // This handles both: 1) full name columns 2) separate firstName/lastName columns with duplicate data
+      if (lead.lastName && lead.firstName) {
+        const firstNameUpper = lead.firstName.toUpperCase().trim();
+        const lastNameUpper = lead.lastName.toUpperCase().trim();
 
         // Check if lastName is already contained in firstName (duplicate entry)
+        // e.g., firstName="VASANTHA VENKATA SAIRAM", lastName="VENKATA SAIRAM" -> clear lastName
         if (firstNameUpper.includes(lastNameUpper) || firstNameUpper.endsWith(lastNameUpper)) {
-          // Clear lastName to avoid duplication like "SHAIK SHABBEER ALI SHABBEER ALI"
+          lead.lastName = undefined;
+        }
+        // Also check reverse: if firstName is contained in lastName (rare but possible)
+        // e.g., firstName="REDDY", lastName="LOKESH REDDY" -> swap and clear
+        else if (lastNameUpper.includes(firstNameUpper) && lastNameUpper.length > firstNameUpper.length) {
+          lead.firstName = lead.lastName;
           lead.lastName = undefined;
         }
       }
