@@ -4,7 +4,7 @@ import { Request, Response } from 'express';
 // General API rate limiter
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 500 : 50000, // Much higher limit for development
+  max: process.env.NODE_ENV === 'production' ? 2000 : 50000, // Higher limit for dashboard heavy apps
   message: {
     success: false,
     message: 'Too many requests, please try again after 15 minutes',

@@ -25,6 +25,11 @@ import path from 'path';
 const app = express();
 const httpServer = createServer(app);
 
+// Trust proxy - REQUIRED for correct rate limiting behind Nginx/load balancer
+// Without this, all requests appear to come from the same IP (docker network)
+// and ALL users share one rate limit bucket!
+app.set('trust proxy', 1);
+
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
