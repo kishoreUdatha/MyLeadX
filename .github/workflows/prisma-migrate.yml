@@ -1,0 +1,91 @@
+name: Auto Generate Prisma Migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/prisma/schema.prisma'
+
+jobs:
+  generate-migration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Check if migration needed
+        id: check
+        working-directory: backend
+        run: |
+          # Get the previous schema from git
+          git show HEAD~1:backend/prisma/schema.prisma > /tmp/old_schema.prisma 2>/dev/null || cp prisma/schema.prisma /tmp/old_schema.prisma
+
+          # Compare schemas using prisma migrate diff
+          DIFF=$(npx prisma migrate diff \
+            --from-schema-datamodel /tmp/old_schema.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script 2>/dev/null || echo "")
+
+          if [ -z "$DIFF" ] || [ "$DIFF" = "-- This is an empty migration." ]; then
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+            echo "No schema changes detected"
+          else
+            echo "no_changes=false" >> $GITHUB_OUTPUT
+            echo "Schema changes detected"
+          fi
+
+      - name: Generate migration
+        if: steps.check.outputs.no_changes == 'false'
+        working-directory: backend
+        run: |
+          # Generate timestamp
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          MIGRATION_NAME="${TIMESTAMP}_auto_migration"
+          MIGRATION_DIR="prisma/migrations/${MIGRATION_NAME}"
+
+          # Create migration directory
+          mkdir -p "$MIGRATION_DIR"
+
+          # Get previous schema
+          git show HEAD~1:backend/prisma/schema.prisma > /tmp/old_schema.prisma 2>/dev/null || cp prisma/schema.prisma /tmp/old_schema.prisma
+
+          # Generate migration SQL
+          npx prisma migrate diff \
+            --from-schema-datamodel /tmp/old_schema.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script > "$MIGRATION_DIR/migration.sql"
+
+          echo "Generated migration: $MIGRATION_NAME"
+          cat "$MIGRATION_DIR/migration.sql"
+
+      - name: Commit and push migration
+        if: steps.check.outputs.no_changes == 'false'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          git add backend/prisma/migrations/
+
+          if git diff --staged --quiet; then
+            echo "No migration files to commit"
+          else
+            git commit -m "chore: auto-generate prisma migration
+
+            Co-Authored-By: GitHub Actions <github-actions[bot]@users.noreply.github.com>"
+            git push
+          fi
