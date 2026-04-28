@@ -45,15 +45,16 @@ interface AdmissionFilters {
 
 export class AdmissionService {
   /**
-   * Generate unique admission number
-   * Uses global count across all organizations to ensure uniqueness
+   * Generate unique admission number per organization
+   * Each tenant has their own sequence: ADM-2026-00001, ADM-2026-00002, etc.
    */
   private async generateAdmissionNumber(organizationId: string, academicYear: string): Promise<string> {
     const yearPart = academicYear.replace('-', '').substring(0, 4);
 
-    // Get the last admission number for this academic year (globally)
+    // Get the last admission number for this organization and academic year
     const lastAdmission = await prisma.admission.findFirst({
       where: {
+        organizationId,
         admissionNumber: {
           startsWith: `ADM-${yearPart}-`,
         },

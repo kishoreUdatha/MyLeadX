@@ -87,6 +87,8 @@ const LeadPipelinePage: React.FC = () => {
   const [showActionMenu, setShowActionMenu] = useState(false);
 
   // Data states
+  const [pipelines, setPipelines] = useState<any[]>([]);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
   const [pipelineName, setPipelineName] = useState('Sales Pipeline');
   const [totalLeads, setTotalLeads] = useState(0);
   const [totalInProgress, setTotalInProgress] = useState(0);
@@ -97,39 +99,61 @@ const LeadPipelinePage: React.FC = () => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
 
   useEffect(() => {
-    fetchPipelineData();
+    fetchPipelines();
   }, []);
 
-  const fetchPipelineData = async () => {
+  // Re-fetch when pipeline changes
+  useEffect(() => {
+    if (selectedPipelineId) {
+      fetchPipelineData(selectedPipelineId);
+    }
+  }, [selectedPipelineId]);
+
+  // Fetch available pipelines
+  const fetchPipelines = async () => {
+    try {
+      const res = await api.get('/pipelines?entityType=LEAD');
+      const pipelineList = res.data?.data || [];
+      setPipelines(pipelineList);
+
+      // Auto-select default pipeline
+      const selectedPipeline = pipelineList.find((p: any) => p.isDefault) || pipelineList[0];
+      if (selectedPipeline) {
+        setSelectedPipelineId(selectedPipeline.id);
+      }
+    } catch (error) {
+      console.error('Failed to fetch pipelines:', error);
+    }
+  };
+
+  const fetchPipelineData = async (pipelineId?: string) => {
     try {
       setLoading(true);
 
-      // First fetch pipelines to get the default pipeline
-      const [pipelineRes, campaignsRes, tagsRes] = await Promise.all([
-        api.get('/pipelines?entityType=LEAD').catch(() => ({ data: { data: [] } })),
+      // Fetch campaigns and tags in parallel
+      const [campaignsRes, tagsRes] = await Promise.all([
         api.get('/campaigns').catch(() => ({ data: { data: [] } })),
         api.get('/lead-tags?includeCount=true').catch(() => ({ data: { data: [] } })),
       ]);
 
-      const pipelines = pipelineRes.data?.data || [];
       const campaignsData = campaignsRes.data?.data || [];
       // Tags API returns { tags: [...], total: N }
       const tagsResponse = tagsRes.data?.data || {};
       const tagsData: LeadTag[] = tagsResponse.tags || [];
 
-      // Find default pipeline or use first LEAD pipeline
-      const defaultPipeline = pipelines.find((p: any) => p.isDefault) || pipelines[0];
+      // Find selected pipeline from state
+      const selectedPipeline = pipelines.find((p: any) => p.id === pipelineId) || pipelines[0];
 
       // Debug logging
       console.log('Pipeline API Response:', {
         pipelines,
-        defaultPipeline,
+        selectedPipeline,
         tagsData,
       });
 
       // Set dynamic pipeline name
-      if (defaultPipeline) {
-        setPipelineName(defaultPipeline.name || 'Sales Pipeline');
+      if (selectedPipeline) {
+        setPipelineName(selectedPipeline.name || 'Sales Pipeline');
       }
 
       // Build stage funnel data from pipeline stages
@@ -137,10 +161,10 @@ const LeadPipelinePage: React.FC = () => {
       let total = 0;
       let analyticsSuccess = false;
 
-      if (defaultPipeline && defaultPipeline.id) {
+      if (selectedPipeline && selectedPipeline.id) {
         // Fetch pipeline analytics for accurate stage counts
         try {
-          const analyticsRes = await api.get(`/pipelines/${defaultPipeline.id}/analytics`);
+          const analyticsRes = await api.get(`/pipelines/${selectedPipeline.id}/analytics`);
           const analytics = analyticsRes.data?.data || {};
 
           console.log('Pipeline Analytics:', analytics);
@@ -171,8 +195,8 @@ const LeadPipelinePage: React.FC = () => {
           console.warn('Pipeline analytics failed, falling back to pipeline stages:', analyticsError);
 
           // Fallback: use pipeline stages without counts
-          if (defaultPipeline.stages && defaultPipeline.stages.length > 0) {
-            defaultPipeline.stages.forEach((stage: any, idx: number) => {
+          if (selectedPipeline.stages && selectedPipeline.stages.length > 0) {
+            selectedPipeline.stages.forEach((stage: any, idx: number) => {
               stageList.push({
                 id: stage.id,
                 name: stage.name,
@@ -389,6 +413,20 @@ const LeadPipelinePage: React.FC = () => {
               <ArrowLeftIcon className="w-4 h-4 text-gray-600" />
             </button>
             <h1 className="text-base font-semibold text-gray-800">{pipelineName}</h1>
+            {/* Pipeline Selector */}
+            {pipelines.length > 1 && (
+              <select
+                value={selectedPipelineId || ''}
+                onChange={(e) => setSelectedPipelineId(e.target.value)}
+                className="ml-2 px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                {pipelines.map((p: any) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.isDefault ? '(Default)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Link
