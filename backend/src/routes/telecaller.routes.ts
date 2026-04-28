@@ -1638,35 +1638,47 @@ router.post('/calls', async (req: TenantRequest, res: Response) => {
       return ApiResponse.error(res, 'Phone number is required', 400);
     }
 
-    // Duplicate prevention: Check if a call with same phone was logged in last 2 minutes
-    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-    const existingCall = await prisma.telecallerCall.findFirst({
+    // Step 1: Check for any INITIATED call to this phone (no time limit)
+    // This handles: Web starts call → Mobile completes it (even after long call)
+    const initiatedCall = await prisma.telecallerCall.findFirst({
       where: {
         telecallerId: userId,
         phoneNumber,
+        status: 'INITIATED',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (initiatedCall && status === 'COMPLETED') {
+      console.log(`[Telecaller/Calls] Found INITIATED call ${initiatedCall.id}, updating to COMPLETED`);
+      const updatedCall = await prisma.telecallerCall.update({
+        where: { id: initiatedCall.id },
+        data: {
+          status: 'COMPLETED',
+          outcome: outcome || null,
+          duration: duration || null,
+          notes: notes || null,
+          endedAt: new Date(),
+        },
+      });
+      return ApiResponse.success(res, 'Call updated', updatedCall, 200);
+    }
+
+    // Step 2: Check for recent COMPLETED call (last 2 minutes) - prevents double-tap
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+    const recentCall = await prisma.telecallerCall.findFirst({
+      where: {
+        telecallerId: userId,
+        phoneNumber,
+        status: 'COMPLETED',
         createdAt: { gte: twoMinutesAgo },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (existingCall) {
-      console.log(`[Telecaller/Calls] Duplicate call detected for ${phoneNumber}, returning existing call ${existingCall.id}`);
-      // If the existing call is INITIATED and new request has COMPLETED status, update it
-      if (existingCall.status === 'INITIATED' && status === 'COMPLETED') {
-        const updatedCall = await prisma.telecallerCall.update({
-          where: { id: existingCall.id },
-          data: {
-            status: 'COMPLETED',
-            outcome: outcome || null,
-            duration: duration || null,
-            notes: notes || null,
-            endedAt: new Date(),
-          },
-        });
-        return ApiResponse.success(res, 'Call updated', updatedCall, 200);
-      }
-      // Otherwise return existing call to prevent duplicate
-      return ApiResponse.success(res, 'Call already logged', existingCall, 200);
+    if (recentCall) {
+      console.log(`[Telecaller/Calls] Recent call found for ${phoneNumber}, returning existing ${recentCall.id}`);
+      return ApiResponse.success(res, 'Call already logged', recentCall, 200);
     }
 
     // Validate callType if provided
