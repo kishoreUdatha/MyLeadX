@@ -31,9 +31,20 @@ step() {
 step "Pulling latest code..."
 git pull origin main
 
+# Stop existing containers
+step "Stopping existing containers..."
+docker-compose -f docker-compose.prod.yml --env-file .env.production down --remove-orphans || true
+
+# Force remove network if stuck (fixes race condition)
+step "Cleaning up network..."
+docker network rm myleadx_myleadx-network 2>/dev/null || true
+sleep 2
+
 # Build and start containers
-step "Building and starting containers..."
+step "Building images..."
 docker-compose -f docker-compose.prod.yml --env-file .env.production build
+
+step "Starting containers..."
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 # Wait for services to be healthy

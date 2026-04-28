@@ -20,10 +20,21 @@ fi
 echo "Pulling latest code..."
 git pull origin main
 
-# Build and start containers
-echo "Building and starting containers..."
-docker compose -f docker-compose.prod.yml --env-file .env.production down
+# Stop and remove containers
+echo "Stopping containers..."
+docker compose -f docker-compose.prod.yml --env-file .env.production down --remove-orphans || true
+
+# Force remove network if it exists (fixes race condition)
+echo "Cleaning up network..."
+docker network rm myleadx_myleadx-network 2>/dev/null || true
+sleep 2
+
+# Build images
+echo "Building images..."
 docker compose -f docker-compose.prod.yml --env-file .env.production build --no-cache
+
+# Start containers
+echo "Starting containers..."
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 # Wait for database to be ready
