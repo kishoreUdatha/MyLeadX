@@ -46,14 +46,30 @@ interface AdmissionFilters {
 export class AdmissionService {
   /**
    * Generate unique admission number
+   * Uses global count across all organizations to ensure uniqueness
    */
   private async generateAdmissionNumber(organizationId: string, academicYear: string): Promise<string> {
-    const count = await prisma.admission.count({
-      where: { organizationId, academicYear },
+    const yearPart = academicYear.replace('-', '').substring(0, 4);
+
+    // Get the last admission number for this academic year (globally)
+    const lastAdmission = await prisma.admission.findFirst({
+      where: {
+        admissionNumber: {
+          startsWith: `ADM-${yearPart}-`,
+        },
+      },
+      orderBy: { admissionNumber: 'desc' },
+      select: { admissionNumber: true },
     });
 
-    const yearPart = academicYear.replace('-', '').substring(0, 4);
-    const sequenceNumber = (count + 1).toString().padStart(5, '0');
+    let nextSequence = 1;
+    if (lastAdmission) {
+      // Extract sequence number from last admission (e.g., "ADM-2026-00001" -> 1)
+      const lastSequence = parseInt(lastAdmission.admissionNumber.split('-')[2], 10);
+      nextSequence = lastSequence + 1;
+    }
+
+    const sequenceNumber = nextSequence.toString().padStart(5, '0');
     return `ADM-${yearPart}-${sequenceNumber}`;
   }
 
