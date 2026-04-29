@@ -1388,7 +1388,38 @@ router.get('/calls', async (req: TenantRequest, res: Response) => {
       if (o.outcome) counts[o.outcome] = o._count._all;
     });
 
-    ApiResponse.success(res, 'Calls retrieved', { calls, total, outcomeCounts: counts });
+    // Date-range counts for the date filter badges. Counted from the same
+    // outcome-filtered set the user is viewing (so badges match the current tab),
+    // ignoring any active date filter (so all date-buckets stay visible).
+    const dateCountsWhere: any = { telecallerId: userId };
+    if (whereClause.leadId) dateCountsWhere.leadId = whereClause.leadId;
+    if (whereClause.outcome !== undefined) dateCountsWhere.outcome = whereClause.outcome;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [allCount, todayCount, yesterdayCount, weekCount, monthCount] = await Promise.all([
+      prisma.telecallerCall.count({ where: dateCountsWhere }),
+      prisma.telecallerCall.count({ where: { ...dateCountsWhere, createdAt: { gte: todayStart, lte: now } } }),
+      prisma.telecallerCall.count({ where: { ...dateCountsWhere, createdAt: { gte: yesterdayStart, lt: todayStart } } }),
+      prisma.telecallerCall.count({ where: { ...dateCountsWhere, createdAt: { gte: weekStart, lte: now } } }),
+      prisma.telecallerCall.count({ where: { ...dateCountsWhere, createdAt: { gte: monthStart, lte: now } } }),
+    ]);
+
+    const dateCounts: Record<string, number> = {
+      all: allCount,
+      today: todayCount,
+      yesterday: yesterdayCount,
+      thisWeek: weekCount,
+      thisMonth: monthCount,
+    };
+
+    ApiResponse.success(res, 'Calls retrieved', { calls, total, outcomeCounts: counts, dateCounts });
   } catch (error) {
     ApiResponse.error(res, (error as Error).message, 500);
   }

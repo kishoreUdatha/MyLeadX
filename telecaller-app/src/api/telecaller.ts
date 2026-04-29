@@ -35,7 +35,7 @@ export const telecallerApi = {
       endDate?: string;
       outcome?: string;
     }
-  ): Promise<PaginatedResponse<Call> & { outcomeCounts?: Record<string, number> }> => {
+  ): Promise<PaginatedResponse<Call> & { outcomeCounts?: Record<string, number>; dateCounts?: Record<string, number> }> => {
     try {
       const offset = (page - 1) * limit;
       const params = new URLSearchParams({
@@ -51,11 +51,12 @@ export const telecallerApi = {
       const response = await api.get(`/telecaller/calls?${params.toString()}`);
       console.log('[TelecallerAPI] Calls response:', JSON.stringify(response.data));
 
-      // Backend returns { success, message, data: { calls, total, outcomeCounts } }
+      // Backend returns { success, message, data: { calls, total, outcomeCounts, dateCounts } }
       const responseData = response.data.data || response.data;
       const calls = responseData.calls || [];
       const total = responseData.total || 0;
       const outcomeCounts = responseData.outcomeCounts || {};
+      const dateCounts = responseData.dateCounts || {};
 
       // Transform calls to match app's Call type
       const transformedCalls: Call[] = calls.map((call: any) => ({
@@ -90,6 +91,7 @@ export const telecallerApi = {
           totalPages: Math.ceil(total / limit),
         },
         outcomeCounts,
+        dateCounts,
       };
     } catch (error) {
       console.error('[TelecallerAPI] Error fetching calls:', error);

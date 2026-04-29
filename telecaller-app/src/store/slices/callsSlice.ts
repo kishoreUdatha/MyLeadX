@@ -14,6 +14,7 @@ interface CallsStateWithStats extends CallsState {
   stats: TelecallerStats | null;
   pendingUploads: Array<{ callId: string; recordingPath: string }>;
   outcomeCounts: Record<string, number>;
+  dateCounts: Record<string, number>;
   currentRecordingPath: string | null;
 }
 
@@ -33,6 +34,7 @@ const initialState: CallsStateWithStats = {
   stats: null,
   pendingUploads: [],
   outcomeCounts: {},
+  dateCounts: {},
   currentRecordingPath: null,
 };
 
@@ -66,6 +68,7 @@ export const fetchCalls = createAsyncThunk(
         calls: response.data,
         pagination: response.pagination,
         outcomeCounts: response.outcomeCounts || {},
+        dateCounts: response.dateCounts || {},
         refresh,
       };
     } catch (error) {
@@ -229,7 +232,7 @@ const callsSlice = createSlice({
       })
       .addCase(fetchCalls.fulfilled, (state, action) => {
         state.isLoading = false;
-        const { calls, pagination, outcomeCounts, refresh } = action.payload;
+        const { calls, pagination, outcomeCounts, dateCounts, refresh } = action.payload;
 
         if (refresh || pagination.page === 1) {
           state.calls = calls;
@@ -249,6 +252,9 @@ const callsSlice = createSlice({
         // Update outcome counts
         if (outcomeCounts && Object.keys(outcomeCounts).length > 0) {
           state.outcomeCounts = outcomeCounts;
+        }
+        if (dateCounts && Object.keys(dateCounts).length > 0) {
+          state.dateCounts = dateCounts;
         }
       })
       .addCase(fetchCalls.rejected, (state, action) => {

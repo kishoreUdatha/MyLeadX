@@ -131,41 +131,63 @@ const AssignedDataScreen: React.FC = () => {
     }
   }, []);
 
+  // Records filtered by active status tab only (date range applied separately).
+  // Splitting these lets us compute date counts that respect the active status tab.
+  const statusFilteredRecords = useMemo(() => {
+    const tabKey = tabs[activeTab]?.key;
+    if (tabKey === 'NEW') {
+      return allRecords.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
+    } else if (tabKey === 'CALLBACK') {
+      return allRecords.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
+    } else if (tabKey !== 'ALL') {
+      return allRecords.filter(r => r.status === tabKey);
+    }
+    return allRecords;
+  }, [allRecords, activeTab]);
+
   // Filter records locally based on active tab and date range (instant, no refresh)
   const filteredRecords = useMemo(() => {
-    const tabKey = tabs[activeTab]?.key;
-    let filtered = allRecords;
-
-    // Filter by status. "NEW" groups anything not yet dispositioned: PENDING (freshly
-    // imported), ASSIGNED (handed to telecaller), or CALLING (mid-call). The CALLBACK
-    // tab matches both CALLBACK and CALLBACK_REQUESTED since the backend uses different
-    // names in TelecallerCall vs RawImportRecord.
-    if (tabKey === 'NEW') {
-      filtered = filtered.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
-    } else if (tabKey === 'CALLBACK') {
-      filtered = filtered.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
-    } else if (tabKey !== 'ALL') {
-      filtered = filtered.filter(r => r.status === tabKey);
-    }
-
     // Filter by date range. Include a record if EITHER its last-call activity OR
     // its assignment date falls in range, so "Today" correctly shows records the
     // telecaller called today even when the record was assigned earlier.
     const dates = getDateRange(dateRange, customDates);
-    if (dates) {
+    if (!dates) return statusFilteredRecords;
+
+    const inRange = (value?: string | null) => {
+      if (!value) return false;
+      const d = new Date(value);
+      return d >= dates.startDate && d <= dates.endDate;
+    };
+    return statusFilteredRecords.filter(r => {
+      if (!r.assignedAt && !r.lastCallAt) return true; // Keep records with no dates (shouldn't happen)
+      return inRange(r.lastCallAt) || inRange(r.assignedAt);
+    });
+  }, [statusFilteredRecords, dateRange, customDates]);
+
+  // Per-date-range counts for the DateRangeFilter badges. Computed from status-filtered
+  // records so badge counts match what each tab will show after switching date range.
+  const dateCounts = useMemo(() => {
+    const ranges: DateRangeType[] = ['all', 'today', 'yesterday', 'thisWeek', 'thisMonth'];
+    const result: Partial<Record<DateRangeType, number>> = {};
+    for (const range of ranges) {
+      if (range === 'all') {
+        result[range] = statusFilteredRecords.length;
+        continue;
+      }
+      const dates = getDateRange(range);
+      if (!dates) continue;
       const inRange = (value?: string | null) => {
         if (!value) return false;
         const d = new Date(value);
         return d >= dates.startDate && d <= dates.endDate;
       };
-      filtered = filtered.filter(r => {
-        if (!r.assignedAt && !r.lastCallAt) return true; // Keep records with no dates (shouldn't happen)
+      result[range] = statusFilteredRecords.filter(r => {
+        if (!r.assignedAt && !r.lastCallAt) return true;
         return inRange(r.lastCallAt) || inRange(r.assignedAt);
-      });
+      }).length;
     }
-
-    return filtered;
-  }, [allRecords, activeTab, dateRange, customDates]);
+    return result;
+  }, [statusFilteredRecords]);
 
   useEffect(() => {
     const load = async () => {
@@ -297,6 +319,7 @@ const AssignedDataScreen: React.FC = () => {
         selectedRange={dateRange}
         onRangeChange={handleDateRangeChange}
         customDates={customDates}
+        counts={dateCounts}
       />
 
       {/* Filter Tabs */}

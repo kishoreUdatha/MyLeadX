@@ -21,6 +21,7 @@ interface DateRangeFilterProps {
   selectedRange: DateRangeType;
   onRangeChange: (range: DateRangeType, dates?: DateRange) => void;
   customDates?: DateRange;
+  counts?: Partial<Record<DateRangeType, number>>;
 }
 
 interface FilterOption {
@@ -43,6 +44,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
   selectedRange,
   onRangeChange,
   customDates,
+  counts,
 }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickingDate, setPickingDate] = useState<'start' | 'end'>('start');
@@ -99,6 +101,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
       >
         {DATE_FILTERS.map((filter) => {
           const isActive = selectedRange === filter.key;
+          const count = counts?.[filter.key];
 
           return (
             <TouchableOpacity
@@ -124,6 +127,16 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
                   ? getSelectedLabel()
                   : filter.label}
               </Text>
+              {typeof count === 'number' && count > 0 && (
+                <View
+                  style={[
+                    styles.filterBadge,
+                    { backgroundColor: isActive ? filter.color : '#9CA3AF' },
+                  ]}
+                >
+                  <Text style={styles.filterBadgeText}>{count}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -182,6 +195,20 @@ const styles = StyleSheet.create({
   filterTabText: {
     fontSize: 11,
     color: '#6B7280',
+  },
+  filterBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+    marginLeft: 2,
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   modalOverlay: {
     flex: 1,

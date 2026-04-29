@@ -23,7 +23,7 @@ import {
   getOutcomeColor,
   formatPhoneNumber,
 } from '../utils/formatters';
-import { Call, CallOutcome, RootStackParamList, isTeamLeadOrAbove } from '../types';
+import { Call, CallOutcome, RootStackParamList, isTeamLeadOrAbove, Lead } from '../types';
 import DateRangeFilter, { DateRangeType } from '../components/DateRangeFilter';
 import ConversationTranscript from '../components/ConversationTranscript';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -264,7 +264,7 @@ const ExpandedCallContent: React.FC<{ item: Call }> = ({ item }) => {
 const HistoryScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigation = useNavigation<NavigationProp>();
-  const { calls, isLoading, pagination, outcomeCounts } = useAppSelector((state) => state.calls);
+  const { calls, isLoading, pagination, outcomeCounts, dateCounts } = useAppSelector((state) => state.calls);
 
   const [activeFilter, setActiveFilter] = useState<CallOutcome | 'ALL' | 'PENDING'>('ALL');
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
@@ -401,6 +401,19 @@ const HistoryScreen: React.FC = () => {
     setExpandedCallId((prev) => (prev === callId ? null : callId));
   }, []);
 
+  const handleCallAgain = useCallback((call: Call) => {
+    if (!call.leadPhone) return;
+    const lead: Lead = {
+      id: call.leadId || call.id,
+      name: call.leadName || 'Unknown',
+      phone: call.leadPhone,
+      status: 'CONTACTED' as any,
+      createdAt: call.createdAt,
+      updatedAt: call.updatedAt || call.createdAt,
+    };
+    navigation.navigate('Call', { lead });
+  }, [navigation]);
+
   const renderCallItem = useCallback(
     ({ item }: { item: Call }) => {
       const isExpanded = expandedCallId === item.id;
@@ -449,10 +462,22 @@ const HistoryScreen: React.FC = () => {
                 <Text style={[styles.statText, { color: '#10B981' }]}>Recorded</Text>
               </View>
             )}
+            <View style={{ flex: 1 }} />
+            {item.leadPhone ? (
+              <TouchableOpacity
+                style={styles.callAgainBtn}
+                onPress={() => handleCallAgain(item)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="phone-return" size={14} color="#FFFFFF" />
+                <Text style={styles.callAgainBtnText}>Call Again</Text>
+              </TouchableOpacity>
+            ) : null}
             <Icon
               name={isExpanded ? 'chevron-up' : 'chevron-down'}
               size={20}
               color="#9CA3AF"
+              style={{ marginLeft: 8 }}
             />
           </View>
 
@@ -462,7 +487,7 @@ const HistoryScreen: React.FC = () => {
         </TouchableOpacity>
       );
     },
-    [expandedCallId, toggleExpand]
+    [expandedCallId, toggleExpand, handleCallAgain]
   );
 
   const renderEmpty = () => {
@@ -526,6 +551,7 @@ const HistoryScreen: React.FC = () => {
         selectedRange={dateRange}
         onRangeChange={handleDateRangeChange}
         customDates={customDates}
+        counts={dateCounts}
       />
 
       {/* Status Filter Tabs */}
@@ -713,6 +739,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     marginLeft: 4,
+  },
+  callAgainBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 4,
+  },
+  callAgainBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   expandedContent: {
     marginTop: 12,
