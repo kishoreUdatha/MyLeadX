@@ -145,6 +145,33 @@ export interface BulkUploadResult {
   errors: Array<{ row: number; errors: string[] }>;
 }
 
+// System fields for column mapping (with industry categories)
+export interface SystemField {
+  key: string;
+  label: string;
+  required: boolean;
+  category?: string;
+}
+
+// Column mapping
+export interface ColumnMapping {
+  sourceColumn: string;
+  targetField: string;
+  customFieldName?: string;
+}
+
+// File preview result
+export interface FilePreviewResult {
+  columns: Array<{
+    name: string;
+    detectedAs: string;
+    sampleValues: string[];
+    confidence: number;
+  }>;
+  totalRows: number;
+  systemFields: SystemField[];
+}
+
 export const leadService = {
   async getAll(filter: LeadFilter = {}) {
     const params = new URLSearchParams();
@@ -209,6 +236,33 @@ export const leadService = {
 
   async updateAdmissionStatus(id: string, admissionStatus: AdmissionStatus): Promise<Lead> {
     const response = await api.put(`/leads/${id}`, { admissionStatus });
+    return response.data.data;
+  },
+
+  // Preview file for column mapping
+  async bulkUploadPreview(file: File): Promise<FilePreviewResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post('/leads/bulk-upload/preview', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data.data;
+  },
+
+  // Upload with user-defined column mappings
+  async bulkUploadWithMappings(file: File, columnMappings: ColumnMapping[]): Promise<BulkUploadResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('columnMappings', JSON.stringify(columnMappings));
+
+    const response = await api.post('/leads/bulk-upload/with-mappings', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data.data;
   },
 };

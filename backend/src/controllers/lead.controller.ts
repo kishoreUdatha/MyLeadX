@@ -228,6 +228,74 @@ export class LeadController {
       next(error);
     }
   }
+
+  // Preview file for column mapping
+  async bulkUploadPreview(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.file) {
+        ApiResponse.error(res, 'No file uploaded', 400);
+        return;
+      }
+
+      const result = await bulkUploadService.previewFile(
+        req.file.buffer,
+        req.file.mimetype
+      );
+
+      ApiResponse.success(res, 'File preview generated successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Upload with user-defined column mappings
+  async bulkUploadWithMappings(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.file) {
+        ApiResponse.error(res, 'No file uploaded', 400);
+        return;
+      }
+
+      // Parse columnMappings - it comes as JSON string from FormData
+      let parsedMappings = req.body.columnMappings;
+      if (typeof parsedMappings === 'string') {
+        try {
+          parsedMappings = JSON.parse(parsedMappings);
+        } catch (e) {
+          ApiResponse.error(res, 'Invalid column mappings format', 400);
+          return;
+        }
+      }
+      if (!parsedMappings || !Array.isArray(parsedMappings)) {
+        ApiResponse.error(res, 'Column mappings are required', 400);
+        return;
+      }
+
+      const result = await bulkUploadService.processUploadWithMappings(
+        req.organizationId!,
+        req.user!.id,
+        req.file.buffer,
+        req.file.mimetype,
+        req.file.originalname,
+        req.file.size,
+        parsedMappings
+      );
+
+      ApiResponse.success(res, 'Bulk upload processed successfully', {
+        bulkImportId: result.bulkImportId,
+        totalRows: result.totalRows,
+        validRows: result.validRows,
+        duplicateRows: result.duplicateRows,
+        invalidRows: result.invalidRows,
+        insertedRecords: result.insertedRecords,
+        insertedLeads: 0,
+        duplicates: [],
+        errors: [],
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const leadController = new LeadController();

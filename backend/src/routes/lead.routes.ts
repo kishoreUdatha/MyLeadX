@@ -158,6 +158,22 @@ router.post(
   leadController.bulkUpload.bind(leadController)
 );
 
+// Preview file for column mapping (new flow)
+router.post(
+  '/bulk-upload/preview',
+  authorize('admin', 'counselor'),
+  uploadSpreadsheet.single('file'),
+  leadController.bulkUploadPreview.bind(leadController)
+);
+
+// Upload with user-defined column mappings (new flow)
+router.post(
+  '/bulk-upload/with-mappings',
+  authorize('admin', 'counselor'),
+  uploadSpreadsheet.single('file'),
+  leadController.bulkUploadWithMappings.bind(leadController)
+);
+
 // Bulk assign leads to counselors - must be before /:id routes
 // Admin: can assign to anyone
 // Manager: can assign to their team leads and telecallers
