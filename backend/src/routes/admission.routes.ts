@@ -126,4 +126,18 @@ router.post(
   admissionController.cancel.bind(admissionController)
 );
 
+// Backfill commissions for existing admissions (admin only)
+router.post(
+  '/backfill-commissions',
+  authorize('admin'),
+  admissionController.backfillCommissions.bind(admissionController)
+);
+
+// Backfill payment records for paid admissions (admin only)
+router.post(
+  '/backfill-payments',
+  authorize('admin'),
+  admissionController.backfillPayments.bind(admissionController)
+);
+
 export default router;

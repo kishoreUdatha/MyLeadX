@@ -13,6 +13,79 @@ import { calendarService } from '../services/calendar.service';
 import { workSessionService } from '../services/work-session.service';
 import { uploadRecordingToS3, getPlayableRecordingUrl } from '../services/s3.service';
 import { leadPipelineService } from '../services/lead-pipeline.service';
+import Redis from 'ioredis';
+
+// ============================================================================
+// IDEMPOTENCY KEY SUPPORT - Prevents duplicate call submissions from mobile
+// ============================================================================
+// Redis client for idempotency (with fallback to in-memory)
+let idempotencyRedis: Redis | null = null;
+const idempotencyMemoryStore = new Map<string, { callId: string; expiresAt: number }>();
+const IDEMPOTENCY_TTL_SECONDS = 3600; // 1 hour
+
+// Initialize Redis for idempotency
+function initIdempotencyRedis() {
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl && !idempotencyRedis) {
+    try {
+      idempotencyRedis = new Redis(redisUrl, {
+        maxRetriesPerRequest: 3,
+        retryStrategy: (times) => (times > 3 ? null : Math.min(times * 100, 3000)),
+        lazyConnect: true,
+      });
+      idempotencyRedis.connect().catch(() => {
+        console.warn('[Idempotency] Redis connection failed, using memory fallback');
+        idempotencyRedis = null;
+      });
+    } catch {
+      console.warn('[Idempotency] Redis init failed, using memory fallback');
+    }
+  }
+}
+initIdempotencyRedis();
+
+// Check if requestId was already processed
+async function checkIdempotencyKey(requestId: string): Promise<string | null> {
+  if (idempotencyRedis) {
+    try {
+      const existing = await idempotencyRedis.get(`idempotency:call:${requestId}`);
+      return existing;
+    } catch {
+      // Fallback to memory
+    }
+  }
+  // Memory fallback
+  const entry = idempotencyMemoryStore.get(requestId);
+  if (entry && entry.expiresAt > Date.now()) {
+    return entry.callId;
+  }
+  return null;
+}
+
+// Store requestId after successful call creation
+async function storeIdempotencyKey(requestId: string, callId: string): Promise<void> {
+  if (idempotencyRedis) {
+    try {
+      await idempotencyRedis.setex(`idempotency:call:${requestId}`, IDEMPOTENCY_TTL_SECONDS, callId);
+      return;
+    } catch {
+      // Fallback to memory
+    }
+  }
+  // Memory fallback
+  idempotencyMemoryStore.set(requestId, {
+    callId,
+    expiresAt: Date.now() + IDEMPOTENCY_TTL_SECONDS * 1000,
+  });
+  // Cleanup old entries periodically
+  if (idempotencyMemoryStore.size > 1000) {
+    const now = Date.now();
+    for (const [key, value] of idempotencyMemoryStore.entries()) {
+      if (value.expiresAt < now) idempotencyMemoryStore.delete(key);
+    }
+  }
+}
+// ============================================================================
 
 // Helper to save buffer to temp file for AI processing
 function saveTempFile(buffer: Buffer, ext: string): string {
@@ -30,6 +103,25 @@ function cleanupTempFile(filePath: string): void {
   } catch (e) {
     console.error('[Telecaller] Failed to cleanup temp file:', filePath, e);
   }
+}
+
+// Helper to clean duplicate names (e.g., "BUDHIL BUDHIL" -> "BUDHIL")
+function cleanDuplicateNames(firstName?: string | null, lastName?: string | null): { firstName?: string; lastName?: string | null } {
+  if (!firstName || !lastName) {
+    return { firstName: firstName || undefined, lastName };
+  }
+  const firstNameUpper = firstName.toUpperCase().trim();
+  const lastNameUpper = lastName.toUpperCase().trim();
+
+  // If firstName contains lastName, remove lastName
+  if (firstNameUpper.includes(lastNameUpper) || firstNameUpper.endsWith(lastNameUpper)) {
+    return { firstName, lastName: null };
+  }
+  // If lastName contains firstName and is longer, use lastName as firstName
+  if (lastNameUpper.includes(firstNameUpper) && lastNameUpper.length > firstNameUpper.length) {
+    return { firstName: lastName, lastName: null };
+  }
+  return { firstName, lastName };
 }
 
 const router = Router();
@@ -810,21 +902,31 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
       orderBy: { journeyOrder: 'asc' },
     });
 
+    // Get default pipeline and entry stage for unified pipeline system
+    const defaultPipeline = await leadPipelineService.getDefaultPipeline(organizationId);
+    const entryStage = defaultPipeline ? await leadPipelineService.getEntryStage(defaultPipeline.id) : null;
+
+    // Clean duplicate names (e.g., "BUDHIL BUDHIL" -> "BUDHIL")
+    const cleanedNames = cleanDuplicateNames(record.firstName, record.lastName);
+
     // Use transaction to ensure atomicity - all operations succeed or all fail
     const result = await prisma.$transaction(async (tx) => {
-      // Create lead with first stage assigned
+      // Create lead with first stage assigned + pipeline stage
       const lead = await tx.lead.create({
         data: {
           organizationId,
-          firstName: record.firstName,
-          lastName: record.lastName || undefined,
+          firstName: cleanedNames.firstName,
+          lastName: cleanedNames.lastName || undefined,
           email: record.email || undefined,
           phone: record.phone,
           alternatePhone: record.alternatePhone || undefined,
           source: 'BULK_UPLOAD',
           sourceDetails: `Bulk Import: ${record.bulkImport?.fileName || 'Unknown'}`,
           priority,
-          stageId: firstStage?.id || undefined, // Assign first stage
+          stageId: firstStage?.id || undefined, // Assign first stage (old system)
+          pipelineStageId: entryStage?.id || undefined, // Assign pipeline stage (unified system)
+          pipelineEnteredAt: entryStage ? new Date() : undefined,
+          pipelineDaysInStage: entryStage ? 0 : undefined,
           customFields: record.customFields || undefined,
         },
       });
@@ -881,15 +983,40 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
         });
       }
 
+      // Create pipeline record for tracking (if pipeline stage was assigned)
+      if (entryStage && defaultPipeline) {
+        await tx.pipelineRecord.create({
+          data: {
+            pipelineId: defaultPipeline.id,
+            stageId: entryStage.id,
+            entityType: 'LEAD',
+            entityId: lead.id,
+            enteredStageAt: new Date(),
+            daysInStage: 0,
+            totalDaysInPipeline: 0,
+          },
+        });
+
+        // Log pipeline assignment in lead activity
+        await tx.leadActivity.create({
+          data: {
+            leadId: lead.id,
+            type: 'STAGE_CHANGED',
+            title: 'Added to pipeline',
+            description: `Added to pipeline "${defaultPipeline.name}" at stage "${entryStage.name}"`,
+            userId,
+            metadata: {
+              pipelineId: defaultPipeline.id,
+              pipelineName: defaultPipeline.name,
+              stageId: entryStage.id,
+              stageName: entryStage.name,
+            },
+          },
+        });
+      }
+
       return lead;
     });
-
-    // Auto-assign lead to default pipeline (Unified Pipeline System)
-    try {
-      await leadPipelineService.assignLeadToPipeline(result.id, organizationId);
-    } catch (err) {
-      console.warn('[Telecaller] Failed to assign lead to pipeline:', err);
-    }
 
     ApiResponse.success(res, 'Converted to lead successfully', { lead: result, rawRecordId: id }, 201);
   } catch (error) {
@@ -1606,20 +1733,80 @@ router.post('/calls', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const userRole = req.user!.roleSlug;
-    const { leadId, phoneNumber, contactName, callType } = req.body;
+    const { leadId, phoneNumber, contactName, callType, status, outcome, duration, notes, callDirection, requestId } = req.body;
 
-    console.log(`[Telecaller/Calls] POST /calls - User: ${req.user!.email}, Role: ${userRole}, LeadId: ${leadId}, Phone: ${phoneNumber}`);
+    console.log(`[Telecaller/Calls] POST /calls - User: ${req.user!.email}, Role: ${userRole}, LeadId: ${leadId}, Phone: ${phoneNumber}, RequestId: ${requestId || 'none'}`);
 
     if (!phoneNumber) {
       console.log(`[Telecaller/Calls] ERROR: Phone number is required`);
       return ApiResponse.error(res, 'Phone number is required', 400);
     }
 
+    // ========================================================================
+    // IDEMPOTENCY CHECK - Permanent duplicate prevention using unique requestId
+    // ========================================================================
+    // If requestId is provided (from mobile app), check if already processed
+    if (requestId) {
+      const existingCallId = await checkIdempotencyKey(requestId);
+      if (existingCallId) {
+        console.log(`[Telecaller/Calls] Idempotency hit: requestId ${requestId} already processed, returning call ${existingCallId}`);
+        const existingCall = await prisma.telecallerCall.findUnique({
+          where: { id: existingCallId },
+        });
+        if (existingCall) {
+          return ApiResponse.success(res, 'Call already logged (duplicate request)', existingCall, 200);
+        }
+        // Call was deleted? Allow new creation
+      }
+    }
+
+    // ========================================================================
+    // FALLBACK: Time-based duplicate prevention (for requests without requestId)
+    // ========================================================================
+    // This catches duplicates from web or old mobile versions without requestId
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const recentCall = await prisma.telecallerCall.findFirst({
+      where: {
+        telecallerId: userId,
+        phoneNumber,
+        createdAt: { gte: fiveMinutesAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (recentCall) {
+      // If existing call is INITIATED and new is COMPLETED, update it
+      if (recentCall.status === 'INITIATED' && status === 'COMPLETED') {
+        console.log(`[Telecaller/Calls] Updating INITIATED call ${recentCall.id} to COMPLETED`);
+        const updatedCall = await prisma.telecallerCall.update({
+          where: { id: recentCall.id },
+          data: {
+            status: 'COMPLETED',
+            outcome: outcome || null,
+            duration: duration || null,
+            notes: notes || null,
+            endedAt: new Date(),
+          },
+        });
+        // Store idempotency key for this update too
+        if (requestId) {
+          await storeIdempotencyKey(requestId, updatedCall.id);
+        }
+        return ApiResponse.success(res, 'Call updated', updatedCall, 200);
+      }
+      // Otherwise return existing - prevent duplicate
+      console.log(`[Telecaller/Calls] Call already logged for ${phoneNumber} at ${recentCall.createdAt}, returning existing ${recentCall.id}`);
+      return ApiResponse.success(res, 'Call already logged recently', recentCall, 200);
+    }
+
     // Validate callType if provided
     const validCallTypes = ['OUTBOUND', 'INBOUND'];
-    const normalizedCallType = callType && validCallTypes.includes(callType.toUpperCase())
+    const normalizedCallType = callType && validCallTypes.includes(callType?.toUpperCase?.())
       ? callType.toUpperCase()
-      : 'OUTBOUND';
+      : callDirection?.toUpperCase() || 'OUTBOUND';
+
+    // Determine status - use provided status or default to INITIATED
+    const callStatus = status === 'COMPLETED' ? 'COMPLETED' : 'INITIATED';
 
     // Create call record
     console.log(`[Telecaller/Calls] Creating call record for user ${userId}...`);
@@ -1630,12 +1817,22 @@ router.post('/calls', async (req: TenantRequest, res: Response) => {
         leadId: leadId || null,
         phoneNumber,
         contactName: contactName || null,
-        status: 'INITIATED',
+        status: callStatus,
+        outcome: callStatus === 'COMPLETED' ? (outcome || null) : null,
+        duration: callStatus === 'COMPLETED' ? (duration || null) : null,
+        notes: notes || null,
         callType: normalizedCallType,
         startedAt: new Date(),
+        endedAt: callStatus === 'COMPLETED' ? new Date() : null,
       },
     });
     console.log(`[Telecaller/Calls] Call created successfully: ${call.id}`);
+
+    // Store idempotency key to prevent duplicate submissions
+    if (requestId) {
+      await storeIdempotencyKey(requestId, call.id);
+      console.log(`[Telecaller/Calls] Stored idempotency key: ${requestId} -> ${call.id}`);
+    }
 
     // Log activity on lead if exists
     if (leadId) {

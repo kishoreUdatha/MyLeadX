@@ -102,7 +102,7 @@ export default function NewCallScreen() {
 
     setIsSubmitting(true);
     try {
-      await telecallerService.logCall({
+      const response = await telecallerService.logCall({
         phoneNumber: phoneNumber.trim(),
         contactName: contactName.trim() || undefined,
         leadId: lead?.id,
@@ -113,9 +113,19 @@ export default function NewCallScreen() {
         callDirection: 'OUTBOUND',
       });
 
-      Alert.alert('Success', 'Call logged successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      // Check if this was a duplicate (backend returns existing call)
+      const message = response.data?.message;
+      if (message?.includes('already logged')) {
+        Alert.alert(
+          'Already Logged',
+          'A call to this number was already logged recently. No duplicate created.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        Alert.alert('Success', 'Call logged successfully', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (error: any) {
       console.error('Error logging call:', error);
       Alert.alert('Error', error.response?.data?.message || 'Failed to log call');

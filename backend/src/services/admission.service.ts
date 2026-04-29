@@ -102,6 +102,17 @@ export class AdmissionService {
 
     if (!config) {
       console.log('[AdmissionService] No commission config found for admission type:', admissionType);
+      console.log('[AdmissionService] To enable commissions, go to Settings → Commission and configure amounts');
+      return;
+    }
+
+    // Check if any commission amounts are configured (all zeros means no commissions)
+    const telecallerAmt = Number(config.telecallerAmount) || 0;
+    const teamLeadAmt = Number(config.teamLeadAmount) || 0;
+    const managerAmt = Number(config.managerAmount) || 0;
+    if (telecallerAmt === 0 && teamLeadAmt === 0 && managerAmt === 0) {
+      console.log('[AdmissionService] Commission config exists but all amounts are ₹0 for:', admissionType);
+      console.log('[AdmissionService] To enable commissions, go to Settings → Commission and set amounts > 0');
       return;
     }
 
@@ -414,9 +425,18 @@ export class AdmissionService {
     // Generate admission number
     const admissionNumber = await this.generateAdmissionNumber(input.organizationId, input.academicYear);
 
+    // Validate numeric values to prevent database overflow (max ~9.99 billion for decimal(12,2))
+    const MAX_AMOUNT = 9999999999.99;
+    if (input.totalFee > MAX_AMOUNT) {
+      throw new BadRequestError(`Total fee cannot exceed ₹${MAX_AMOUNT.toLocaleString('en-IN')}. Please check the entered amount.`);
+    }
+    if (input.donationAmount && input.donationAmount > MAX_AMOUNT) {
+      throw new BadRequestError(`Donation amount cannot exceed ₹${MAX_AMOUNT.toLocaleString('en-IN')}. Please check the entered amount.`);
+    }
+
     // Calculate commission
-    const commissionAmount = (input.totalFee * input.commissionPercent) / 100;
-    const pendingAmount = input.totalFee + (input.donationAmount || 0);
+    const commissionAmount = Math.min((input.totalFee * input.commissionPercent) / 100, MAX_AMOUNT);
+    const pendingAmount = Math.min(input.totalFee + (input.donationAmount || 0), MAX_AMOUNT);
 
     const admission = await prisma.admission.create({
       data: {
@@ -1013,6 +1033,151 @@ export class AdmissionService {
     });
 
     return years.map((y) => y.academicYear);
+  }
+
+  /**
+   * Backfill commissions for existing admissions that don't have commission records
+   * This is useful when commission configs are added after admissions were created
+   */
+  async backfillCommissions(organizationId: string): Promise<{ processed: number; created: number; skipped: number }> {
+    // Find all admissions that don't have any commission records
+    const admissionsWithoutCommissions = await prisma.admission.findMany({
+      where: {
+        organizationId,
+        status: 'ACTIVE',
+      },
+      include: {
+        lead: {
+          select: {
+            id: true,
+            assignments: {
+              where: { isActive: true },
+              orderBy: { assignedAt: 'desc' },
+              take: 1,
+              select: {
+                assignedToId: true,
+                assignedTo: {
+                  select: {
+                    id: true,
+                    managerId: true,
+                    role: { select: { slug: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let processed = 0;
+    let created = 0;
+    let skipped = 0;
+
+    for (const admission of admissionsWithoutCommissions) {
+      processed++;
+
+      // Check if commission already exists for this admission
+      const existingCommission = await prisma.commission.findFirst({
+        where: { admissionId: admission.id },
+      });
+
+      if (existingCommission) {
+        skipped++;
+        continue;
+      }
+
+      // Create commissions for this admission
+      try {
+        await this.createCommissions(
+          organizationId,
+          admission.id,
+          admission.leadId,
+          admission.closedById,
+          admission.admissionType,
+          Number(admission.totalFee)
+        );
+        created++;
+        console.log(`[AdmissionService] Backfilled commissions for admission ${admission.admissionNumber}`);
+      } catch (error) {
+        console.error(`[AdmissionService] Failed to backfill commission for admission ${admission.id}:`, error);
+        skipped++;
+      }
+    }
+
+    return { processed, created, skipped };
+  }
+
+  /**
+   * Backfill payment records for admissions that have paidAmount > 0 but no payment records
+   * This creates a single payment record for the full paid amount
+   */
+  async backfillPayments(organizationId: string): Promise<{ processed: number; created: number; skipped: number }> {
+    // Find all admissions with paidAmount > 0
+    const admissionsWithPaidAmount = await prisma.admission.findMany({
+      where: {
+        organizationId,
+        status: 'ACTIVE',
+        paidAmount: { gt: 0 },
+      },
+    });
+
+    let processed = 0;
+    let created = 0;
+    let skipped = 0;
+
+    for (const admission of admissionsWithPaidAmount) {
+      processed++;
+
+      // Check if payment records already exist
+      const existingPayments = await prisma.admissionPayment.findFirst({
+        where: { admissionId: admission.id },
+      });
+
+      if (existingPayments) {
+        skipped++;
+        continue;
+      }
+
+      // Create a backfill payment record
+      try {
+        await prisma.admissionPayment.create({
+          data: {
+            admissionId: admission.id,
+            paymentNumber: 1,
+            amount: Number(admission.paidAmount),
+            paymentType: 'FEE',
+            paymentMode: 'ONLINE',
+            paidAt: admission.closedAt || admission.createdAt,
+            notes: 'Payment record created via backfill (pre-existing payment)',
+          },
+        });
+
+        // Also create generic Payment record
+        await prisma.payment.create({
+          data: {
+            organizationId,
+            leadId: admission.leadId,
+            admissionId: admission.id,
+            amount: Number(admission.paidAmount),
+            paymentMethod: 'ONLINE',
+            paymentType: 'FEE',
+            description: 'Backfilled payment record',
+            status: 'COMPLETED',
+            paidAt: admission.closedAt || admission.createdAt,
+            createdById: admission.closedById,
+          },
+        });
+
+        created++;
+        console.log(`[AdmissionService] Backfilled payment for admission ${admission.admissionNumber}`);
+      } catch (error) {
+        console.error(`[AdmissionService] Failed to backfill payment for admission ${admission.id}:`, error);
+        skipped++;
+      }
+    }
+
+    return { processed, created, skipped };
   }
 }
 
