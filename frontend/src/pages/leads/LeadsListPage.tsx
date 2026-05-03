@@ -145,6 +145,13 @@ export default function LeadsListPage() {
     searchParams.get('isConverted') === 'true' ? 'converted' :
     searchParams.get('isConverted') === 'false' ? 'active' : 'all'
   );
+
+  // Page size options and state - persist in localStorage
+  const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = localStorage.getItem('leadsPageSize');
+    return saved ? parseInt(saved, 10) : 20;
+  });
   const [stages, setStages] = useState<LeadStage[]>([]);
   const [tags, setTags] = useState<LeadTag[]>([]);
   const [tagFilter, setTagFilter] = useState(searchParams.get('tag') || '');
@@ -387,10 +394,10 @@ export default function LeadsListPage() {
       fetchLeads({
         ...params,
         page: parseInt(searchParams.get('page') || '1'),
-        limit: 20,
+        limit: pageSize,
       })
     );
-  }, [dispatch, searchParams]);
+  }, [dispatch, searchParams, pageSize]);
 
   // Open filter panel
   const handleOpenFilterPanel = () => {
@@ -544,7 +551,7 @@ export default function LeadsListPage() {
         dateTo: dateTo || undefined,
         customFields: Object.keys(activeCustomFilters).length > 0 ? JSON.stringify(activeCustomFilters) : undefined,
         page: 1,
-        limit: 20,
+        limit: pageSize,
       })
     );
   };
@@ -732,10 +739,20 @@ export default function LeadsListPage() {
     setSearchParams(params);
 
     // Re-fetch with no filters
-    dispatch(fetchLeads({ page: 1, limit: 20 }));
+    dispatch(fetchLeads({ page: 1, limit: pageSize }));
   };
 
-  const totalPages = Math.ceil(total / limit);
+  const totalPages = Math.ceil(total / pageSize);
+
+  // Handle page size change
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    localStorage.setItem('leadsPageSize', String(newSize));
+    // Reset to page 1 when changing page size
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', '1');
+    setSearchParams(params);
+  };
 
   return (
     <div className="space-y-4">
@@ -1143,70 +1160,86 @@ export default function LeadsListPage() {
           </table>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Pagination - Always show when there are leads */}
+        {total > 0 && (
           <div className="px-3 py-2 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50/50">
-            <div className="text-xs text-slate-500">
-              Showing <span className="font-medium">{(page - 1) * limit + 1}</span>-<span className="font-medium">{Math.min(page * limit, total)}</span> of <span className="font-medium">{total}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => {
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.set('page', String(page - 1));
-                  setSearchParams(params);
-                }}
-                disabled={page === 1}
-                className="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-              >
-                <ChevronLeftIcon className="h-3 w-3" />
-                Prev
-              </button>
-              <div className="flex items-center">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (page <= 3) {
-                    pageNum = i + 1;
-                  } else if (page >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = page - 2 + i;
-                  }
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => {
-                        const params = new URLSearchParams(searchParams.toString());
-                        params.set('page', String(pageNum));
-                        setSearchParams(params);
-                      }}
-                      className={`w-6 h-6 rounded text-xs font-medium transition-colors ${
-                        page === pageNum
-                          ? 'bg-primary-600 text-white'
-                          : 'text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-slate-500">
+                Showing <span className="font-medium">{(page - 1) * pageSize + 1}</span>-<span className="font-medium">{Math.min(page * pageSize, total)}</span> of <span className="font-medium">{total}</span>
               </div>
-              <button
-                onClick={() => {
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.set('page', String(page + 1));
-                  setSearchParams(params);
-                }}
-                disabled={page === totalPages}
-                className="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-              >
-                Next
-                <ChevronRightIcon className="h-3 w-3" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-500">Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  className="px-2 py-1 text-xs border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set('page', String(page - 1));
+                    setSearchParams(params);
+                  }}
+                  disabled={page === 1}
+                  className="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  <ChevronLeftIcon className="h-3 w-3" />
+                  Prev
+                </button>
+                <div className="flex items-center">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (page <= 3) {
+                      pageNum = i + 1;
+                    } else if (page >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = page - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => {
+                          const params = new URLSearchParams(searchParams.toString());
+                          params.set('page', String(pageNum));
+                          setSearchParams(params);
+                        }}
+                        className={`w-6 h-6 rounded text-xs font-medium transition-colors ${
+                          page === pageNum
+                            ? 'bg-primary-600 text-white'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set('page', String(page + 1));
+                    setSearchParams(params);
+                  }}
+                  disabled={page === totalPages}
+                  className="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  Next
+                  <ChevronRightIcon className="h-3 w-3" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
