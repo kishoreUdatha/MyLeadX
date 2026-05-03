@@ -79,6 +79,9 @@ services:
       AWS_RECORDINGS_BUCKET: ${AWS_RECORDINGS_BUCKET:-myleadx-recordings}
       # Redis
       REDIS_URL: redis://redis:6379
+      # OTP Testing (remove when SMS/WhatsApp providers are configured)
+      DEFAULT_OTP: ${DEFAULT_OTP:-}
+      SKIP_OTP_DELIVERY: ${SKIP_OTP_DELIVERY:-}
       # Deepgram
       DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
       # ElevenLabs
