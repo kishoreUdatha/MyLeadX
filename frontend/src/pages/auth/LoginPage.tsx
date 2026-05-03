@@ -50,38 +50,55 @@ export default function LoginPage() {
     }
   }, [resendTimer]);
 
-  // Step 1: Validate credentials and send OTP
+  // Step 1: Validate credentials and send OTP (tries regular user first, then super admin)
   const onCredentialsSubmit = async (data: LoginFormData) => {
     dispatch(clearError());
     setLocalError(null);
     setOtpLoading(true);
 
     try {
-      // First validate credentials and get user phone
+      // First try regular user login
       const validateResult = await authService.validateCredentials(data.email, data.password);
 
-      if (!validateResult.success) {
-        setLocalError(validateResult.message || 'Invalid email or password');
-        setOtpLoading(false);
+      if (validateResult.success) {
+        // Regular user - proceed with OTP flow
+        setCredentials(data);
+        setUserPhone(validateResult.phone || '');
+
+        if (validateResult.phone) {
+          const otpResult = await authService.sendLoginOtp(validateResult.phone, 'WHATSAPP');
+          if (otpResult.success) {
+            setChannelUsed(otpResult.channelUsed || 'WHATSAPP');
+            setResendTimer(60);
+            setLoginStep('otp');
+          } else {
+            setLocalError(otpResult.message || 'Failed to send OTP');
+          }
+        } else {
+          setLocalError('No phone number associated with this account');
+        }
         return;
       }
 
-      // Store credentials for final login
-      setCredentials(data);
-      setUserPhone(validateResult.phone || '');
-
-      // Send OTP to user's phone
-      if (validateResult.phone) {
-        const otpResult = await authService.sendLoginOtp(validateResult.phone, 'WHATSAPP');
-        if (otpResult.success) {
-          setChannelUsed(otpResult.channelUsed || 'WHATSAPP');
-          setResendTimer(60);
-          setLoginStep('otp');
+      // Regular user login failed - try super admin login
+      try {
+        setSuperAdminLoading(true);
+        await superAdminService.login(data.email, data.password);
+        // Super admin login successful - redirect to super admin dashboard
+        navigate('/super-admin/dashboard');
+        return;
+      } catch (superAdminErr: unknown) {
+        // Super admin login also failed - show original error
+        const saError = superAdminErr as { response?: { data?: { message?: string } } };
+        // If super admin says "Invalid credentials", show the original user error
+        // Otherwise show a generic error
+        if (saError.response?.data?.message === 'Invalid credentials') {
+          setLocalError(validateResult.message || 'Invalid email or password');
         } else {
-          setLocalError(otpResult.message || 'Failed to send OTP');
+          setLocalError(validateResult.message || 'Invalid email or password');
         }
-      } else {
-        setLocalError('No phone number associated with this account');
+      } finally {
+        setSuperAdminLoading(false);
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };

@@ -848,8 +848,8 @@ function App() {
         <Route path="profit" element={<ProfitDashboardPage />} />
       </Route>
 
-      {/* Super Admin Routes */}
-      <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
+      {/* Super Admin Routes - unified login handles both regular and super admin */}
+      <Route path="/super-admin/login" element={<Navigate to="/login" replace />} />
       <Route
         element={
           <SuperAdminProtectedRoute>
