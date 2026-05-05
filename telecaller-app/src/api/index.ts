@@ -85,6 +85,23 @@ export const stopProactiveTokenRefresh = () => {
   console.log('[API] Stopped proactive token refresh');
 };
 
+// Token refresh lock to prevent race conditions
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const subscribeTokenRefresh = (callback: (token: string) => void) => {
+  refreshSubscribers.push(callback);
+};
+
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.forEach(callback => callback(token));
+  refreshSubscribers = [];
+};
+
+const onRefreshFailed = () => {
+  refreshSubscribers = [];
+};
+
 // Create axios instance
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -116,7 +133,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor for token refresh
+// Response interceptor for token refresh with race condition prevention
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -125,6 +142,21 @@ api.interceptors.response.use(
     // If 401 and not already retried, try to refresh token
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
+
+      // If already refreshing, wait for the refresh to complete
+      if (isRefreshing) {
+        console.log('[API] Token refresh in progress, waiting...');
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((token: string) => {
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+            }
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      isRefreshing = true;
 
       try {
         const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
@@ -143,6 +175,9 @@ api.interceptors.response.use(
               await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
             }
 
+            isRefreshing = false;
+            onTokenRefreshed(token);
+
             if (originalRequest.headers) {
               originalRequest.headers.Authorization = `Bearer ${token}`;
             }
@@ -156,6 +191,8 @@ api.interceptors.response.use(
         throw new Error('No valid refresh token');
       } catch (refreshError) {
         console.log('[API] Token refresh failed, logging out...');
+        isRefreshing = false;
+        onRefreshFailed();
         // Clear tokens
         await AsyncStorage.multiRemove([
           STORAGE_KEYS.AUTH_TOKEN,

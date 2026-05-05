@@ -273,6 +273,7 @@ export interface AssignedData {
   };
   bulkImport?: { fileName: string };
   assignedBy?: { firstName: string; lastName: string };
+  assignedTo?: { id: string; firstName: string; lastName: string };
 }
 
 export interface AssignedDataStats {

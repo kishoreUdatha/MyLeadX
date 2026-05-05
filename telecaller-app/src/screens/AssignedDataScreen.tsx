@@ -76,37 +76,27 @@ const AssignedDataScreen: React.FC = () => {
     endDate: null,
   });
   const [userRole, setUserRole] = useState<string>('telecaller');
+  const [userId, setUserId] = useState<string>('');
   const [showTeamTasks, setShowTeamTasks] = useState(false);
 
   const isTeamLead = isTeamLeadOrAbove(userRole);
 
-  // Load user role on mount
+  // Load user role and ID on mount
   useEffect(() => {
-    const loadRole = async () => {
+    const loadUserData = async () => {
       try {
         const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
         if (userData) {
           const user = JSON.parse(userData);
           setUserRole(user.role || 'telecaller');
+          setUserId(user.id || '');
         }
       } catch (e) {
-        console.log('[AssignedDataScreen] Error loading role:', e);
+        console.log('[AssignedDataScreen] Error loading user data:', e);
       }
     };
-    loadRole();
+    loadUserData();
   }, []);
-
-  const newCount =
-    stats?.new ?? ((stats?.pending || 0) + (stats?.assigned || 0) + (stats?.calling || 0));
-  const tabs = [
-    { key: 'ALL', label: 'All', count: stats?.total || 0 },
-    { key: 'NEW', label: 'New', count: newCount },
-    { key: 'INTERESTED', label: 'Interested', count: stats?.interested || 0 },
-    { key: 'CALLBACK', label: 'Callback', count: stats?.callback || 0 }, // Match both CALLBACK and CALLBACK_REQUESTED
-    { key: 'NO_ANSWER', label: 'No Ans', count: stats?.noAnswer || 0 },
-    { key: 'NOT_INTERESTED', label: 'Not Int', count: stats?.notInterested || 0 },
-    { key: 'CONVERTED', label: 'Done', count: stats?.converted || 0 },
-  ];
 
   // Store all records, filter locally for instant tab switching
   const [allRecords, setAllRecords] = useState<AssignedData[]>([]);
@@ -132,19 +122,62 @@ const AssignedDataScreen: React.FC = () => {
     }
   }, []);
 
+  // Filter by My Tasks vs Team Tasks for team leads
+  const teamFilteredRecords = useMemo(() => {
+    // Only apply team filtering for team leads
+    if (!isTeamLead || !userId) {
+      return allRecords;
+    }
+
+    if (showTeamTasks) {
+      // Team Tasks: Records assigned to team members (not the current user)
+      return allRecords.filter(r => r.assignedTo?.id && r.assignedTo.id !== userId);
+    } else {
+      // My Tasks: Records assigned directly to the current user
+      return allRecords.filter(r => r.assignedTo?.id === userId);
+    }
+  }, [allRecords, isTeamLead, userId, showTeamTasks]);
+
+  // Compute tab counts from filtered data (for accurate counts with team filtering)
+  const computedCounts = useMemo(() => {
+    const records = teamFilteredRecords;
+    const newRecords = records.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
+    const callbackRecords = records.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
+
+    return {
+      total: records.length,
+      new: newRecords.length,
+      interested: records.filter(r => r.status === 'INTERESTED').length,
+      callback: callbackRecords.length,
+      noAnswer: records.filter(r => r.status === 'NO_ANSWER').length,
+      notInterested: records.filter(r => r.status === 'NOT_INTERESTED').length,
+      converted: records.filter(r => r.status === 'CONVERTED').length,
+    };
+  }, [teamFilteredRecords]);
+
+  const tabs = [
+    { key: 'ALL', label: 'All', count: computedCounts.total },
+    { key: 'NEW', label: 'New', count: computedCounts.new },
+    { key: 'INTERESTED', label: 'Interested', count: computedCounts.interested },
+    { key: 'CALLBACK', label: 'Callback', count: computedCounts.callback },
+    { key: 'NO_ANSWER', label: 'No Ans', count: computedCounts.noAnswer },
+    { key: 'NOT_INTERESTED', label: 'Not Int', count: computedCounts.notInterested },
+    { key: 'CONVERTED', label: 'Done', count: computedCounts.converted },
+  ];
+
   // Records filtered by active status tab only (date range applied separately).
   // Splitting these lets us compute date counts that respect the active status tab.
   const statusFilteredRecords = useMemo(() => {
     const tabKey = tabs[activeTab]?.key;
     if (tabKey === 'NEW') {
-      return allRecords.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
+      return teamFilteredRecords.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
     } else if (tabKey === 'CALLBACK') {
-      return allRecords.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
+      return teamFilteredRecords.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
     } else if (tabKey !== 'ALL') {
-      return allRecords.filter(r => r.status === tabKey);
+      return teamFilteredRecords.filter(r => r.status === tabKey);
     }
-    return allRecords;
-  }, [allRecords, activeTab]);
+    return teamFilteredRecords;
+  }, [teamFilteredRecords, activeTab]);
 
   // Filter records locally based on active tab and date range (instant, no refresh)
   const filteredRecords = useMemo(() => {

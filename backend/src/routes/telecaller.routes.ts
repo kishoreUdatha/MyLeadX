@@ -500,13 +500,50 @@ router.get('/assigned-data/:id', async (req: TenantRequest, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.user!.id;
+    const organizationId = req.organization!.id;
+    const userRole = req.user!.role || req.user!.roleSlug;
+
+    // Role-based access check
+    const normalizedRole = (typeof userRole === 'string' ? userRole : (userRole as any)?.slug || '').toLowerCase().replace(/[_-]/g, '');
+    const isAdmin = normalizedRole === 'admin';
+    const isManager = normalizedRole === 'manager';
+    const isTeamLead = normalizedRole === 'teamlead';
+
+    // Build allowed user IDs based on role
+    let allowedUserIds = [userId];
+
+    if (isAdmin) {
+      allowedUserIds = [];
+    } else if (isManager) {
+      const teamLeads = await prisma.user.findMany({
+        where: { organizationId, managerId: userId, isActive: true },
+        select: { id: true },
+      });
+      const teamLeadIds = teamLeads.map(tl => tl.id);
+      const telecallers = await prisma.user.findMany({
+        where: { organizationId, managerId: { in: teamLeadIds }, isActive: true },
+        select: { id: true },
+      });
+      allowedUserIds = [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
+    } else if (isTeamLead) {
+      const teamMembers = await prisma.user.findMany({
+        where: { organizationId, managerId: userId, isActive: true },
+        select: { id: true },
+      });
+      allowedUserIds = [userId, ...teamMembers.map(m => m.id)];
+    }
+
+    // Build where clause with team access
+    const whereClause: any = {
+      id,
+      organizationId,
+    };
+    if (allowedUserIds.length > 0) {
+      whereClause.assignedToId = { in: allowedUserIds };
+    }
 
     const record = await prisma.rawImportRecord.findFirst({
-      where: {
-        id,
-        organizationId: req.organization!.id,
-        assignedToId: userId,
-      },
+      where: whereClause,
       include: {
         bulkImport: { select: { fileName: true, createdAt: true } },
         assignedBy: { select: { firstName: true, lastName: true } },
@@ -529,6 +566,7 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
     const { id } = req.params;
     const userId = req.user!.id;
     const organizationId = req.organization!.id;
+    const userRole = req.user!.role || req.user!.roleSlug;
     const { status, notes, callSummary, interestLevel, duration, callbackAt, alternatePhone } = req.body;
 
     // Validate status
@@ -537,14 +575,48 @@ router.put('/assigned-data/:id/status', async (req: TenantRequest, res: Response
       return ApiResponse.error(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
     }
 
-    // Verify ownership
+    // Role-based access check
+    const normalizedRole = (typeof userRole === 'string' ? userRole : (userRole as any)?.slug || '').toLowerCase().replace(/[_-]/g, '');
+    const isAdmin = normalizedRole === 'admin';
+    const isManager = normalizedRole === 'manager';
+    const isTeamLead = normalizedRole === 'teamlead';
+
+    // Build allowed user IDs based on role
+    let allowedUserIds = [userId];
+
+    if (isAdmin) {
+      allowedUserIds = [];
+    } else if (isManager) {
+      const teamLeads = await prisma.user.findMany({
+        where: { organizationId, managerId: userId, isActive: true },
+        select: { id: true },
+      });
+      const teamLeadIds = teamLeads.map(tl => tl.id);
+      const telecallers = await prisma.user.findMany({
+        where: { organizationId, managerId: { in: teamLeadIds }, isActive: true },
+        select: { id: true },
+      });
+      allowedUserIds = [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
+    } else if (isTeamLead) {
+      const teamMembers = await prisma.user.findMany({
+        where: { organizationId, managerId: userId, isActive: true },
+        select: { id: true },
+      });
+      allowedUserIds = [userId, ...teamMembers.map(m => m.id)];
+    }
+
+    // Verify ownership or team access
+    const whereClause: any = {
+      id,
+      organizationId,
+      convertedLeadId: null,
+    };
+    if (allowedUserIds.length > 0) {
+      whereClause.assignedToId = { in: allowedUserIds };
+    }
+
     const existing = await prisma.rawImportRecord.findFirst({
-      where: {
-        id,
-        organizationId,
-        assignedToId: userId,
-        convertedLeadId: null,
-      },
+      where: whereClause,
     });
 
     if (!existing) {
@@ -695,15 +767,69 @@ router.post('/assigned-data/:id/call', async (req: TenantRequest, res: Response)
   try {
     const { id } = req.params;
     const userId = req.user!.id;
+    const userRole = req.user!.role || req.user!.roleSlug;
 
-    // Verify ownership
+    // Role-based access check
+    const normalizedRole = (typeof userRole === 'string' ? userRole : (userRole as any)?.slug || '').toLowerCase().replace(/[_-]/g, '');
+    const isAdmin = normalizedRole === 'admin';
+    const isManager = normalizedRole === 'manager';
+    const isTeamLead = normalizedRole === 'teamlead';
+
+    // Build allowed user IDs based on role
+    let allowedUserIds = [userId];
+
+    if (isAdmin) {
+      // Admin can call any record in the organization - don't filter by assignedToId
+      allowedUserIds = [];
+    } else if (isManager) {
+      // Manager: Get team leads under them + telecallers under those team leads
+      const teamLeads = await prisma.user.findMany({
+        where: {
+          organizationId: req.organization!.id,
+          managerId: userId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const teamLeadIds = teamLeads.map(tl => tl.id);
+
+      const telecallers = await prisma.user.findMany({
+        where: {
+          organizationId: req.organization!.id,
+          managerId: { in: teamLeadIds },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      allowedUserIds = [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
+    } else if (isTeamLead) {
+      // Team lead: Get telecallers under them
+      const teamMembers = await prisma.user.findMany({
+        where: {
+          organizationId: req.organization!.id,
+          managerId: userId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      allowedUserIds = [userId, ...teamMembers.map(m => m.id)];
+    }
+
+    // Verify ownership or team access
+    const whereClause: any = {
+      id,
+      organizationId: req.organization!.id,
+      convertedLeadId: null,
+    };
+
+    // Only add assignedToId filter if not admin
+    if (allowedUserIds.length > 0) {
+      whereClause.assignedToId = { in: allowedUserIds };
+    }
+
     const record = await prisma.rawImportRecord.findFirst({
-      where: {
-        id,
-        organizationId: req.organization!.id,
-        assignedToId: userId,
-        convertedLeadId: null,
-      },
+      where: whereClause,
     });
 
     if (!record) {
