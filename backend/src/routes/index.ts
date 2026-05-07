@@ -197,6 +197,17 @@ import notificationPreferencesRoutes from './notification-preferences.routes';
 import workSessionRoutes from './work-session.routes';
 import brandingRoutes from './branding.routes';
 
+// Partner Admission Portal
+import admissionPartnerRoutes from './admission-partner.routes';
+import admissionPartnerPortalRoutes from './admission-partner-portal.routes';
+import partnerApplicationRoutes from './partner-application.routes';
+import studentApplicationPortalRoutes from './student-application-portal.routes';
+import applicationPaymentRoutes from './application-payment.routes';
+import paymentLinkRoutes from './payment-link.routes';
+import collegeAdmissionFormRoutes from './college-admission-form.routes';
+import universityAdmissionConfigRoutes from './university-admission-config.routes';
+import universityPaymentConfigRoutes from './university-payment-config.routes';
+
 const router = Router();
 
 // Health check endpoints (comprehensive)
@@ -429,6 +440,33 @@ router.use('/scholarships', scholarshipRoutes);
 router.use('/courses', courseRoutes);
 router.use('/expenses', businessExpenseRoutes);
 router.use('/profit', profitRoutes);
+
+// Partner Admission Portal (Admin routes for managing partners)
+router.use('/admission-partners', admissionPartnerRoutes);
+
+// Partner Portal (Routes for partners to access their own portal - separate auth)
+router.use('/partner-portal', admissionPartnerPortalRoutes);
+
+// Partner Applications (Admin routes for managing applications)
+router.use('/partner-applications', partnerApplicationRoutes);
+
+// College Admission Forms (Admin routes for managing college-specific application forms)
+router.use('/college-admission-forms', collegeAdmissionFormRoutes);
+
+// University Admission Configuration (Admin routes for configuring admission modes, fees, etc.)
+router.use('/university-admission-configs', universityAdmissionConfigRoutes);
+
+// University Payment Configuration (Admin routes for managing payment QR codes, bank details)
+router.use('/university-payment-configs', universityPaymentConfigRoutes);
+
+// Student Application Portal (Public routes for students to submit/track applications)
+router.use('/student-portal', studentApplicationPortalRoutes);
+
+// Application Payments (Admin routes for payment management)
+router.use('/application-payments', applicationPaymentRoutes);
+
+// Payment Links (Public routes for payment via link)
+router.use('/pay', paymentLinkRoutes);
 
 // Team Communication & Performance
 router.use('/team-messaging', teamMessagingRoutes);
