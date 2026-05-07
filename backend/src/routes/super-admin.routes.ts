@@ -9,6 +9,8 @@ import { prisma } from '../config/database';
 import { getAccessToken } from '../utils/cookies';
 import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
 import advancedRoutes from './super-admin-advanced.routes';
+import pagesRoutes from './super-admin-pages.routes';
+import trialManagementRoutes from './trial-management.routes';
 
 // Validation rules
 const setupValidation = [
@@ -696,6 +698,12 @@ router.get('/export/audit-logs', verifySuperAdmin, async (req: Request, res: Res
 // ==================== ADVANCED FEATURES ====================
 // Mount advanced routes (all require super admin auth)
 router.use('/', verifySuperAdmin, advancedRoutes);
+
+// Mount pages routes (all require super admin auth)
+router.use('/', verifySuperAdmin, pagesRoutes);
+
+// Mount trial management routes
+router.use('/trials', verifySuperAdmin, trialManagementRoutes);
 
 // ==================== BILLING DASHBOARD ====================
 

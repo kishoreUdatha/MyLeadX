@@ -8,6 +8,7 @@ import { crmAutomationService } from './crm-automation.service';
 import { autoReportsService } from './auto-reports.service';
 import { resendService } from './resend.service';
 import { reportGeneratorService } from './report-generator.service';
+import { trialManagementService } from './trial-management.service';
 
 /**
  * Job Initializer Service
@@ -61,6 +62,9 @@ class JobInitializerService {
 
       // 11. Start the auto-report scheduler (runs every minute to check for due reports)
       this.startAutoReportChecker();
+
+      // 12. Start the trial reminder checker (runs daily at 9 AM)
+      this.startTrialReminderChecker();
 
       this.initialized = true;
       console.log('[JobInitializer] All scheduled jobs initialized successfully');
@@ -356,6 +360,62 @@ class JobInitializerService {
     }, 20000);
 
     console.log('[JobInitializer] Auto-report scheduler started (checks every minute)');
+  }
+
+  /**
+   * Start the trial reminder checker
+   * Sends reminders to organizations with expiring trials (9 AM daily)
+   */
+  private startTrialReminderChecker(): void {
+    // Calculate ms until next 9 AM
+    const now = new Date();
+    const next9AM = new Date(now);
+    next9AM.setHours(9, 0, 0, 0);
+    if (now >= next9AM) {
+      next9AM.setDate(next9AM.getDate() + 1);
+    }
+    const msUntilNext9AM = next9AM.getTime() - now.getTime();
+
+    // Schedule to run at 9 AM daily
+    setTimeout(() => {
+      // Run immediately at 9 AM
+      this.runTrialReminders();
+
+      // Then run every 24 hours
+      setInterval(() => {
+        this.runTrialReminders();
+      }, 24 * 60 * 60 * 1000);
+    }, msUntilNext9AM);
+
+    // Also run once on startup (after 60 second delay) for testing/catchup
+    setTimeout(async () => {
+      try {
+        console.log('[TrialReminder] Running initial trial reminder check...');
+        await this.runTrialReminders();
+      } catch (error) {
+        console.error('[TrialReminder] Error in initial check:', error);
+      }
+    }, 60000);
+
+    console.log(`[JobInitializer] Trial reminder checker started (runs daily at 9 AM, next run in ${Math.round(msUntilNext9AM / 60000)} minutes)`);
+  }
+
+  /**
+   * Run trial reminder processing
+   */
+  private async runTrialReminders(): Promise<void> {
+    try {
+      const results = await trialManagementService.processTrialReminders();
+      const totalSent = results.sent7Days + results.sent3Days + results.sent1Day + results.sentExpired;
+      if (totalSent > 0 || results.errors > 0) {
+        console.log(
+          `[TrialReminder] Processed: 7-day=${results.sent7Days}, 3-day=${results.sent3Days}, ` +
+          `1-day=${results.sent1Day}, expired=${results.sentExpired}, errors=${results.errors}`
+        );
+      }
+    } catch (error) {
+      console.error('[TrialReminder] Error processing reminders:', error);
+    }
   }
 
   /**
