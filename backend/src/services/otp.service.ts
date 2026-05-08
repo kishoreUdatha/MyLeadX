@@ -346,18 +346,20 @@ class OtpService {
     const formattedPhone = this.formatPhoneForSms(phone);
     console.log(`[OTP] SMS phone formatted: ${phone} -> ${formattedPhone}`);
 
-    // Try MSG91 dedicated OTP API first (supports ##OTP## template placeholder)
+    // Try MSG91 dedicated OTP API first (uses default template if no template_id configured)
     try {
       const { msg91Service } = await import('./msg91.service');
       const { config } = await import('../config');
 
-      if (msg91Service.isConfigured() && config.msg91?.otpTemplateId && otp) {
-        console.log(`[OTP] Sending OTP via MSG91 OTP API with template to ${formattedPhone}`);
+      if (msg91Service.isConfigured() && otp) {
+        // Use MSG91 OTP API - works with or without template_id
+        // Without template_id, MSG91 uses their default OTP template
+        const templateId = config.msg91?.otpTemplateId;
+        console.log(`[OTP] Sending OTP via MSG91 OTP API ${templateId ? `with template ${templateId}` : '(default template)'} to ${formattedPhone}`);
 
-        // Use dedicated OTP API which supports ##OTP## placeholder in DLT template
         const result = await msg91Service.sendOtp({
           phone: formattedPhone,
-          templateId: config.msg91.otpTemplateId,
+          templateId: templateId, // Optional - MSG91 uses default if not provided
           otp: otp, // Pass our custom OTP
           otpExpiry: OTP_EXPIRY_MINUTES,
           otpLength: OTP_LENGTH,
@@ -369,23 +371,6 @@ class OtpService {
         }
 
         console.warn(`[OTP] MSG91 OTP API failed: ${result.error}`);
-      } else if (msg91Service.isConfigured()) {
-        // Fallback to regular SMS if no template configured
-        console.log(`[OTP] Sending SMS via MSG91 (no template) to ${formattedPhone}`);
-
-        const result = await msg91Service.sendSms({
-          phone: formattedPhone,
-          message,
-          userId: 'system',
-          organizationId: 'system',
-        });
-
-        if (result.success) {
-          console.log(`[OTP] SMS sent via MSG91, messageId: ${result.messageId}`);
-          return;
-        }
-
-        console.warn(`[OTP] MSG91 failed: ${result.error}`);
       }
     } catch (msg91Error) {
       console.error(`[OTP] MSG91 error:`, msg91Error);

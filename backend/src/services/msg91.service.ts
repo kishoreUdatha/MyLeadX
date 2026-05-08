@@ -327,7 +327,8 @@ class Msg91Service {
 
   /**
    * Send OTP via MSG91 dedicated OTP API
-   * Uses /api/v5/otp endpoint which supports ##OTP## template placeholder
+   * Uses /api/v5/otp endpoint - works with or without template_id
+   * Without template_id, MSG91 uses their default pre-approved OTP template
    */
   async sendOtp(input: SendOtpInput): Promise<{ success: boolean; requestId?: string; error?: string }> {
     if (!this.isConfigured()) {
@@ -338,25 +339,33 @@ class Msg91Service {
     try {
       const phone = this.formatPhone(input.phone);
 
-      const payload: Record<string, unknown> = {
+      // Build params for OTP API (uses query params, not body)
+      const params: Record<string, string | number> = {
+        authkey: this.authKey,
         mobile: phone,
-        sender: this.senderId,
         otp_length: input.otpLength || 6,
         otp_expiry: input.otpExpiry || 10, // Match our OTP expiry (10 minutes)
       };
 
       // Pass custom OTP if provided (MSG91 supports this)
       if (input.otp) {
-        payload.otp = input.otp;
+        params.otp = input.otp;
       }
 
+      // Template ID is optional - without it MSG91 uses default template
       if (input.templateId) {
-        payload.template_id = input.templateId;
+        params.template_id = input.templateId;
       }
 
-      console.log('[MSG91] OTP API request:', JSON.stringify(payload, null, 2));
+      console.log('[MSG91] OTP API request params:', JSON.stringify(params, null, 2));
 
-      const response = await this.client.post('/api/v5/otp', payload);
+      // Use api.msg91.com for OTP endpoint with query params
+      const response = await axios.post('https://api.msg91.com/api/v5/otp', null, {
+        params,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
       console.log('[MSG91] OTP API response:', JSON.stringify(response.data, null, 2));
 
