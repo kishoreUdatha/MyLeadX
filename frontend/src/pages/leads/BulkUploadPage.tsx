@@ -245,6 +245,9 @@ export default function BulkUploadPage() {
                   <li>
                     <span className="font-medium">Status</span> - status, lead status, stage, enquiry status, etc.
                   </li>
+                  <li>
+                    <span className="font-medium">Assigned To</span> - assigned to, counselor, telecaller, agent name, owner
+                  </li>
                   <li>alternate_phone, course_name, gender, address, city, state, etc.</li>
                   <li>{t('leads:bulkUpload.customFieldsNote')}</li>
                 </ul>

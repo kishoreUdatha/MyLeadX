@@ -15,6 +15,7 @@ interface ParsedLead {
   location?: string;
   priority?: string;
   status?: string;
+  assignedTo?: string; // Counselor/Agent name from Excel
   // Extended fields for proper data mapping
   fatherName?: string;
   motherName?: string;
@@ -265,6 +266,12 @@ export class BulkUploadService {
       status: [
         'status', 'lead status', 'lead_status', 'stage', 'current status', 'current_status',
         'enquiry status', 'enquiry_status', 'state', 'lead state', 'lead_state'
+      ],
+      assignedTo: [
+        'assigned to', 'assigned_to', 'assignedto', 'counselor', 'counselor name',
+        'counselor_name', 'agent', 'agent name', 'agent_name', 'owner', 'lead owner',
+        'lead_owner', 'assigned', 'telecaller', 'telecaller name', 'telecaller_name',
+        'sales person', 'sales_person', 'salesperson', 'executive', 'executive name'
       ],
     };
 
@@ -585,94 +592,73 @@ export class BulkUploadService {
     leads: ParsedLead[],
     counselorIds?: string[]
   ): Promise<LeadWithAssignment[]> {
-    // Get counselors if not provided
+    // Get all organization users to match assignedTo names
+    const allUsers = await prisma.user.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        _count: {
+          select: {
+            leadAssignments: { where: { isActive: true } },
+          },
+        },
+      },
+    });
+
+    // Create a map of user names/emails to user IDs for quick lookup
+    const userNameMap = new Map<string, string>();
+    allUsers.forEach((user) => {
+      const fullName = `${user.firstName} ${user.lastName || ''}`.toLowerCase().trim();
+      const firstName = user.firstName.toLowerCase().trim();
+      userNameMap.set(fullName, user.id);
+      userNameMap.set(firstName, user.id);
+      if (user.email) {
+        userNameMap.set(user.email.toLowerCase(), user.id);
+      }
+    });
+
+    // Get counselors for round-robin fallback
     let counselors: { id: string; activeLeadCount: number }[];
 
     if (counselorIds && counselorIds.length > 0) {
-      // Use provided counselor IDs
-      const users = await prisma.user.findMany({
-        where: {
-          id: { in: counselorIds },
-          organizationId,
-          isActive: true,
-        },
-        select: {
-          id: true,
-          _count: {
-            select: {
-              leadAssignments: { where: { isActive: true } },
-            },
-          },
-        },
-      });
-
-      counselors = users.map((u) => ({
-        id: u.id,
-        activeLeadCount: u._count.leadAssignments,
-      }));
+      counselors = allUsers
+        .filter((u) => counselorIds.includes(u.id))
+        .map((u) => ({
+          id: u.id,
+          activeLeadCount: u._count.leadAssignments,
+        }));
     } else {
-      // Get all active counselors
-      const users = await prisma.user.findMany({
-        where: {
-          organizationId,
-          role: { slug: 'counselor' },
-          isActive: true,
-        },
-        select: {
-          id: true,
-          _count: {
-            select: {
-              leadAssignments: { where: { isActive: true } },
-            },
-          },
-        },
-      });
-
-      counselors = users.map((u) => ({
+      counselors = allUsers.map((u) => ({
         id: u.id,
         activeLeadCount: u._count.leadAssignments,
       }));
     }
 
-    if (counselors.length === 0) {
-      // No counselors available, return leads without assignment
-      return leads.map((lead) => ({
-        organizationId,
-        firstName: lead.firstName,
-        lastName: lead.lastName,
-        email: lead.email,
-        phone: lead.phone,
-        alternatePhone: lead.alternatePhone,
-        source: LeadSource.BULK_UPLOAD,
-        priority: this.mapPriority(lead.priority),
-        notes: lead.notes,
-        // Extended fields
-        fatherName: lead.fatherName,
-        motherName: lead.motherName,
-        fatherPhone: lead.fatherPhone,
-        motherPhone: lead.motherPhone,
-        gender: lead.gender,
-        dateOfBirth: lead.dateOfBirth,
-        address: lead.address,
-        city: lead.city,
-        state: lead.state,
-        pincode: lead.pincode,
-        country: lead.country,
-        companyName: lead.companyName,
-        customFields: {
-          ...lead.customFields,
-          ...(lead.location && { location: lead.location }),
-          ...(lead.status && { importedStatus: lead.status }),
-        },
-      }));
-    }
-
-    // Sort by workload (ascending)
+    // Sort counselors by workload (ascending) for round-robin fallback
     counselors.sort((a, b) => a.activeLeadCount - b.activeLeadCount);
 
-    // Distribute leads using round-robin
+    // Distribute leads - use assignedTo from Excel if available, otherwise round-robin
     return leads.map((lead, index) => {
-      const counselorIndex = index % counselors.length;
+      // Try to find counselor from Excel's assignedTo column
+      let counselorId: string | undefined;
+
+      if (lead.assignedTo) {
+        const assignedToLower = lead.assignedTo.toLowerCase().trim();
+        counselorId = userNameMap.get(assignedToLower);
+      }
+
+      // Fallback to round-robin if no match found and counselors available
+      if (!counselorId && counselors.length > 0) {
+        const counselorIndex = index % counselors.length;
+        counselorId = counselors[counselorIndex].id;
+      }
+
       return {
         organizationId,
         firstName: lead.firstName,
@@ -701,7 +687,7 @@ export class BulkUploadService {
           ...(lead.location && { location: lead.location }),
           ...(lead.status && { importedStatus: lead.status }),
         },
-        counselorId: counselors[counselorIndex].id,
+        counselorId,
       };
     });
   }
