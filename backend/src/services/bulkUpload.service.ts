@@ -12,6 +12,9 @@ interface ParsedLead {
   phone: string;
   alternatePhone?: string;
   notes?: string;
+  location?: string;
+  priority?: string;
+  status?: string;
   // Extended fields for proper data mapping
   fatherName?: string;
   motherName?: string;
@@ -209,7 +212,12 @@ export class BulkUploadService {
         'alternate mobile', 'alternate_mobile', 'phone2', 'mobile2', 'other phone', 'other_phone',
         'guardian phone', 'guardian_phone', 'emergency contact', 'emergency_contact'
       ],
-      notes: ['notes', 'comments', 'remarks', 'description', 'note', 'comment', 'remark'],
+      notes: ['notes', 'comments', 'remarks', 'description', 'note', 'comment', 'remark', 'feedback', 'observation', 'observations'],
+      location: [
+        'location', 'place', 'area', 'region', 'zone', 'branch', 'center', 'centre',
+        'office', 'site', 'venue', 'loc', 'current location', 'current_location',
+        'preferred location', 'preferred_location', 'work location', 'work_location'
+      ],
       // Education-specific field mappings
       fatherName: [
         'fname', 'f_name', 'f name', 'father name', 'father_name', 'fathername',
@@ -249,6 +257,14 @@ export class BulkUploadService {
         'institution_name', 'school', 'school name', 'school_name', 'university',
         'university name', 'university_name', 'company', 'company name', 'company_name',
         'organization', 'org', 'org name', 'org_name'
+      ],
+      priority: [
+        'priority', 'lead priority', 'lead_priority', 'importance', 'urgency',
+        'hot', 'warm', 'cold', 'lead type', 'lead_type', 'type'
+      ],
+      status: [
+        'status', 'lead status', 'lead_status', 'stage', 'current status', 'current_status',
+        'enquiry status', 'enquiry_status', 'state', 'lead state', 'lead_state'
       ],
     };
 
@@ -628,7 +644,7 @@ export class BulkUploadService {
         phone: lead.phone,
         alternatePhone: lead.alternatePhone,
         source: LeadSource.BULK_UPLOAD,
-        priority: LeadPriority.MEDIUM,
+        priority: this.mapPriority(lead.priority),
         notes: lead.notes,
         // Extended fields
         fatherName: lead.fatherName,
@@ -643,7 +659,11 @@ export class BulkUploadService {
         pincode: lead.pincode,
         country: lead.country,
         companyName: lead.companyName,
-        customFields: lead.customFields || {},
+        customFields: {
+          ...lead.customFields,
+          ...(lead.location && { location: lead.location }),
+          ...(lead.status && { importedStatus: lead.status }),
+        },
       }));
     }
 
@@ -661,7 +681,7 @@ export class BulkUploadService {
         phone: lead.phone,
         alternatePhone: lead.alternatePhone,
         source: LeadSource.BULK_UPLOAD,
-        priority: LeadPriority.MEDIUM,
+        priority: this.mapPriority(lead.priority),
         notes: lead.notes,
         // Extended fields
         fatherName: lead.fatherName,
@@ -676,7 +696,11 @@ export class BulkUploadService {
         pincode: lead.pincode,
         country: lead.country,
         companyName: lead.companyName,
-        customFields: lead.customFields || {},
+        customFields: {
+          ...lead.customFields,
+          ...(lead.location && { location: lead.location }),
+          ...(lead.status && { importedStatus: lead.status }),
+        },
         counselorId: counselors[counselorIndex].id,
       };
     });
@@ -799,6 +823,29 @@ export class BulkUploadService {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
+  // Map priority string to LeadPriority enum
+  private mapPriority(priority?: string): LeadPriority {
+    if (!priority) return LeadPriority.MEDIUM;
+
+    const p = priority.toLowerCase().trim();
+
+    // Map common priority names
+    if (['hot', 'high', 'urgent', 'critical', 'important'].includes(p)) {
+      return LeadPriority.HIGH;
+    }
+    if (['warm', 'medium', 'normal', 'moderate'].includes(p)) {
+      return LeadPriority.MEDIUM;
+    }
+    if (['cold', 'low', 'minor'].includes(p)) {
+      return LeadPriority.LOW;
+    }
+    if (['urgent', 'asap', 'immediate'].includes(p)) {
+      return LeadPriority.URGENT;
+    }
+
+    return LeadPriority.MEDIUM;
+  }
+
   // Process upload to Raw Import Records (new flow)
   async processUploadToRaw(
     organizationId: string,
@@ -870,7 +917,11 @@ export class BulkUploadService {
         email: record.email,
         phone: record.phone,
         alternatePhone: record.alternatePhone,
-        customFields: record.customFields,
+        notes: record.notes,
+        customFields: {
+          ...record.customFields,
+          ...(record.location && { location: record.location }),
+        },
       }))
     );
 

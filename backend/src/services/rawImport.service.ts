@@ -305,6 +305,7 @@ export class RawImportService {
       email?: string;
       phone: string;
       alternatePhone?: string;
+      notes?: string;
       customFields?: Record<string, unknown>;
     }>
   ) {
@@ -324,6 +325,7 @@ export class RawImportService {
           email: record.email,
           phone: record.phone,
           alternatePhone: record.alternatePhone,
+          notes: record.notes,
           customFields: (record.customFields || {}) as Prisma.InputJsonValue,
           status: 'PENDING',
         })),

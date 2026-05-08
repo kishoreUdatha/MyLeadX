@@ -95,27 +95,24 @@ export default function BulkUploadPage() {
       console.log('Upload result:', result);
 
       // Show informative message based on results
-      const inserted = result.insertedRecords || 0;
+      const inserted = result.insertedLeads || 0;
       const duplicates = result.duplicateRows || 0;
       const invalid = result.invalidRows || 0;
       const total = result.totalRows || 0;
 
       if (inserted === 0 && duplicates > 0) {
-        showToast.error(`No records imported. All ${duplicates} records are duplicates (phone/email already exists in the system).`);
+        showToast.error(`No leads imported. All ${duplicates} records are duplicates (phone/email already exists in the system).`);
       } else if (inserted === 0 && invalid > 0) {
-        showToast.error(`No records imported. All ${invalid} records are invalid (missing required fields).`);
+        showToast.error(`No leads imported. All ${invalid} records are invalid (missing required fields).`);
       } else if (inserted === 0) {
-        showToast.error('No records were imported. Please check the file format.');
+        showToast.error('No leads were imported. Please check the file format.');
       } else if (duplicates > 0 || invalid > 0) {
-        showToast.success(`Imported ${inserted} of ${total} records. ${duplicates} duplicates, ${invalid} invalid.`);
+        showToast.success(`Imported ${inserted} leads of ${total} records. ${duplicates} duplicates, ${invalid} invalid.`);
       } else {
-        showToast.success(`Successfully imported ${inserted} records!`);
+        showToast.success(`Successfully imported ${inserted} leads!`);
       }
 
-      // Navigate to raw imports detail page if bulkImportId is returned
-      if (result.bulkImportId) {
-        navigate(`/raw-imports/${result.bulkImportId}`);
-      }
+      // No redirect needed - results are shown on this page
     } catch (error) {
       console.error('Upload error:', error);
       showToast.error('Bulk upload failed. Check console for details.');
@@ -233,7 +230,22 @@ export default function BulkUploadPage() {
                   {t('leads:bulkUpload.optionalColumns')}
                 </h3>
                 <ul className="text-sm text-gray-600 space-y-1">
-                  <li>email, alternate_phone, notes, course_name, gender, etc.</li>
+                  <li>
+                    <span className="font-medium">Email</span> - email, email_address, contact email, etc.
+                  </li>
+                  <li>
+                    <span className="font-medium">Location</span> - location, place, area, region, branch, center, etc.
+                  </li>
+                  <li>
+                    <span className="font-medium">Comments</span> - comments, notes, remarks, feedback, description, etc.
+                  </li>
+                  <li>
+                    <span className="font-medium">Priority</span> - priority (Hot/Warm/Cold or High/Medium/Low)
+                  </li>
+                  <li>
+                    <span className="font-medium">Status</span> - status, lead status, stage, enquiry status, etc.
+                  </li>
+                  <li>alternate_phone, course_name, gender, address, city, state, etc.</li>
                   <li>{t('leads:bulkUpload.customFieldsNote')}</li>
                 </ul>
               </div>

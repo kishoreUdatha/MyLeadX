@@ -23,7 +23,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { RootStackParamList, AssignedData } from '../types';
-import { telecallerApi } from '../api/telecaller';
+import { telecallerApi, CustomCallOutcome } from '../api/telecaller';
 import { requestCallPermissions } from '../utils/permissions';
 import CallTimer from '../components/CallTimer';
 import RecordingIndicator from '../components/RecordingIndicator';
@@ -100,6 +100,12 @@ const CallAssignedDataScreen: React.FC = () => {
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState('');
   const [pendingOutcome, setPendingOutcome] = useState<string | null>(null);
+
+  // Quick Notes during call - visible floating panel
+  const [showQuickNotes, setShowQuickNotes] = useState(false);
+  const [quickNotes, setQuickNotes] = useState('');
+  const [notesSaved, setNotesSaved] = useState(false);
+  const notesDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const defaultCallback = new Date(Date.now() + 24 * 60 * 60 * 1000);
   defaultCallback.setHours(10, 0, 0, 0);
   const [callbackAt, setCallbackAt] = useState<Date>(defaultCallback);
@@ -107,6 +113,42 @@ const CallAssignedDataScreen: React.FC = () => {
   const [showCallbackTimePicker, setShowCallbackTimePicker] = useState(false);
   const [isSubmittingOutcome, setIsSubmittingOutcome] = useState(false);
   const finalDurationRef = useRef<number>(0);
+
+  // Custom outcomes from API
+  const [customOutcomes, setCustomOutcomes] = useState<CustomCallOutcome[]>([]);
+  const [isLoadingOutcomes, setIsLoadingOutcomes] = useState(true);
+
+  // Auto-save quick notes with debounce (saves after 2 seconds of no typing)
+  const handleQuickNotesChange = useCallback((text: string) => {
+    setQuickNotes(text);
+    setNotesSaved(false);
+
+    // Clear previous debounce timer
+    if (notesDebounceRef.current) {
+      clearTimeout(notesDebounceRef.current);
+    }
+
+    // Set new debounce timer - auto-save after 2 seconds
+    if (text.trim()) {
+      notesDebounceRef.current = setTimeout(() => {
+        setNotesSaved(true);
+        // Notes will be synced to outcomeNotes when modal opens
+        console.log('[CallAssignedDataScreen] Quick notes auto-saved:', text);
+      }, 2000);
+    }
+  }, []);
+
+  // Sync quick notes to outcome notes when modal opens
+  useEffect(() => {
+    if (showOutcomeModal && quickNotes.trim()) {
+      setOutcomeNotes(prev => {
+        if (prev.trim()) {
+          return quickNotes + '\n\n' + prev;
+        }
+        return quickNotes;
+      });
+    }
+  }, [showOutcomeModal, quickNotes]);
 
   // Start timer
   const startTimer = useCallback(() => {
@@ -416,7 +458,8 @@ const CallAssignedDataScreen: React.FC = () => {
     d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const OUTCOMES = [
+  // Fallback outcomes if API fails
+  const FALLBACK_OUTCOMES = [
     { value: 'INTERESTED', label: 'Interested', icon: 'thumb-up', color: '#10B981' },
     { value: 'NOT_INTERESTED', label: 'Not Interested', icon: 'thumb-down', color: '#EF4444' },
     { value: 'CALLBACK', label: 'Callback', icon: 'phone-return', color: '#F59E0B' },
@@ -425,6 +468,40 @@ const CallAssignedDataScreen: React.FC = () => {
     { value: 'BUSY', label: 'Busy', icon: 'phone-lock', color: '#6B7280' },
     { value: 'WRONG_NUMBER', label: 'Wrong Number', icon: 'phone-cancel', color: '#EF4444' },
   ];
+
+  // Use custom outcomes from API, fallback to defaults
+  const OUTCOMES = customOutcomes.length > 0
+    ? customOutcomes.map(o => ({
+        value: o.slug.toUpperCase(),
+        label: o.name,
+        icon: o.icon || 'phone-check',
+        color: o.color || '#6B7280',
+        requiresFollowUp: o.requiresFollowUp,
+        requiresSubOption: o.requiresSubOption,
+        subOptions: o.subOptions || [],
+      }))
+    : FALLBACK_OUTCOMES;
+
+  // Fetch custom outcomes from API
+  useEffect(() => {
+    const fetchOutcomes = async () => {
+      console.log('[CallAssignedDataScreen] Fetching custom outcomes...');
+      try {
+        setIsLoadingOutcomes(true);
+        const outcomes = await telecallerApi.getCallOutcomes();
+        console.log('[CallAssignedDataScreen] Got', outcomes?.length || 0, 'outcomes');
+        if (outcomes && outcomes.length > 0) {
+          setCustomOutcomes(outcomes);
+        }
+      } catch (error: any) {
+        console.error('[CallAssignedDataScreen] Error fetching outcomes:', error?.message);
+        // Keep using fallback outcomes
+      } finally {
+        setIsLoadingOutcomes(false);
+      }
+    };
+    fetchOutcomes();
+  }, []);
 
   // Handle app state changes
   useEffect(() => {
@@ -711,6 +788,45 @@ const CallAssignedDataScreen: React.FC = () => {
           {isEnding ? statusMessage : 'Call in progress - duration tracking active'}
         </Text>
       </View>
+
+      {/* Quick Notes Panel - Visible during call */}
+      {!isEnding && (
+        <View style={styles.quickNotesContainer}>
+          <TouchableOpacity
+            style={[styles.quickNotesToggle, showQuickNotes && styles.quickNotesToggleActive]}
+            onPress={() => setShowQuickNotes(!showQuickNotes)}
+          >
+            <Icon name={showQuickNotes ? "chevron-down" : "note-plus"} size={20} color={showQuickNotes ? "#3B82F6" : "#6B7280"} />
+            <Text style={[styles.quickNotesToggleText, showQuickNotes && styles.quickNotesToggleTextActive]}>
+              {showQuickNotes ? "Hide Notes" : "Add Notes"}
+            </Text>
+            {notesSaved && quickNotes.trim() && (
+              <View style={styles.savedBadge}>
+                <Icon name="check" size={12} color="#10B981" />
+                <Text style={styles.savedBadgeText}>Saved</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {showQuickNotes && (
+            <View style={styles.quickNotesPanel}>
+              <TextInput
+                style={styles.quickNotesInput}
+                placeholder="Type notes here... (auto-saves)"
+                placeholderTextColor="#9CA3AF"
+                value={quickNotes}
+                onChangeText={handleQuickNotesChange}
+                multiline
+                autoFocus
+              />
+              {quickNotes.trim() && (
+                <Text style={styles.autoSaveHint}>
+                  {notesSaved ? "✓ Notes saved" : "Saving..."}
+                </Text>
+              )}
+            </View>
+          )}
+        </View>
+      )}
 
       {/* End Call Button */}
       {!isEnding ? (
@@ -1008,6 +1124,81 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: '#6B7280',
+  },
+  // Quick Notes styles
+  quickNotesContainer: {
+    position: 'absolute',
+    bottom: 140,
+    left: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  quickNotesToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    alignSelf: 'flex-start',
+    gap: 8,
+  },
+  quickNotesToggleActive: {
+    backgroundColor: '#EBF5FF',
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+  },
+  quickNotesToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  quickNotesToggleTextActive: {
+    color: '#3B82F6',
+  },
+  savedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  savedBadgeText: {
+    fontSize: 11,
+    color: '#10B981',
+    fontWeight: '500',
+  },
+  quickNotesPanel: {
+    marginTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  quickNotesInput: {
+    minHeight: 80,
+    maxHeight: 150,
+    fontSize: 15,
+    color: '#1F2937',
+    textAlignVertical: 'top',
+    padding: 0,
+  },
+  autoSaveHint: {
+    marginTop: 8,
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
   },
 });
 

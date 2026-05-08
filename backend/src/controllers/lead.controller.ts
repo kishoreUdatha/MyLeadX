@@ -183,27 +183,23 @@ export class LeadController {
         return;
       }
 
-      // Use new flow: upload to raw import records (not leads directly)
-      const result = await bulkUploadService.processUploadToRaw(
+      // Direct import to Leads table (not Raw Imports)
+      const result = await bulkUploadService.processUpload(
         req.organizationId!,
-        req.user!.id,
         req.file.buffer,
         req.file.mimetype,
-        req.file.originalname,
-        req.file.size
+        undefined, // counselorIds - will be assigned later
+        req.user!.id // assignedById
       );
 
       ApiResponse.success(res, 'Bulk upload processed successfully', {
-        bulkImportId: result.bulkImportId,
         totalRows: result.totalRows,
         validRows: result.validRows,
         duplicateRows: result.duplicateRows,
         invalidRows: result.invalidRows,
-        insertedRecords: result.insertedRecords,
-        // For backward compatibility with frontend
-        insertedLeads: 0,
-        duplicates: [],
-        errors: [],
+        insertedLeads: result.insertedLeads,
+        duplicates: result.duplicates,
+        errors: result.errors,
       });
     } catch (error) {
       next(error);
