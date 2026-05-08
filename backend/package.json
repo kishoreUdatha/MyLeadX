@@ -18,9 +18,10 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test": "node --max-old-space-size=4096 ./node_modules/jest/bin/jest.js",
+    "test:watch": "node --max-old-space-size=4096 ./node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --max-old-space-size=4096 ./node_modules/jest/bin/jest.js --coverage",
+    "test:unit": "node --max-old-space-size=4096 ./node_modules/jest/bin/jest.js --testPathPattern=__tests__ --no-coverage",
     "test:lead-lifecycle": "ts-node scripts/test-lead-lifecycle.ts",
     "test:lead-api": "ts-node scripts/test-lead-lifecycle-api.ts",
     "test:followup": "ts-node scripts/test-followup-system.ts",
@@ -78,7 +79,8 @@
     "swagger-ui-express": "^5.0.0",
     "uuid": "^9.0.1",
     "ws": "^8.16.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^3.25.76"
   },
   "optionalDependencies": {
     "wrtc": "^0.4.7"
