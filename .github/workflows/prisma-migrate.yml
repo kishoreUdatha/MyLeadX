@@ -6,6 +6,9 @@ on:
     paths:
       - 'backend/prisma/schema.prisma'
 
+permissions:
+  contents: write
+
 jobs:
   generate-migration:
     runs-on: ubuntu-latest
