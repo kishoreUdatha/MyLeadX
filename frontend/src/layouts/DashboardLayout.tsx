@@ -141,6 +141,12 @@ const educationNavigation: NavItem[] = [
   { name: 'Fee Collection', href: '/fees', icon: BanknotesIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
   { name: 'Scholarships', href: '/scholarships', icon: AcademicCapIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'fees_view' },
   { name: 'Commission', href: '/commissions', icon: CurrencyRupeeIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'counselor', 'telecaller'] },
+  // Partner Admission Portal
+  { name: 'Admission Partners', href: '/admission-partners', icon: UserGroupIcon, roles: ['super_admin', 'admin', 'manager'] },
+  { name: 'Partner Applications', href: '/partner-applications', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager', 'telecaller'] },
+  { name: 'Partner Payouts', href: '/partner-payouts', icon: BanknotesIcon, roles: ['super_admin', 'admin'] },
+  { name: 'Partner Leaderboard', href: '/partner-leaderboard', icon: TrophyIcon, roles: ['super_admin', 'admin', 'manager'] },
+  { name: 'Partner Incentives', href: '/partner-incentives', icon: SparklesIcon, roles: ['super_admin', 'admin', 'manager'] },
 ];
 
 // ============================================

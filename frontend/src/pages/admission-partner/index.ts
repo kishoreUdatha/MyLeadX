@@ -1,0 +1,10 @@
+export { AdmissionPartnerLoginPage } from './LoginPage';
+export { AdmissionPartnerDashboardPage } from './DashboardPage';
+export { AdmissionPartnerApplicationsPage } from './ApplicationsPage';
+export { AdmissionPartnerApplicationDetailPage } from './ApplicationDetailPage';
+export { AdmissionPartnerWalletPage } from './WalletPage';
+export { AdmissionPartnerNewApplicationPage } from './NewApplicationPage';
+export { AdmissionPartnerCreateLinkPage } from './CreateLinkPage';
+export { AdmissionPartnerLinksPage } from './LinksPage';
+export { AdmissionPartnerTeamPage } from './TeamPage';
+export { AdmissionPartnerSettingsPage } from './SettingsPage';

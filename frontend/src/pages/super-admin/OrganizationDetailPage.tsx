@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { superAdminService } from '../../services/super-admin.service';
+import api from '../../services/api';
 import {
   ArrowLeftIcon,
   UserIcon,
@@ -11,6 +12,9 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   PlayIcon,
+  FlagIcon,
+  ArrowPathIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 
 interface OrganizationDetails {
@@ -58,6 +62,24 @@ interface OrganizationDetails {
   }>;
 }
 
+interface FeatureFlag {
+  id: string;
+  name: string;
+  key: string;
+  description: string;
+  isEnabled: boolean;
+  rolloutPercentage: number;
+  defaultValue: boolean;
+}
+
+interface TenantFeatureOverride {
+  featureKey: string;
+  value: boolean;
+  reason?: string;
+  expiresAt?: string;
+  setAt?: string;
+}
+
 export default function OrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -66,11 +88,25 @@ export default function OrganizationDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [impersonating, setImpersonating] = useState<string | null>(null);
 
+  // Feature flags state
+  const [activeTab, setActiveTab] = useState<'overview' | 'features'>('overview');
+  const [allFeatures, setAllFeatures] = useState<FeatureFlag[]>([]);
+  const [tenantFeatures, setTenantFeatures] = useState<Record<string, boolean>>({});
+  const [tenantOverrides, setTenantOverrides] = useState<Record<string, TenantFeatureOverride>>({});
+  const [featuresLoading, setFeaturesLoading] = useState(false);
+  const [togglingFeature, setTogglingFeature] = useState<string | null>(null);
+
   useEffect(() => {
     if (id) {
       fetchOrganization();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (id && activeTab === 'features') {
+      fetchFeatures();
+    }
+  }, [id, activeTab]);
 
   const fetchOrganization = async () => {
     try {
@@ -80,6 +116,93 @@ export default function OrganizationDetailPage() {
       console.error('Failed to fetch organization:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFeatures = async () => {
+    if (!id) return;
+    setFeaturesLoading(true);
+    try {
+      // Fetch all available features and tenant-specific status
+      const [flagsRes, tenantRes] = await Promise.all([
+        api.get('/super-admin/feature-flags'),
+        api.get(`/super-admin/feature-flags/tenant/${id}`),
+      ]);
+
+      setAllFeatures(flagsRes.data.data || []);
+      setTenantFeatures(tenantRes.data.data || {});
+
+      // Get tenant overrides from organization settings
+      if (organization?.id) {
+        const orgRes = await api.get(`/super-admin/organizations/${id}`);
+        const settings = orgRes.data.organization?.settings || {};
+        setTenantOverrides(settings.featureOverrides || {});
+      }
+    } catch (error) {
+      console.error('Failed to fetch features:', error);
+    } finally {
+      setFeaturesLoading(false);
+    }
+  };
+
+  const handleToggleFeature = async (featureKey: string, currentValue: boolean) => {
+    if (!id) return;
+    setTogglingFeature(featureKey);
+    try {
+      const hasOverride = tenantOverrides[featureKey] !== undefined;
+
+      if (hasOverride) {
+        // Remove override to use default
+        await api.delete(`/super-admin/feature-flags/override/${id}/${featureKey}`);
+        const newOverrides = { ...tenantOverrides };
+        delete newOverrides[featureKey];
+        setTenantOverrides(newOverrides);
+      } else {
+        // Set override to opposite of current value
+        await api.post(`/super-admin/feature-flags/override/${id}`, {
+          featureKey,
+          value: !currentValue,
+          reason: 'Manual toggle by super admin',
+        });
+        setTenantOverrides({
+          ...tenantOverrides,
+          [featureKey]: {
+            featureKey,
+            value: !currentValue,
+            reason: 'Manual toggle by super admin',
+            setAt: new Date().toISOString(),
+          },
+        });
+      }
+
+      // Update tenant features
+      setTenantFeatures({
+        ...tenantFeatures,
+        [featureKey]: hasOverride ? !currentValue : !currentValue,
+      });
+
+      // Refresh features to get accurate state
+      await fetchFeatures();
+    } catch (error) {
+      console.error('Failed to toggle feature:', error);
+    } finally {
+      setTogglingFeature(null);
+    }
+  };
+
+  const handleResetToDefault = async (featureKey: string) => {
+    if (!id) return;
+    setTogglingFeature(featureKey);
+    try {
+      await api.delete(`/super-admin/feature-flags/override/${id}/${featureKey}`);
+      const newOverrides = { ...tenantOverrides };
+      delete newOverrides[featureKey];
+      setTenantOverrides(newOverrides);
+      await fetchFeatures();
+    } catch (error) {
+      console.error('Failed to reset feature:', error);
+    } finally {
+      setTogglingFeature(null);
     }
   };
 
@@ -188,6 +311,35 @@ export default function OrganizationDetailPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="border-b border-slate-200">
+        <nav className="flex gap-4">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'overview'
+                ? 'border-purple-600 text-purple-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('features')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+              activeTab === 'features'
+                ? 'border-purple-600 text-purple-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <FlagIcon className="w-4 h-4" />
+            Features
+          </button>
+        </nav>
+      </div>
+
+      {activeTab === 'overview' && (
+      <>
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
@@ -417,6 +569,132 @@ export default function OrganizationDetailPage() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* Features Tab */}
+      {activeTab === 'features' && (
+        <div className="space-y-6">
+          {/* Features Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Feature Controls</h2>
+              <p className="text-sm text-slate-500">Manage which features are enabled for this organization</p>
+            </div>
+            <button
+              onClick={fetchFeatures}
+              disabled={featuresLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium text-slate-700 transition-colors disabled:opacity-50"
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${featuresLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {featuresLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {allFeatures.map((feature) => {
+                const isEnabled = tenantFeatures[feature.key] ?? feature.defaultValue;
+                const hasOverride = tenantOverrides[feature.key] !== undefined;
+                const override = tenantOverrides[feature.key];
+
+                return (
+                  <div
+                    key={feature.key}
+                    className={`bg-white rounded-xl p-5 shadow-sm border ${
+                      hasOverride ? 'border-purple-300 ring-1 ring-purple-100' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <h3 className="font-semibold text-slate-800">{feature.name}</h3>
+                          {hasOverride && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                              Custom Override
+                            </span>
+                          )}
+                          {!hasOverride && feature.rolloutPercentage < 100 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                              {feature.rolloutPercentage}% Rollout
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-500 mt-1">{feature.description}</p>
+                        {hasOverride && override?.setAt && (
+                          <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                            <InformationCircleIcon className="w-3.5 h-3.5" />
+                            Override set on {new Date(override.setAt).toLocaleDateString()}
+                            {override.reason && ` - ${override.reason}`}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {hasOverride && (
+                          <button
+                            onClick={() => handleResetToDefault(feature.key)}
+                            disabled={togglingFeature === feature.key}
+                            className="text-xs text-slate-500 hover:text-slate-700 underline disabled:opacity-50"
+                          >
+                            Reset to default
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleToggleFeature(feature.key, isEnabled)}
+                          disabled={togglingFeature === feature.key}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 ${
+                            isEnabled ? 'bg-purple-600' : 'bg-slate-200'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              isEnabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {allFeatures.length === 0 && (
+                <div className="text-center py-12 bg-slate-50 rounded-xl">
+                  <FlagIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">No feature flags configured</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Legend */}
+          <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-600">
+            <p className="font-medium mb-2">Legend:</p>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-full bg-purple-600"></span>
+                <span>Enabled</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-full bg-slate-200"></span>
+                <span>Disabled</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">Custom Override</span>
+                <span>Manually set for this tenant</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full">% Rollout</span>
+                <span>Gradual rollout (may vary by tenant)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -255,6 +255,34 @@ import { ProfitDashboardPage } from './pages/profit';
 // Onboarding
 import { OnboardingWizard } from './pages/onboarding';
 
+// Admission Partner Portal
+import AdmissionPartnerLayout from './layouts/AdmissionPartnerLayout';
+import {
+  AdmissionPartnerLoginPage,
+  AdmissionPartnerDashboardPage,
+  AdmissionPartnerApplicationsPage,
+  AdmissionPartnerApplicationDetailPage,
+  AdmissionPartnerWalletPage,
+  AdmissionPartnerNewApplicationPage,
+  AdmissionPartnerCreateLinkPage,
+  AdmissionPartnerLinksPage,
+  AdmissionPartnerTeamPage,
+  AdmissionPartnerSettingsPage,
+} from './pages/admission-partner';
+
+// Student Portal
+import { TrackApplicationPage, PaymentPage } from './pages/student-portal';
+
+// Partner Applications Admin (CRM)
+import { PartnerApplicationsPage, PartnerApplicationDetailPage } from './pages/partner-applications';
+import { AdmissionPartnersPage, AddPartnerPage, PartnerDetailPage, EditPartnerPage, CollegeFormsPage, CollegeFormEditorPage } from './pages/admission-partners';
+
+// Partner Incentives & Gamification
+import { PartnerLeaderboardPage, IncentiveSchemesPage } from './pages/partner-incentives';
+
+// Partner Payouts Management
+import { PayoutManagementPage } from './pages/partner-payouts';
+
 // Super Admin Pages
 import SuperAdminLayout from './layouts/SuperAdminLayout';
 import {
@@ -276,6 +304,14 @@ import {
   PhoneNumbersPage as SuperAdminPhoneNumbersPage,
   IndustriesPage as SuperAdminIndustriesPage,
   IndustryDetailPage as SuperAdminIndustryDetailPage,
+  UsageMeteringPage as SuperAdminUsageMeteringPage,
+  AIControlPage as SuperAdminAIControlPage,
+  IntegrationsPage as SuperAdminIntegrationsPage,
+  PlatformUsersPage as SuperAdminPlatformUsersPage,
+  SecurityPage as SuperAdminSecurityPage,
+  WorkflowsPage as SuperAdminWorkflowsPage,
+  ReleasesPage as SuperAdminReleasesPage,
+  TrialManagementPage as SuperAdminTrialManagementPage,
 } from './pages/super-admin';
 import { superAdminService } from './services/super-admin.service';
 
@@ -400,7 +436,11 @@ function App() {
 
   // Check auth status on app initialization (validates httpOnly cookies)
   useEffect(() => {
-    if (!isInitialized) {
+    // Skip CRM auth check for partner portal routes (they have their own auth)
+    const isPartnerPortal = window.location.pathname.startsWith('/admission-partner');
+    const isPublicPortal = window.location.pathname.startsWith('/track') || window.location.pathname.startsWith('/pay');
+
+    if (!isInitialized && !isPartnerPortal && !isPublicPortal) {
       // On initial load, check if httpOnly cookie auth is valid
       dispatch(fetchCurrentUser());
     }
@@ -846,7 +886,44 @@ function App() {
         <Route path="scholarships" element={<ScholarshipsPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="profit" element={<ProfitDashboardPage />} />
+
+        {/* Partner Applications Management (Admin CRM) */}
+        <Route path="partner-applications" element={<PartnerApplicationsPage />} />
+        <Route path="partner-applications/:id" element={<PartnerApplicationDetailPage />} />
+        <Route path="admission-partners" element={<AdmissionPartnersPage />} />
+        <Route path="admission-partners/new" element={<AddPartnerPage />} />
+        <Route path="admission-partners/:id" element={<PartnerDetailPage />} />
+        <Route path="admission-partners/:id/edit" element={<EditPartnerPage />} />
+        <Route path="admission-partners/forms" element={<CollegeFormsPage />} />
+        <Route path="admission-partners/forms/new" element={<CollegeFormEditorPage />} />
+        <Route path="admission-partners/forms/:id" element={<CollegeFormEditorPage />} />
+        <Route path="admission-partners/forms/:id/edit" element={<CollegeFormEditorPage />} />
+        <Route path="partner-payouts" element={<PayoutManagementPage />} />
+
+        {/* Partner Incentives & Gamification */}
+        <Route path="partner-leaderboard" element={<PartnerLeaderboardPage />} />
+        <Route path="partner-incentives" element={<IncentiveSchemesPage />} />
       </Route>
+
+      {/* Admission Partner Portal Routes */}
+      <Route path="/admission-partner/login" element={<AdmissionPartnerLoginPage />} />
+      <Route path="/admission-partner/login/:orgSlug" element={<AdmissionPartnerLoginPage />} />
+      <Route path="/admission-partner" element={<AdmissionPartnerLayout />}>
+        <Route index element={<AdmissionPartnerDashboardPage />} />
+        <Route path="applications" element={<AdmissionPartnerApplicationsPage />} />
+        <Route path="applications/new" element={<AdmissionPartnerNewApplicationPage />} />
+        <Route path="applications/:id" element={<AdmissionPartnerApplicationDetailPage />} />
+        <Route path="links" element={<AdmissionPartnerLinksPage />} />
+        <Route path="links/new" element={<AdmissionPartnerCreateLinkPage />} />
+        <Route path="team" element={<AdmissionPartnerTeamPage />} />
+        <Route path="wallet" element={<AdmissionPartnerWalletPage />} />
+        <Route path="settings" element={<AdmissionPartnerSettingsPage />} />
+      </Route>
+
+      {/* Student Portal Routes (Public) */}
+      <Route path="/track" element={<TrackApplicationPage />} />
+      <Route path="/track/:applicationNumber" element={<TrackApplicationPage />} />
+      <Route path="/pay/:token" element={<PaymentPage />} />
 
       {/* Super Admin Routes - unified login handles both regular and super admin */}
       <Route path="/super-admin/login" element={<Navigate to="/login" replace />} />
@@ -875,6 +952,15 @@ function App() {
         <Route path="/super-admin/support" element={<SuperAdminSupportToolsPage />} />
         <Route path="/super-admin/compliance" element={<SuperAdminCompliancePage />} />
         <Route path="/super-admin/system" element={<SuperAdminSystemPage />} />
+        {/* New Super Admin Pages */}
+        <Route path="/super-admin/usage" element={<SuperAdminUsageMeteringPage />} />
+        <Route path="/super-admin/ai-control" element={<SuperAdminAIControlPage />} />
+        <Route path="/super-admin/integrations" element={<SuperAdminIntegrationsPage />} />
+        <Route path="/super-admin/users" element={<SuperAdminPlatformUsersPage />} />
+        <Route path="/super-admin/security" element={<SuperAdminSecurityPage />} />
+        <Route path="/super-admin/workflows" element={<SuperAdminWorkflowsPage />} />
+        <Route path="/super-admin/releases" element={<SuperAdminReleasesPage />} />
+        <Route path="/super-admin/trials" element={<SuperAdminTrialManagementPage />} />
       </Route>
 
       {/* Catch all */}

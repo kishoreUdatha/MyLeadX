@@ -91,10 +91,25 @@ export default function IndustriesPage() {
     setLoading(true);
     try {
       const result = await superAdminService.getIndustries();
-      setIndustries(result.data || []);
+      // Handle various response formats:
+      // 1. { data: { industries: [...] } } - nested in data
+      // 2. { industries: [...] } - direct industries property
+      // 3. [...] - array directly
+      let industriesData: Industry[] = [];
+      if (Array.isArray(result)) {
+        industriesData = result;
+      } else if (Array.isArray(result?.data?.industries)) {
+        industriesData = result.data.industries;
+      } else if (Array.isArray(result?.industries)) {
+        industriesData = result.industries;
+      } else if (Array.isArray(result?.data)) {
+        industriesData = result.data;
+      }
+      setIndustries(industriesData);
     } catch (err: any) {
       console.error('Failed to fetch industries:', err);
       setError(err.response?.data?.message || 'Failed to load industries');
+      setIndustries([]);
     } finally {
       setLoading(false);
     }

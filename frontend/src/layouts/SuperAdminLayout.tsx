@@ -25,6 +25,16 @@ import {
   BanknotesIcon,
   PhoneIcon,
   Squares2X2Icon,
+  CpuChipIcon,
+  LinkIcon,
+  CircleStackIcon,
+  UsersIcon,
+  LockClosedIcon,
+  RectangleGroupIcon,
+  RocketLaunchIcon,
+  LifebuoyIcon,
+  BoltIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -44,33 +54,61 @@ const navigationSections: NavSection[] = [
     title: 'Overview',
     items: [
       { name: 'Dashboard', href: '/super-admin/dashboard', icon: HomeIcon },
-      { name: 'Organizations', href: '/super-admin/organizations', icon: BuildingOffice2Icon },
+      { name: 'Tenants', href: '/super-admin/organizations', icon: BuildingOffice2Icon },
     ],
   },
   {
-    title: 'Monitoring',
+    title: 'Billing & Plans',
+    items: [
+      { name: 'Plans & Billing', href: '/super-admin/billing', icon: BanknotesIcon },
+      { name: 'Financial', href: '/super-admin/financial', icon: CurrencyDollarIcon },
+      { name: 'Usage & Metering', href: '/super-admin/usage', icon: CircleStackIcon },
+      { name: 'Trial Management', href: '/super-admin/trials', icon: ClockIcon },
+    ],
+  },
+  {
+    title: 'Platform Control',
+    items: [
+      { name: 'Features', href: '/super-admin/feature-flags', icon: FlagIcon },
+      { name: 'AI Control', href: '/super-admin/ai-control', icon: CpuChipIcon },
+      { name: 'Integrations', href: '/super-admin/integrations', icon: LinkIcon },
+      { name: 'Industries', href: '/super-admin/industries', icon: Squares2X2Icon },
+    ],
+  },
+  {
+    title: 'Analytics',
     items: [
       { name: 'Real-time', href: '/super-admin/realtime', icon: ChartBarIcon },
-      { name: 'Tenant Intelligence', href: '/super-admin/intelligence', icon: LightBulbIcon },
+      { name: 'Intelligence', href: '/super-admin/intelligence', icon: LightBulbIcon },
     ],
   },
   {
-    title: 'Management',
+    title: 'Users & Security',
     items: [
-      { name: 'Industries', href: '/super-admin/industries', icon: Squares2X2Icon },
-      { name: 'Financial', href: '/super-admin/financial', icon: CurrencyDollarIcon },
-      { name: 'Billing', href: '/super-admin/billing', icon: BanknotesIcon },
-      { name: 'Phone Numbers', href: '/super-admin/phone-numbers', icon: PhoneIcon },
-      { name: 'Feature Flags', href: '/super-admin/feature-flags', icon: FlagIcon },
-      { name: 'White-Label', href: '/super-admin/white-label', icon: PaintBrushIcon },
+      { name: 'Platform Users', href: '/super-admin/users', icon: UsersIcon },
+      { name: 'Security', href: '/super-admin/security', icon: LockClosedIcon },
+      { name: 'Compliance', href: '/super-admin/compliance', icon: DocumentCheckIcon },
+    ],
+  },
+  {
+    title: 'Automation',
+    items: [
+      { name: 'Workflows', href: '/super-admin/workflows', icon: RectangleGroupIcon },
     ],
   },
   {
     title: 'Operations',
     items: [
-      { name: 'Support Tools', href: '/super-admin/support', icon: WrenchScrewdriverIcon },
-      { name: 'Compliance', href: '/super-admin/compliance', icon: DocumentCheckIcon },
-      { name: 'System', href: '/super-admin/system', icon: CogIcon },
+      { name: 'Support', href: '/super-admin/support', icon: LifebuoyIcon },
+      { name: 'Releases', href: '/super-admin/releases', icon: RocketLaunchIcon },
+      { name: 'System', href: '/super-admin/system', icon: BoltIcon },
+    ],
+  },
+  {
+    title: 'Branding',
+    items: [
+      { name: 'White-Label', href: '/super-admin/white-label', icon: PaintBrushIcon },
+      { name: 'Phone Numbers', href: '/super-admin/phone-numbers', icon: PhoneIcon },
     ],
   },
   {

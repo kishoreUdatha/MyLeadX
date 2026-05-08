@@ -497,6 +497,56 @@ export const superAdminService = {
     const response = await api.get('/super-admin/industries/stats');
     return response.data;
   },
+
+  // ==================== TRIAL MANAGEMENT ====================
+
+  // Get trial statistics
+  async getTrialStats() {
+    const response = await api.get('/super-admin/trials/stats');
+    return response.data;
+  },
+
+  // Get trial organizations with pagination
+  async getTrialOrganizations(params: {
+    page?: number;
+    limit?: number;
+    filter?: 'all' | 'expiring_soon' | 'expired' | 'active';
+    search?: string;
+  }) {
+    const response = await api.get('/super-admin/trials/organizations', { params });
+    return response.data;
+  },
+
+  // Extend trial for an organization
+  async extendTrial(orgId: string, days: number, reason: string) {
+    const response = await api.post(`/super-admin/trials/organizations/${orgId}/extend`, {
+      days,
+      reason,
+    });
+    return response.data;
+  },
+
+  // Send trial reminder
+  async sendTrialReminder(orgId: string, type: '7_days' | '3_days' | '1_day' | 'expired') {
+    const response = await api.post(`/super-admin/trials/organizations/${orgId}/send-reminder`, {
+      type,
+    });
+    return response.data;
+  },
+
+  // Get trial conversion funnel
+  async getTrialConversionFunnel(months: number = 3) {
+    const response = await api.get('/super-admin/trials/conversion-funnel', {
+      params: { months },
+    });
+    return response.data;
+  },
+
+  // Process trial reminders manually
+  async processTrialReminders() {
+    const response = await api.post('/super-admin/trials/process-reminders');
+    return response.data;
+  },
 };
 
 export default superAdminService;

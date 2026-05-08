@@ -228,7 +228,7 @@ api.interceptors.response.use(
         console.error('[API] Token refresh failed:', refreshError);
 
         // Clear any local state and redirect (except for public pages)
-        const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/pricing', '/docs', '/realtime-test', '/'];
+        const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/pricing', '/docs', '/realtime-test', '/', '/admission-partner', '/track', '/pay'];
         const currentPath = window.location.pathname;
         const isPublicPage = publicPaths.some(path => currentPath === path || currentPath.startsWith(path + '/'));
 

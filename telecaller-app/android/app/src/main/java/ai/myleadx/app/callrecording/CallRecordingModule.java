@@ -265,9 +265,10 @@ public class CallRecordingModule extends ReactContextBaseJavaModule {
                         if (file.isFile() && (fileName.endsWith(".mp3") || fileName.endsWith(".m4a") ||
                             fileName.endsWith(".wav") || fileName.endsWith(".amr") || fileName.endsWith(".3gp"))) {
 
-                            // Check if this recording was made in the last 5 minutes
+                            // Check if this recording was made in the last 30 minutes
+                            // Long calls can last 20+ minutes, so we need a wider window
                             long ageMs = System.currentTimeMillis() - file.lastModified();
-                            if (ageMs > 300000) { // older than 5 minutes, skip
+                            if (ageMs > 1800000) { // older than 30 minutes, skip
                                 continue;
                             }
 
@@ -335,17 +336,17 @@ public class CallRecordingModule extends ReactContextBaseJavaModule {
 
     /**
      * Search for call recordings using MediaStore API (works on Android 11+ with scoped storage)
-     * Finds the most recent audio file in call recording directories within the last 5 minutes
+     * Finds the most recent audio file in call recording directories within the last 30 minutes
      */
     private File findViaMediaStore(String normalizedPhone) {
         ContentResolver resolver = getReactApplicationContext().getContentResolver();
         Uri audioUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
 
-        // Query for recent audio files (last 5 minutes)
-        long fiveMinAgo = (System.currentTimeMillis() / 1000) - 300;
+        // Query for recent audio files (last 30 minutes to support long calls)
+        long thirtyMinAgo = (System.currentTimeMillis() / 1000) - 1800;
 
         String selection = MediaStore.Audio.Media.DATE_MODIFIED + " > ?";
-        String[] selectionArgs = { String.valueOf(fiveMinAgo) };
+        String[] selectionArgs = { String.valueOf(thirtyMinAgo) };
         String sortOrder = MediaStore.Audio.Media.DATE_MODIFIED + " DESC";
 
         String[] projection = {

@@ -140,16 +140,21 @@ export default function IndustryDetailPage() {
         superAdminService.getIndustryStages(slug!),
       ]);
 
-      setIndustry(industryRes.data);
-      setFields(fieldsRes.data || []);
-      setStages(stagesRes.data || []);
+      // Handle different response formats
+      const industryData = industryRes.data?.industry || industryRes.data || industryRes;
+      const fieldsData = fieldsRes.data?.fields || fieldsRes.data || [];
+      const stagesData = stagesRes.data?.stages || stagesRes.data || [];
+
+      setIndustry(industryData);
+      setFields(Array.isArray(fieldsData) ? fieldsData : []);
+      setStages(Array.isArray(stagesData) ? stagesData : []);
 
       setEditForm({
-        name: industryRes.data.name,
-        description: industryRes.data.description || '',
-        icon: industryRes.data.icon || '',
-        color: industryRes.data.color,
-        isActive: industryRes.data.isActive,
+        name: industryData.name || '',
+        description: industryData.description || '',
+        icon: industryData.icon || '',
+        color: industryData.color || '#6B7280',
+        isActive: industryData.isActive ?? true,
       });
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load industry');
@@ -355,10 +360,10 @@ export default function IndustryDetailPage() {
           <div className="flex items-center gap-3">
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: `${industry.color}20` }}
+              style={{ backgroundColor: `${industry.color || '#6B7280'}20` }}
             >
-              <span style={{ color: industry.color }} className="text-xl font-bold">
-                {industry.name[0]}
+              <span style={{ color: industry.color || '#6B7280' }} className="text-xl font-bold">
+                {industry.name?.[0] || '?'}
               </span>
             </div>
             <div>

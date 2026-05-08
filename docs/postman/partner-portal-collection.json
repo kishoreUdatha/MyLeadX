@@ -1,0 +1,572 @@
+{
+  "info": {
+    "name": "Partner Admission Portal API",
+    "description": "API collection for Partner Admission Application & Payment Tracking Portal",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "partnerToken",
+      "value": ""
+    },
+    {
+      "key": "studentToken",
+      "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
+    },
+    {
+      "key": "partnerId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Admin Authentication",
+      "item": [
+        {
+          "name": "Admin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('adminToken', jsonData.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Partner Management (Admin)",
+      "item": [
+        {
+          "name": "Create Partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('partnerId', jsonData.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Premier Education Partners\",\n  \"email\": \"partner@example.com\",\n  \"phone\": \"+919876543210\",\n  \"type\": \"SUPER_PARTNER\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"commissionRate\": 10,\n  \"address\": \"123 Business Park, Mumbai\"\n}"
+            },
+            "url": "{{baseUrl}}/admission-partners"
+          }
+        },
+        {
+          "name": "List Partners",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admission-partners?status=ACTIVE&type=SUPER_PARTNER",
+              "host": ["{{baseUrl}}"],
+              "path": ["admission-partners"],
+              "query": [
+                { "key": "status", "value": "ACTIVE" },
+                { "key": "type", "value": "SUPER_PARTNER" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Partner Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": "{{baseUrl}}/admission-partners/{{partnerId}}"
+          }
+        },
+        {
+          "name": "Update Partner",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"commissionRate\": 12,\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": "{{baseUrl}}/admission-partners/{{partnerId}}"
+          }
+        },
+        {
+          "name": "Create Sub-Partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Delhi Education Hub\",\n  \"email\": \"subpartner@example.com\",\n  \"phone\": \"+919876543211\",\n  \"type\": \"SUB_PARTNER\",\n  \"parentPartnerId\": \"{{partnerId}}\",\n  \"city\": \"New Delhi\",\n  \"state\": \"Delhi\",\n  \"commissionRate\": 7\n}"
+            },
+            "url": "{{baseUrl}}/admission-partners"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Partner Portal",
+      "item": [
+        {
+          "name": "Partner Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('partnerToken', jsonData.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"partner@example.com\",\n  \"password\": \"Welcome@123\"\n}"
+            },
+            "url": "{{baseUrl}}/admission-partner-portal/login"
+          }
+        },
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "url": "{{baseUrl}}/admission-partner-portal/dashboard"
+          }
+        },
+        {
+          "name": "Submit Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('applicationId', jsonData.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentName\": \"Rahul Kumar\",\n  \"email\": \"rahul.kumar@email.com\",\n  \"phone\": \"+919876543212\",\n  \"dateOfBirth\": \"2000-05-15\",\n  \"gender\": \"MALE\",\n  \"fatherName\": \"Suresh Kumar\",\n  \"motherName\": \"Sunita Kumar\",\n  \"address\": \"123 Sector 15, Noida, UP - 201301\",\n  \"universityId\": \"uuid-of-university\",\n  \"courseId\": \"uuid-of-course\",\n  \"intake\": \"August 2024\"\n}"
+            },
+            "url": "{{baseUrl}}/admission-partner-portal/applications"
+          }
+        },
+        {
+          "name": "List Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admission-partner-portal/applications?status=APPLICATION_SUBMITTED&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admission-partner-portal", "applications"],
+              "query": [
+                { "key": "status", "value": "APPLICATION_SUBMITTED" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"10TH_MARKSHEET\",\n  \"documentName\": \"10th Marksheet\",\n  \"fileUrl\": \"https://storage.example.com/docs/10th.pdf\"\n}"
+            },
+            "url": "{{baseUrl}}/admission-partner-portal/applications/{{applicationId}}/documents"
+          }
+        },
+        {
+          "name": "Get Wallet",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "url": "{{baseUrl}}/admission-partner-portal/wallet"
+          }
+        },
+        {
+          "name": "Get Wallet Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "url": "{{baseUrl}}/admission-partner-portal/wallet/transactions"
+          }
+        },
+        {
+          "name": "Request Payout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{partnerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 25000,\n  \"bankAccountNumber\": \"1234567890123456\",\n  \"ifscCode\": \"HDFC0001234\",\n  \"accountHolderName\": \"Premier Education Partners\"\n}"
+            },
+            "url": "{{baseUrl}}/admission-partner-portal/wallet/request-payout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Student Portal",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationNumber\": \"APP-2024-001234\",\n  \"phone\": \"+919876543212\"\n}"
+            },
+            "url": "{{baseUrl}}/student-portal/send-otp"
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('studentToken', jsonData.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationNumber\": \"APP-2024-001234\",\n  \"phone\": \"+919876543212\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": "{{baseUrl}}/student-portal/verify-otp"
+          }
+        },
+        {
+          "name": "Get Application Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "url": "{{baseUrl}}/student-portal/application"
+          }
+        },
+        {
+          "name": "Upload Document (Student)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"AADHAR_CARD\",\n  \"documentName\": \"Aadhar Card\",\n  \"fileUrl\": \"https://storage.example.com/docs/aadhar.pdf\"\n}"
+            },
+            "url": "{{baseUrl}}/student-portal/documents"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Application Management (Admin)",
+      "item": [
+        {
+          "name": "List All Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/partner-applications?status=DOCUMENT_VERIFICATION&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["partner-applications"],
+              "query": [
+                { "key": "status", "value": "DOCUMENT_VERIFICATION" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Application Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": "{{baseUrl}}/partner-applications/{{applicationId}}"
+          }
+        },
+        {
+          "name": "Update Application Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DOCUMENT_VERIFICATION\",\n  \"remarks\": \"Documents under review\"\n}"
+            },
+            "url": "{{baseUrl}}/partner-applications/{{applicationId}}/status"
+          }
+        },
+        {
+          "name": "Verify Document",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\",\n  \"remarks\": \"Document verified successfully\"\n}"
+            },
+            "url": "{{baseUrl}}/partner-applications/{{applicationId}}/documents/{{documentId}}/verify"
+          }
+        },
+        {
+          "name": "Assign Counsellor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"counsellorId\": \"uuid-of-counsellor\"\n}"
+            },
+            "url": "{{baseUrl}}/partner-applications/{{applicationId}}/assign-counsellor"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Management",
+      "item": [
+        {
+          "name": "Record Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{applicationId}}\",\n  \"amount\": 50000,\n  \"paymentMode\": \"BANK_TRANSFER\",\n  \"paymentType\": \"ADMISSION_FEE\",\n  \"transactionId\": \"TXN123456789\"\n}"
+            },
+            "url": "{{baseUrl}}/application-payments"
+          }
+        },
+        {
+          "name": "Verify Payment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"VERIFIED\",\n  \"remarks\": \"Payment verified against bank statement\"\n}"
+            },
+            "url": "{{baseUrl}}/application-payments/{{paymentId}}/verify"
+          }
+        },
+        {
+          "name": "Create Payment Link",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{applicationId}}\",\n  \"amount\": 50000,\n  \"feeType\": \"ADMISSION_FEE\",\n  \"description\": \"Admission Fee Payment\",\n  \"expiresInHours\": 72\n}"
+            },
+            "url": "{{baseUrl}}/application-payments/create-link"
+          }
+        },
+        {
+          "name": "Approve Commissions",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{applicationId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/application-payments/approve-commissions"
+          }
+        },
+        {
+          "name": "Process Payout",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"transactionId\": \"PAYOUT123456\",\n  \"remarks\": \"Payout processed via NEFT\"\n}"
+            },
+            "url": "{{baseUrl}}/application-payments/payouts/{{payoutId}}/process"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Links (Public)",
+      "item": [
+        {
+          "name": "Get Payment Link Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/pay/{{paymentToken}}"
+          }
+        },
+        {
+          "name": "Create Razorpay Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/pay/{{paymentToken}}/create-order"
+          }
+        },
+        {
+          "name": "Verify Razorpay Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"order_xxxxx\",\n  \"razorpay_payment_id\": \"pay_xxxxx\",\n  \"razorpay_signature\": \"signature_xxxxx\"\n}"
+            },
+            "url": "{{baseUrl}}/pay/{{paymentToken}}/verify"
+          }
+        },
+        {
+          "name": "Submit External Payment Proof",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMode\": \"BANK_TRANSFER\",\n  \"transactionId\": \"UTR123456789\",\n  \"proofUrl\": \"https://storage.example.com/proofs/receipt.pdf\",\n  \"remarks\": \"Paid via NEFT from HDFC Bank\"\n}"
+            },
+            "url": "{{baseUrl}}/pay/{{paymentToken}}/submit-proof"
+          }
+        }
+      ]
+    }
+  ]
+}

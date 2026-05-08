@@ -18,3 +18,13 @@ export { default as BillingPage } from './BillingPage';
 export { default as PhoneNumbersPage } from './PhoneNumbersPage';
 export { default as IndustriesPage } from './IndustriesPage';
 export { default as IndustryDetailPage } from './IndustryDetailPage';
+
+// New Super Admin Pages
+export { default as UsageMeteringPage } from './UsageMeteringPage';
+export { default as AIControlPage } from './AIControlPage';
+export { default as IntegrationsPage } from './IntegrationsPage';
+export { default as PlatformUsersPage } from './PlatformUsersPage';
+export { default as SecurityPage } from './SecurityPage';
+export { default as WorkflowsPage } from './WorkflowsPage';
+export { default as ReleasesPage } from './ReleasesPage';
+export { default as TrialManagementPage } from './TrialManagementPage';

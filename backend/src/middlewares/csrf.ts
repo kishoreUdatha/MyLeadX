@@ -122,7 +122,9 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     // Onboarding endpoints - CSRF cookie may not be set yet after login
     '/lead-stages/industry', '/onboarding', '/organization/complete-onboarding',
     // Mobile app notification endpoints
-    '/notifications/register-device', '/notifications/unregister-device', '/notifications/test'
+    '/notifications/register-device', '/notifications/unregister-device', '/notifications/test',
+    // Partner portal auth endpoints
+    '/partner-portal/login',
   ];
   if (csrfExemptEndpoints.some(endpoint => req.path.endsWith(endpoint) || req.path.includes(endpoint))) {
     return next();
