@@ -51,8 +51,7 @@ interface LeadWithAssignment {
   alternatePhone?: string;
   source: LeadSource;
   priority: LeadPriority;
-  notes?: string;
-  // Extended fields
+  // Extended fields (must match Prisma Lead model)
   fatherName?: string;
   motherName?: string;
   fatherPhone?: string;
@@ -64,7 +63,6 @@ interface LeadWithAssignment {
   state?: string;
   pincode?: string;
   country?: string;
-  company?: string;
   customFields: Record<string, unknown>;
   counselorId?: string;
 }
@@ -668,7 +666,6 @@ export class BulkUploadService {
         alternatePhone: lead.alternatePhone,
         source: LeadSource.BULK_UPLOAD,
         priority: this.mapPriority(lead.priority),
-        notes: lead.notes,
         // Extended fields
         fatherName: lead.fatherName,
         motherName: lead.motherName,
@@ -681,11 +678,12 @@ export class BulkUploadService {
         state: lead.state,
         pincode: lead.pincode,
         country: lead.country,
-        companyName: lead.companyName,
         customFields: {
           ...lead.customFields,
           ...(lead.location && { location: lead.location }),
           ...(lead.status && { importedStatus: lead.status }),
+          ...(lead.notes && { notes: lead.notes }),
+          ...(lead.companyName && { companyName: lead.companyName }),
         },
         counselorId,
       };
