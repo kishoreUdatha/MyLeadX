@@ -153,7 +153,7 @@ router.get('/stages', (req: TenantRequest, res: Response) => {
 
 router.post(
   '/bulk-upload',
-  authorize('admin', 'counselor'),
+  authorize('admin', 'manager', 'counselor'),
   uploadSpreadsheet.single('file'),
   leadController.bulkUpload.bind(leadController)
 );
