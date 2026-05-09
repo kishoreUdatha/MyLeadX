@@ -51,6 +51,7 @@ interface LeadWithAssignment {
   alternatePhone?: string;
   source: LeadSource;
   priority: LeadPriority;
+  stageId?: string;
   // Extended fields (must match Prisma Lead model)
   fatherName?: string;
   motherName?: string;
@@ -609,6 +610,44 @@ export class BulkUploadService {
       },
     });
 
+    // Get all lead stages for the organization to map status
+    const leadStages = await prisma.leadStage.findMany({
+      where: { organizationId },
+      select: { id: true, name: true },
+    });
+
+    // Create a map of stage names to stage IDs (case-insensitive)
+    const stageNameMap = new Map<string, string>();
+    leadStages.forEach((stage) => {
+      stageNameMap.set(stage.name.toLowerCase().trim(), stage.id);
+    });
+
+    // Common status mappings (Excel status -> Lead stage name)
+    const statusMappings: Record<string, string[]> = {
+      'new': ['new', 'fresh', 'uncontacted'],
+      'inquiry': ['inquiry', 'enquiry', 'contacted', 'contact', 'reached'],
+      'interested': ['interested', 'hot', 'warm', 'followup', 'follow up', 'follow-up'],
+      'visit scheduled': ['visit scheduled', 'scheduled', 'appointment', 'meeting scheduled'],
+      'visit completed': ['visit completed', 'visited', 'met'],
+      'documents pending': ['documents pending', 'docs pending', 'documentation'],
+      'processing': ['processing', 'in progress', 'ongoing'],
+      'payment pending': ['payment pending', 'fee pending', 'payment'],
+      'admitted': ['admitted', 'converted', 'won', 'closed won'],
+      'enrolled': ['enrolled', 'joined'],
+      'dropped': ['dropped', 'lost', 'closed lost', 'not interested', 'cold'],
+    };
+
+    // Create a map of various status values to stage IDs
+    const statusToStageMap = new Map<string, string>();
+    for (const [stageName, statusAliases] of Object.entries(statusMappings)) {
+      const stageId = stageNameMap.get(stageName);
+      if (stageId) {
+        for (const alias of statusAliases) {
+          statusToStageMap.set(alias, stageId);
+        }
+      }
+    }
+
     // Create a map of user names/emails to user IDs for quick lookup
     const userNameMap = new Map<string, string>();
     allUsers.forEach((user) => {
@@ -657,6 +696,22 @@ export class BulkUploadService {
         counselorId = counselors[counselorIndex].id;
       }
 
+      // Map status to stageId
+      let stageId: string | undefined;
+      if (lead.status) {
+        const statusLower = lead.status.toLowerCase().trim();
+        stageId = statusToStageMap.get(statusLower);
+        // If no direct match, try partial match
+        if (!stageId) {
+          for (const [alias, id] of statusToStageMap.entries()) {
+            if (statusLower.includes(alias) || alias.includes(statusLower)) {
+              stageId = id;
+              break;
+            }
+          }
+        }
+      }
+
       return {
         organizationId,
         firstName: lead.firstName,
@@ -666,6 +721,7 @@ export class BulkUploadService {
         alternatePhone: lead.alternatePhone,
         source: LeadSource.BULK_UPLOAD,
         priority: this.mapPriority(lead.priority),
+        stageId,
         // Extended fields
         fatherName: lead.fatherName,
         motherName: lead.motherName,
