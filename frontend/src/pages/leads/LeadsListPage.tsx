@@ -1128,15 +1128,9 @@ export default function LeadsListPage() {
                       </td>
                       <td className="px-3 py-2">
                         {lead.assignments?.[0]?.assignedTo ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600">
-                              {lead.assignments[0].assignedTo.firstName?.[0]}
-                              {lead.assignments[0].assignedTo.lastName?.[0]}
-                            </div>
-                            <span className="text-xs text-slate-700">
-                              {lead.assignments[0].assignedTo.firstName}
-                            </span>
-                          </div>
+                          <span className="text-xs text-slate-700">
+                            {lead.assignments[0].assignedTo.firstName}
+                          </span>
                         ) : (
                           <span className="text-[10px] text-amber-500 font-medium">Unassigned</span>
                         )}
