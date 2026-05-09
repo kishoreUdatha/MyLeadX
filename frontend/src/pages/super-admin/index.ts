@@ -28,3 +28,6 @@ export { default as SecurityPage } from './SecurityPage';
 export { default as WorkflowsPage } from './WorkflowsPage';
 export { default as ReleasesPage } from './ReleasesPage';
 export { default as TrialManagementPage } from './TrialManagementPage';
+
+// Messaging Platform
+export { default as MessagingManagementPage } from './MessagingManagementPage';

@@ -35,6 +35,7 @@ import {
   LifebuoyIcon,
   BoltIcon,
   ClockIcon,
+  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -115,6 +116,7 @@ const navigationSections: NavSection[] = [
     title: 'Communication',
     items: [
       { name: 'Bulk Email', href: '/super-admin/bulk-email', icon: EnvelopeIcon },
+      { name: 'Messaging Platform', href: '/super-admin/messaging', icon: ChatBubbleLeftRightIcon },
     ],
   },
 ];

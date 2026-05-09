@@ -61,6 +61,7 @@ import {
   TagIcon,
   PauseCircleIcon,
   PlayCircleIcon,
+  PaperAirplaneIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -101,16 +102,16 @@ const industryLabels: Record<string, { lead: string; leads: string; deal: string
 
 // Define which sections are relevant for each industry
 const industrySections: Record<string, string[]> = {
-  EDUCATION: ['main', 'education', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  REAL_ESTATE: ['main', 'realestate', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  HEALTHCARE: ['main', 'healthcare', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  INSURANCE: ['main', 'insurance', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  AUTOMOTIVE: ['main', 'automotive', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  IT_SERVICES: ['main', 'itservices', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  RECRUITMENT: ['main', 'recruitment', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  FINANCE: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  ECOMMERCE: ['main', 'sales', 'communication', 'data', 'analytics', 'team', 'integrations', 'settings'],
-  GENERIC: ['main', 'sales', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  EDUCATION: ['main', 'education', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  REAL_ESTATE: ['main', 'realestate', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  HEALTHCARE: ['main', 'healthcare', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  INSURANCE: ['main', 'insurance', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  AUTOMOTIVE: ['main', 'automotive', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  IT_SERVICES: ['main', 'itservices', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  RECRUITMENT: ['main', 'recruitment', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  FINANCE: ['main', 'sales', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  ECOMMERCE: ['main', 'sales', 'communication', 'messaging', 'data', 'analytics', 'team', 'integrations', 'settings'],
+  GENERIC: ['main', 'sales', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'],
 };
 
 // Helper to get label based on industry
@@ -233,6 +234,13 @@ const communicationNavigation: NavItem[] = [
   { name: 'WhatsApp', href: '/whatsapp/bulk', icon: WhatsAppIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'whatsapp_view' },
   { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['super_admin', 'admin', 'manager'], permission: 'settings_view' },
   { name: 'Follow-ups', href: '/reports/followup', icon: ArrowPathRoundedSquareIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead', 'telecaller'], permission: 'followups_view' },
+];
+
+// Messaging Platform - Bulk SMS, WhatsApp, RCS
+const messagingNavigation: NavItem[] = [
+  { name: 'Credits', href: '/messaging/credits', icon: CreditCardIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'settings_view' },
+  { name: 'Bulk Send', href: '/messaging/bulk', icon: MegaphoneIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'campaigns_view' },
+  { name: 'History', href: '/messaging/history', icon: ClockIcon, roles: ['super_admin', 'admin', 'manager', 'team_lead'], permission: 'campaigns_view' },
 ];
 
 // Calling - Voice & AI Calls
@@ -558,7 +566,7 @@ export default function DashboardLayout() {
                           orgIndustry === 'RECRUITMENT' ? 'recruitment' : 'sales';
 
   // Super Admin sees ALL sections regardless of industry
-  const allSections = ['main', 'sales', 'education', 'realestate', 'healthcare', 'insurance', 'automotive', 'itservices', 'recruitment', 'communication', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'];
+  const allSections = ['main', 'sales', 'education', 'realestate', 'healthcare', 'insurance', 'automotive', 'itservices', 'recruitment', 'communication', 'messaging', 'voiceAI', 'data', 'analytics', 'team', 'integrations', 'settings'];
 
   // Check if a section should be shown for this industry (Super Admin / Admin sees all)
   const isSectionAllowed = useCallback((sectionKey: string) => {
@@ -613,6 +621,7 @@ export default function DashboardLayout() {
   const filteredIndustry = useMemo(() => isSectionAllowed(industrySection) ? filterByRole(getIndustryNavigation(orgIndustry)) : [], [filterByRole, orgIndustry, industrySection]);
   const industrySectionTitle = getIndustrySectionTitle(orgIndustry);
   const filteredCommunication = useMemo(() => isSectionAllowed('communication') ? filterByRole(communicationNavigation) : [], [filterByRole, isSectionAllowed]);
+  const filteredMessaging = useMemo(() => isSectionAllowed('messaging') ? filterByRole(messagingNavigation) : [], [filterByRole, isSectionAllowed]);
   const filteredVoiceAI = useMemo(() => isSectionAllowed('voiceAI') ? filterByRole(voiceAINavigation) : [], [filterByRole, isSectionAllowed]);
   const filteredData = useMemo(() => isSectionAllowed('data') ? filterByRole(dataNavigation) : [], [filterByRole, isSectionAllowed]);
   const filteredAnalytics = useMemo(() => isSectionAllowed('analytics') ? filterByRole(getAnalyticsNavigation(orgIndustry)) : [], [filterByRole, orgIndustry, isSectionAllowed]);
@@ -707,6 +716,7 @@ export default function DashboardLayout() {
   const sectionIcons: Record<string, React.ComponentType<{ className?: string }>> = {
     sales: FunnelIcon,
     communication: ChatBubbleLeftRightIcon,
+    messaging: PaperAirplaneIcon,
     voiceAI: SparklesIcon,
     data: DocumentArrowUpIcon,
     analytics: ChartBarIcon,
@@ -822,6 +832,17 @@ export default function DashboardLayout() {
                 sectionKey="communication"
                 items={filteredCommunication}
                 colorClass="text-sky-400"
+                onClick={() => setSidebarOpen(false)}
+              />
+            )}
+
+            {/* Messaging Platform */}
+            {filteredMessaging.length > 0 && (
+              <CollapsibleSection
+                title="Messaging"
+                sectionKey="messaging"
+                items={filteredMessaging}
+                colorClass="text-rose-400"
                 onClick={() => setSidebarOpen(false)}
               />
             )}
@@ -967,6 +988,14 @@ export default function DashboardLayout() {
                 <NavItemCollapsed key={item.name} item={item} />
               ))}
 
+              {/* Divider + Messaging */}
+              {filteredMessaging.length > 0 && (
+                <div className="my-2 border-t border-slate-700/50" />
+              )}
+              {filteredMessaging.map((item) => (
+                <NavItemCollapsed key={item.name} item={item} />
+              ))}
+
               {/* Divider + Voice AI */}
               {filteredVoiceAI.length > 0 && (
                 <div className="my-2 border-t border-slate-700/50" />
@@ -1058,6 +1087,16 @@ export default function DashboardLayout() {
                   sectionKey="communication"
                   items={filteredCommunication}
                   colorClass="text-sky-400"
+                />
+              )}
+
+              {/* Messaging Platform */}
+              {filteredMessaging.length > 0 && (
+                <CollapsibleSection
+                  title="Messaging"
+                  sectionKey="messaging"
+                  items={filteredMessaging}
+                  colorClass="text-rose-400"
                 />
               )}
 

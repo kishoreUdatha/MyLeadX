@@ -179,6 +179,7 @@ import { LeadTrackingPage } from './pages/lead-tracking';
 import { RawImportsPage, RawImportDetailPage } from './pages/raw-imports';
 import { LeadDistributionPage } from './pages/data';
 import { BulkWhatsAppPage } from './pages/whatsapp';
+import { CreditsPage as MessagingCreditsPage, BulkSendPage as MessagingBulkSendPage, HistoryPage as MessagingHistoryPage } from './pages/messaging';
 import { PhoneNumbersPage } from './pages/phone-numbers';
 import NumbersShopPage from './pages/numbers-shop';
 import { IvrListPage, IvrBuilderPage } from './pages/ivr';
@@ -312,8 +313,26 @@ import {
   WorkflowsPage as SuperAdminWorkflowsPage,
   ReleasesPage as SuperAdminReleasesPage,
   TrialManagementPage as SuperAdminTrialManagementPage,
+  MessagingManagementPage as SuperAdminMessagingManagementPage,
 } from './pages/super-admin';
 import { superAdminService } from './services/super-admin.service';
+
+// Messaging Portal (Standalone)
+import MessagingPortalLayout from './layouts/MessagingPortalLayout';
+import {
+  LoginPage as MessagingPortalLoginPage,
+  RegisterPage as MessagingPortalRegisterPage,
+  DashboardPage as MessagingPortalDashboardPage,
+  ContactsPage as MessagingPortalContactsPage,
+  ContactGroupsPage as MessagingPortalContactGroupsPage,
+  CampaignsPage as MessagingPortalCampaignsPage,
+  CampaignDetailPage as MessagingPortalCampaignDetailPage,
+  CreateCampaignPage as MessagingPortalCreateCampaignPage,
+  TemplatesPage as MessagingPortalTemplatesPage,
+  ReportsPage as MessagingPortalReportsPage,
+  BillingPage as MessagingPortalBillingPage,
+  SettingsPage as MessagingPortalSettingsPage,
+} from './pages/messaging-portal';
 
 // Loading spinner for auth initialization
 function AuthLoadingSpinner() {
@@ -439,8 +458,9 @@ function App() {
     // Skip CRM auth check for partner portal routes (they have their own auth)
     const isPartnerPortal = window.location.pathname.startsWith('/admission-partner');
     const isPublicPortal = window.location.pathname.startsWith('/track') || window.location.pathname.startsWith('/pay');
+    const isMessagingPortal = window.location.pathname.startsWith('/messaging-portal');
 
-    if (!isInitialized && !isPartnerPortal && !isPublicPortal) {
+    if (!isInitialized && !isPartnerPortal && !isPublicPortal && !isMessagingPortal) {
       // On initial load, check if httpOnly cookie auth is valid
       dispatch(fetchCurrentUser());
     }
@@ -756,6 +776,11 @@ function App() {
         {/* WhatsApp */}
         <Route path="whatsapp/bulk" element={<BulkWhatsAppPage />} />
 
+        {/* Messaging Platform */}
+        <Route path="messaging/credits" element={<MessagingCreditsPage />} />
+        <Route path="messaging/bulk" element={<MessagingBulkSendPage />} />
+        <Route path="messaging/history" element={<MessagingHistoryPage />} />
+
         {/* Phone Numbers */}
         <Route path="phone-numbers" element={<PhoneNumbersPage />} />
         <Route path="numbers-shop" element={<NumbersShopPage />} />
@@ -961,6 +986,24 @@ function App() {
         <Route path="/super-admin/workflows" element={<SuperAdminWorkflowsPage />} />
         <Route path="/super-admin/releases" element={<SuperAdminReleasesPage />} />
         <Route path="/super-admin/trials" element={<SuperAdminTrialManagementPage />} />
+        <Route path="/super-admin/messaging" element={<SuperAdminMessagingManagementPage />} />
+      </Route>
+
+      {/* Messaging Portal (Standalone) */}
+      <Route path="/messaging-portal/login" element={<MessagingPortalLoginPage />} />
+      <Route path="/messaging-portal/register" element={<MessagingPortalRegisterPage />} />
+      <Route path="/messaging-portal" element={<MessagingPortalLayout />}>
+        <Route index element={<Navigate to="/messaging-portal/dashboard" replace />} />
+        <Route path="dashboard" element={<MessagingPortalDashboardPage />} />
+        <Route path="contacts" element={<MessagingPortalContactsPage />} />
+        <Route path="groups" element={<MessagingPortalContactGroupsPage />} />
+        <Route path="campaigns" element={<MessagingPortalCampaignsPage />} />
+        <Route path="campaigns/:id" element={<MessagingPortalCampaignDetailPage />} />
+        <Route path="campaigns/create" element={<MessagingPortalCreateCampaignPage />} />
+        <Route path="templates" element={<MessagingPortalTemplatesPage />} />
+        <Route path="reports" element={<MessagingPortalReportsPage />} />
+        <Route path="billing" element={<MessagingPortalBillingPage />} />
+        <Route path="settings" element={<MessagingPortalSettingsPage />} />
       </Route>
 
       {/* Catch all */}

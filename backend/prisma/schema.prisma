@@ -171,7 +171,31 @@ model Organization {
   whiteLabelSettings WhiteLabelSettings?
   emailSettings      EmailSettings?
 
-  // Messaging
+  // Messaging Settings (White-label SMS)
+  smsSenderId       String?  // Assigned sender ID (e.g., "RESELL1") - must be DLT registered under MyLeadex
+  smsEnabled        Boolean  @default(false) // Whether bulk SMS is enabled for this org
+  whatsappEnabled   Boolean  @default(false) // Whether WhatsApp messaging is enabled
+  rcsEnabled        Boolean  @default(false) // Whether RCS messaging is enabled
+  messagingNotes    String?  // Admin notes about this org's messaging setup
+
+  // Custom DLT Configuration (for customers with their own DLT registration)
+  smsProviderType         SmsProviderType @default(PLATFORM) // PLATFORM = MyLeadex DLT, CUSTOM = Customer's own DLT
+  customDltEntityId       String?  // Customer's DLT PE ID (Principal Entity ID) - 19 digit number
+  customDltSenderId       String?  // Customer's DLT registered Sender ID (6 chars)
+  customDltTeleMarketerId String?  // Customer's Telemarketer ID (if applicable)
+  dltPlatform             String?  // Which DLT platform (JIO, AIRTEL, VI, BSNL)
+  dltRegisteredName       String?  // Company name as registered on DLT
+  dltConfiguredAt         DateTime? // When DLT was configured
+  dltConfiguredById       String?  // Super admin who configured it
+
+  // Customer's DLT Templates
+  organizationSmsTemplates OrganizationSmsTemplate[]
+
+  // Messaging Portal Settings
+  senderIdRequests  SenderIdRequest[]
+  messagingApiKeys  MessagingApiKey[]
+
+  // Messaging Relations
   scheduledMessages ScheduledMessage[]
   contactLists      ContactList[]
   conversations     Conversation[]
@@ -325,6 +349,9 @@ model Organization {
   partnerCommunicationTemplates   PartnerCommunicationTemplate[]
   partnerCommunicationLogs        PartnerCommunicationLog[]
   partnerPortalAuditLogs          PartnerPortalAuditLog[]
+
+  // Messaging Platform
+  messageBalance MessageBalance?
 
   @@index([industrySlug])
   @@map("organizations")
@@ -481,6 +508,14 @@ model User {
   partnerApplicationsVerifiedBy PartnerApplication[]  @relation("ApplicationVerifiedBy")
   applicationDocumentsVerified  ApplicationDocument[] @relation("DocumentVerifiedBy")
   applicationPaymentsVerified   ApplicationPayment[]  @relation("PaymentVerifiedBy")
+
+  // Messaging Platform
+  messagePurchases MessagePurchase[]
+  bulkMessageJobs  BulkMessageJob[]
+
+  // Messaging Portal Settings
+  senderIdRequestsProcessed SenderIdRequest[] @relation("SenderIdRequestProcessor")
+  messagingApiKeysCreated   MessagingApiKey[] @relation("ApiKeyCreator")
 
   @@unique([organizationId, email])
   @@map("users")
@@ -5932,6 +5967,51 @@ enum WhatsAppTemplateStatus {
   APPROVED
   REJECTED
   PAUSED
+}
+
+// ==================== ORGANIZATION SMS TEMPLATES (Customer's Own DLT) ====================
+
+// For customers who have their own DLT registration
+// Stores their DLT-approved templates that they can use for SMS campaigns
+model OrganizationSmsTemplate {
+  id             String @id @default(uuid())
+  organizationId String
+
+  // Template Info
+  name        String  // Friendly name (e.g., "Appointment Reminder")
+  description String? // Optional description
+
+  // DLT Details (from customer's DLT portal)
+  dltTemplateId String // Customer's DLT-approved Template ID (required)
+  dltContentType String @default("TRANSACTIONAL") // TRANSACTIONAL or PROMOTIONAL
+
+  // Template Content
+  content   String   @db.Text // Template content with variables like {#var#}
+  variables String[] @default([]) // List of variable names ["name", "date", "time"]
+
+  // Sample Values (for preview)
+  sampleValues Json @default("{}") // {"name": "John", "date": "2024-01-15"}
+
+  // Status
+  isActive   Boolean  @default(true)
+  isVerified Boolean  @default(false) // Verified by super admin
+  verifiedAt DateTime?
+  verifiedBy String?
+
+  // Usage tracking
+  usageCount Int       @default(0)
+  lastUsedAt DateTime?
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, dltTemplateId])
+  @@index([organizationId, isActive])
+  @@map("organization_sms_templates")
 }
 
 // ==================== SCHEDULED MESSAGES ====================
@@ -14804,4 +14884,516 @@ model PartnerPortalAuditLog {
   @@index([entityType, entityId])
   @@index([performedById])
   @@map("partner_portal_audit_logs")
+}
+
+// ==================== MESSAGING PLATFORM MODELS ====================
+
+// Unified messaging credit balance for SMS, WhatsApp, RCS
+model MessageBalance {
+  id             String @id @default(uuid())
+  organizationId String @unique
+
+  // Channel balances
+  smsCredits      Int @default(0)
+  whatsappCredits Int @default(0)
+  rcsCredits      Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("message_balances")
+}
+
+// Pricing configuration for messaging (default and per-organization)
+model MessagePricing {
+  id             String  @id @default(uuid())
+  organizationId String? @unique // null = default pricing for all orgs
+
+  // Per-message pricing (in INR)
+  smsPrice      Decimal @default(0.25) @db.Decimal(10, 4)
+  whatsappPrice Decimal @default(0.75) @db.Decimal(10, 4)
+  rcsPrice      Decimal @default(0.60) @db.Decimal(10, 4)
+
+  // Bulk discounts (JSON: {"1000": 0.22, "5000": 0.20, "10000": 0.18})
+  smsBulkDiscount      Json? @default("{}")
+  whatsappBulkDiscount Json? @default("{}")
+  rcsBulkDiscount      Json? @default("{}")
+
+  // Minimum purchase quantity
+  minPurchase Int     @default(100)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("message_pricing")
+}
+
+// Message credit purchase records
+model MessagePurchase {
+  id             String @id @default(uuid())
+  organizationId String
+  userId         String
+
+  channel      MessageChannel // SMS, WHATSAPP, RCS
+  quantity     Int
+  pricePerUnit Decimal        @db.Decimal(10, 4)
+  totalAmount  Decimal        @db.Decimal(14, 2)
+
+  // Razorpay payment details
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+
+  // Payment status
+  status MessagePurchaseStatus @default(PENDING)
+
+  // Admin adjustment (if credits were added manually)
+  isManualAdjustment Boolean @default(false)
+  adjustmentReason   String?
+  adjustedById       String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+  @@map("message_purchases")
+}
+
+enum MessageChannel {
+  SMS
+  WHATSAPP
+  RCS
+}
+
+// SMS Provider Type - determines which DLT credentials to use
+enum SmsProviderType {
+  PLATFORM // Uses MyLeadex's DLT (PE_ID, Sender ID, Templates)
+  CUSTOM   // Uses Customer's own DLT (their PE_ID, Sender ID, Templates)
+}
+
+enum MessagePurchaseStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// Bulk messaging campaigns/jobs
+model BulkMessageJob {
+  id             String @id @default(uuid())
+  organizationId String
+  userId         String
+
+  channel       MessageChannel // SMS, WHATSAPP, RCS
+  templateId    String?
+  dltTemplateId String? // Store DLT template ID at creation time for SMS
+
+  // Job name for easy identification
+  name        String?
+  description String?
+
+  // Recipients configuration
+  recipientSource BulkRecipientSource @default(FILTER)
+  recipientFilter Json?               @default("{}") // {"status": "NEW", "source": "WEBSITE", "tags": ["hot"]}
+  recipientListId String? // For contact list/group based sending
+  phoneNumbers    Json?               @default("[]") // Direct phone numbers array for CSV upload
+
+  // Counts
+  totalCount   Int @default(0)
+  sentCount    Int @default(0)
+  failedCount  Int @default(0)
+  pendingCount Int @default(0)
+
+  // Delivery stats
+  deliveredCount Int @default(0)
+  readCount      Int @default(0)
+
+  // Status
+  status BulkMessageJobStatus @default(DRAFT)
+
+  // Scheduling
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Message content
+  message  String? @db.Text
+  mediaUrl String? // For WhatsApp/RCS media messages
+
+  // RCS specific
+  rcsRichCardPayload  Json? // Rich card configuration
+  rcsCarouselPayload  Json? // Carousel configuration
+  rcsSuggestedReplies Json? // Suggested replies/actions
+
+  // Variable substitution
+  variables Json? @default("[]") // Variables used in message
+
+  // Cost tracking
+  creditsUsed   Int     @default(0)
+  creditsRefund Int     @default(0)
+  estimatedCost Decimal @default(0) @db.Decimal(14, 2)
+  actualCost    Decimal @default(0) @db.Decimal(14, 2)
+
+  // Error tracking
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([createdAt])
+  @@map("bulk_message_jobs")
+}
+
+enum BulkRecipientSource {
+  FILTER    // Filter leads from CRM
+  LIST      // Contact list/group
+  CSV       // Uploaded CSV
+  MANUAL    // Direct phone numbers
+}
+
+enum BulkMessageJobStatus {
+  DRAFT
+  SCHEDULED
+  PROCESSING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// Individual message logs for bulk campaigns
+model BulkMessageLog {
+  id             String @id @default(uuid())
+  organizationId String
+  bulkJobId      String
+  userId         String
+
+  // Recipient details
+  phone String
+  name  String?
+  email String?
+
+  // Message content (with variables replaced)
+  message String @db.Text
+
+  // Channel
+  channel MessageChannel
+
+  // Delivery status
+  status BulkMessageDeliveryStatus @default(PENDING)
+
+  // Provider response
+  provider       String? // MSG91, GUPSHUP, etc.
+  providerMsgId  String? // External message ID from provider
+  providerStatus String? // Raw status from provider
+
+  // Timestamps
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  failedAt    DateTime?
+
+  // Error tracking
+  errorCode    String?
+  errorMessage String?
+  retryCount   Int     @default(0)
+
+  // Cost
+  creditCost Int @default(1)
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([bulkJobId])
+  @@index([phone])
+  @@index([status])
+  @@map("bulk_message_logs")
+}
+
+enum BulkMessageDeliveryStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  REJECTED
+  EXPIRED
+}
+
+// ==================== STANDALONE MESSAGING PORTAL MODELS ====================
+
+// Contacts for standalone messaging portal (non-CRM users)
+model MessagingContact {
+  id             String @id @default(uuid())
+  organizationId String
+
+  phone String
+  name  String?
+  email String?
+
+  // Custom fields as JSON for flexibility
+  customFields Json? @default("{}")
+
+  // Opt-out tracking
+  smsOptOut      Boolean   @default(false)
+  whatsappOptOut Boolean   @default(false)
+  rcsOptOut      Boolean   @default(false)
+  optOutAt       DateTime?
+
+  // Source tracking
+  source    String? // CSV_UPLOAD, MANUAL, API
+  sourceRef String? // Reference ID (e.g., filename for CSV)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Group memberships
+  groups MessagingContactGroupMember[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId])
+  @@index([phone])
+  @@map("messaging_contacts")
+}
+
+// Contact groups for organizing contacts
+model MessagingContactGroup {
+  id             String @id @default(uuid())
+  organizationId String
+
+  name        String
+  description String?
+  color       String? // For UI display
+
+  // Auto-sync from CRM leads (optional)
+  syncFromCRM     Boolean @default(false)
+  crmSyncFilter   Json?   @default("{}") // {"status": "NEW", "tags": ["vip"]}
+  lastSyncAt      DateTime?
+
+  contactCount Int @default(0)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Members
+  members MessagingContactGroupMember[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("messaging_contact_groups")
+}
+
+// Many-to-many relation for contacts and groups
+model MessagingContactGroupMember {
+  id        String @id @default(uuid())
+  contactId String
+  groupId   String
+
+  createdAt DateTime @default(now())
+
+  contact MessagingContact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  group   MessagingContactGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, groupId])
+  @@index([contactId])
+  @@index([groupId])
+  @@map("messaging_contact_group_members")
+}
+
+// CSV Upload tracking for contacts
+model MessagingContactUpload {
+  id             String @id @default(uuid())
+  organizationId String
+  userId         String
+
+  // File details
+  fileName     String
+  fileSize     Int
+  originalName String
+
+  // Mapping configuration
+  columnMapping Json @default("{}") // {"phone": "Phone Number", "name": "Full Name"}
+
+  // Processing status
+  status MessagingContactUploadStatus @default(PENDING)
+
+  // Counts
+  totalRows    Int @default(0)
+  successCount Int @default(0)
+  failedCount  Int @default(0)
+  skippedCount Int @default(0) // Duplicates
+
+  // Error tracking
+  errors Json? @default("[]") // [{row: 5, error: "Invalid phone"}]
+
+  // Target group (optional)
+  targetGroupId String?
+
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+  @@map("messaging_contact_uploads")
+}
+
+enum MessagingContactUploadStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Credit transaction log for auditing
+model MessageCreditTransaction {
+  id             String @id @default(uuid())
+  organizationId String
+
+  channel         MessageChannel
+  transactionType MessageCreditTransactionType
+
+  // Amount (positive for credits, negative for debits)
+  amount      Int
+  balanceAfter Int
+
+  // Reference
+  referenceType String? // PURCHASE, BULK_JOB, REFUND, ADJUSTMENT
+  referenceId   String? // ID of the related entity
+
+  // Description
+  description String?
+
+  // User who performed the action
+  userId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([channel])
+  @@index([createdAt])
+  @@map("message_credit_transactions")
+}
+
+enum MessageCreditTransactionType {
+  CREDIT    // Credits added (purchase, refund, adjustment)
+  DEBIT     // Credits deducted (sending messages)
+  REFUND    // Credits refunded for failed messages
+  ADJUSTMENT // Manual adjustment by admin
+}
+
+// ============================================
+// MESSAGING PORTAL SETTINGS
+// ============================================
+
+// Sender ID Request - Resellers can request new sender IDs
+model SenderIdRequest {
+  id             String @id @default(uuid())
+  organizationId String
+
+  // Request Details
+  requestedSenderId String // Requested 6-char sender ID
+  businessName      String // Business name for DLT registration
+  businessType      String? // Type of business
+  purpose           String? @db.Text // Purpose of the sender ID
+
+  // Contact Details
+  contactName  String
+  contactEmail String
+  contactPhone String?
+
+  // DLT Details (optional - if customer has their own DLT)
+  hasOwnDlt     Boolean @default(false)
+  dltEntityId   String? // Customer's PE ID if they have one
+  dltPlatform   String? // JIO, AIRTEL, VI, BSNL
+
+  // Status
+  status        SenderIdRequestStatus @default(PENDING)
+  statusReason  String? // Reason for approval/rejection
+
+  // Processing
+  processedAt   DateTime?
+  processedById String?
+
+  // Result (after approval)
+  assignedSenderId String? // May differ from requested
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  processedBy  User?        @relation("SenderIdRequestProcessor", fields: [processedById], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("sender_id_requests")
+}
+
+enum SenderIdRequestStatus {
+  PENDING    // Waiting for review
+  REVIEWING  // Under review
+  APPROVED   // Approved and assigned
+  REJECTED   // Rejected with reason
+  CANCELLED  // Cancelled by requester
+}
+
+// Messaging API Key - For programmatic access
+model MessagingApiKey {
+  id             String @id @default(uuid())
+  organizationId String
+
+  // Key Details
+  name        String // Friendly name (e.g., "Production API Key")
+  description String?
+
+  // The actual key (hashed for storage, shown once on creation)
+  keyPrefix   String // First 8 chars for identification (e.g., "mlx_abc1")
+  keyHash     String // Hashed full key
+
+  // Permissions
+  permissions Json @default("{}") // {"sms": true, "whatsapp": true, "rcs": false}
+
+  // Rate Limiting
+  rateLimit     Int @default(100) // Requests per minute
+  dailyLimit    Int? // Max requests per day (null = unlimited)
+
+  // IP Whitelist (optional security)
+  ipWhitelist String[] @default([]) // ["192.168.1.1", "10.0.0.0/24"]
+
+  // Status
+  isActive    Boolean @default(true)
+  expiresAt   DateTime? // Optional expiry
+
+  // Usage Tracking
+  lastUsedAt  DateTime?
+  usageCount  Int @default(0)
+
+  // Created by
+  createdById String
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("ApiKeyCreator", fields: [createdById], references: [id])
+
+  @@index([organizationId])
+  @@index([keyPrefix])
+  @@index([isActive])
+  @@map("messaging_api_keys")
 }

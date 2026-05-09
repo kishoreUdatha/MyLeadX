@@ -175,6 +175,22 @@ export const config = {
     route: process.env.MSG91_ROUTE || '4', // 4 = Transactional, 1 = Promotional
     baseUrl: process.env.MSG91_BASE_URL || 'https://control.msg91.com',
     otpTemplateId: process.env.MSG91_OTP_TEMPLATE_ID, // DLT registered OTP template
+    defaultTemplateId: process.env.MSG91_DEFAULT_TEMPLATE_ID,
+  },
+
+  // Gupshup Configuration (WhatsApp, RCS, SMS)
+  gupshup: {
+    apiKey: process.env.GUPSHUP_API_KEY,
+    userId: process.env.GUPSHUP_USER_ID,
+    password: process.env.GUPSHUP_PASSWORD,
+    dltEntityId: process.env.GUPSHUP_DLT_ENTITY_ID,
+    // WhatsApp specific
+    whatsappSource: process.env.GUPSHUP_WHATSAPP_SOURCE, // WhatsApp business number
+    whatsappAppName: process.env.GUPSHUP_WHATSAPP_APP_NAME,
+    whatsappNamespace: process.env.GUPSHUP_WHATSAPP_NAMESPACE,
+    // RCS specific
+    rcsAgentId: process.env.GUPSHUP_RCS_AGENT_ID,
+    rcsBotId: process.env.GUPSHUP_RCS_BOT_ID,
   },
 
   smtp: {

@@ -11,6 +11,7 @@ import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
 import advancedRoutes from './super-admin-advanced.routes';
 import pagesRoutes from './super-admin-pages.routes';
 import trialManagementRoutes from './trial-management.routes';
+import messagingRoutes from './super-admin-messaging.routes';
 
 // Validation rules
 const setupValidation = [
@@ -704,6 +705,9 @@ router.use('/', verifySuperAdmin, pagesRoutes);
 
 // Mount trial management routes
 router.use('/trials', verifySuperAdmin, trialManagementRoutes);
+
+// Mount messaging management routes (credits, pricing, sender IDs)
+router.use('/messaging', verifySuperAdmin, messagingRoutes);
 
 // ==================== BILLING DASHBOARD ====================
 
