@@ -621,7 +621,7 @@ export default function LeadDetailPage() {
                 // Get counts for tabs
                 const getTabCount = () => {
                   switch (tab.id) {
-                    case 'notes': return leadData.notes?.length || 0;
+                    case 'notes': return (leadData.notes?.length || 0) + ((currentLead?.customFields as Record<string, any>)?.notes ? 1 : 0);
                     case 'tasks': return leadData.tasks?.length || 0;
                     case 'followups': return leadData.followUps?.length || 0;
                     case 'calls': return leadData.callLogs?.length || 0;
@@ -768,6 +768,7 @@ export default function LeadDetailPage() {
             onUpdate={leadData.updateNote}
             onDelete={leadData.deleteNote}
             onTogglePin={leadData.togglePinNote}
+            importedNotes={(currentLead?.customFields as Record<string, any>)?.notes}
           />
         )}
 

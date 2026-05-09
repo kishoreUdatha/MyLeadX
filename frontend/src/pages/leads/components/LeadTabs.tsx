@@ -409,9 +409,10 @@ interface NotesTabProps {
   onUpdate: (noteId: string, content: string) => void;
   onDelete: (noteId: string) => void;
   onTogglePin: (note: LeadNote) => void;
+  importedNotes?: string; // Notes from bulk upload (customFields.notes)
 }
 
-export function NotesTab({ notes, loading, onAdd, onUpdate, onDelete, onTogglePin }: NotesTabProps) {
+export function NotesTab({ notes, loading, onAdd, onUpdate, onDelete, onTogglePin, importedNotes }: NotesTabProps) {
   const [newNote, setNewNote] = useState('');
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -444,7 +445,10 @@ export function NotesTab({ notes, loading, onAdd, onUpdate, onDelete, onTogglePi
           </div>
           <div>
             <h3 className="font-semibold text-slate-900">Notes</h3>
-            <p className="text-xs text-slate-500">{notes.length} notes • {pinnedNotes.length} pinned</p>
+            <p className="text-xs text-slate-500">
+              {notes.length} notes • {pinnedNotes.length} pinned
+              {importedNotes && ' • 1 imported'}
+            </p>
           </div>
         </div>
       </div>
@@ -470,17 +474,38 @@ export function NotesTab({ notes, loading, onAdd, onUpdate, onDelete, onTogglePi
         </div>
       </div>
 
+      {/* Imported Notes from Bulk Upload */}
+      {importedNotes && (
+        <div className="p-5 border-b border-slate-100">
+          <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <span className="text-xs font-medium text-blue-700">Imported Notes</span>
+            </div>
+            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{importedNotes}</p>
+          </div>
+        </div>
+      )}
+
       {/* Notes List */}
       <div className="p-5">
         {loading ? (
           <LoadingSpinner />
-        ) : notes.length === 0 ? (
+        ) : notes.length === 0 && !importedNotes ? (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <ChatBubbleOvalLeftIcon className="h-8 w-8 text-slate-400" />
             </div>
             <p className="text-slate-500 font-medium">No notes yet</p>
             <p className="text-sm text-slate-400 mt-1">Add a note to keep track of important information</p>
+          </div>
+        ) : notes.length === 0 ? (
+          <div className="text-center py-6 text-slate-400 text-sm">
+            No additional notes
           </div>
         ) : (
           <div className="space-y-3">
