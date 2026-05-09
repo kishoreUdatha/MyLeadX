@@ -41,6 +41,7 @@ export default function BulkUploadPage() {
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [assignmentType, setAssignmentType] = useState<'assignableUsers' | 'ai-agent' | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
+  const [pipelineStages, setPipelineStages] = useState<string[]>([]);
 
   useEffect(() => {
     dispatch(fetchAssignableUsers());
@@ -49,6 +50,17 @@ export default function BulkUploadPage() {
       setVoiceAgents(res.data.data?.agents || []);
     }).catch(() => {
       // Voice agents not available
+    });
+    // Fetch pipeline stages for template
+    api.get('/pipelines').then((res) => {
+      const pipelines = res.data.data || res.data || [];
+      const stages: string[] = [];
+      pipelines.forEach((p: { stages?: { name: string }[] }) => {
+        p.stages?.forEach((s) => stages.push(s.name));
+      });
+      setPipelineStages(stages);
+    }).catch(() => {
+      // Pipeline stages not available
     });
     return () => {
       dispatch(clearBulkUploadResult());
@@ -156,17 +168,25 @@ export default function BulkUploadPage() {
   };
 
   const downloadSampleTemplate = () => {
-    // Create sample data with all supported columns
+    // Use actual pipeline stages or defaults
+    const stages = pipelineStages.length > 0
+      ? pipelineStages
+      : ['New Enquiry', 'Contacted', 'Counseling Done', 'Enrolled'];
+
+    // Get counselor names from assignable users
+    const counselorNames = assignableUsers.slice(0, 2).map(u => `${u.firstName} ${u.lastName || ''}`);
+
+    // Create sample data with actual pipeline stages
     const sampleData = [
       {
         'Name': 'John Doe',
         'Phone': '9876543210',
         'Email': 'john@example.com',
         'Location': 'Mumbai',
-        'Status': 'Contacted',
+        'Status': stages[1] || 'Contacted', // Second stage (usually Contacted)
         'Priority': 'Hot',
-        'Assigned To': 'Counselor Name',
-        'Notes': 'Interested in MBA program',
+        'Assigned To': counselorNames[0] || 'Counselor Name',
+        'Notes': 'Interested in program',
         'Gender': 'Male',
         'City': 'Mumbai',
         'State': 'Maharashtra',
@@ -176,9 +196,9 @@ export default function BulkUploadPage() {
         'Phone': '8765432109',
         'Email': 'jane@example.com',
         'Location': 'Delhi',
-        'Status': 'New Enquiry',
+        'Status': stages[0] || 'New Enquiry', // First stage
         'Priority': 'Warm',
-        'Assigned To': '',
+        'Assigned To': counselorNames[1] || '',
         'Notes': 'Follow up next week',
         'Gender': 'Female',
         'City': 'Delhi',
@@ -186,9 +206,14 @@ export default function BulkUploadPage() {
       },
     ];
 
+    // Add a comment row showing available stages
+    const stagesComment = `Available Stages: ${stages.join(', ')}`;
+
     // Convert to CSV
     const headers = Object.keys(sampleData[0]);
     const csvContent = [
+      `# ${stagesComment}`,
+      `# Priority Options: Hot, Warm, Cold`,
       headers.join(','),
       ...sampleData.map(row => headers.map(h => `"${row[h as keyof typeof row] || ''}"`).join(','))
     ].join('\n');
