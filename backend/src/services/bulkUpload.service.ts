@@ -51,7 +51,7 @@ interface LeadWithAssignment {
   alternatePhone?: string;
   source: LeadSource;
   priority: LeadPriority;
-  stageId?: string;
+  pipelineStageId?: string;
   // Extended fields (must match Prisma Lead model)
   fatherName?: string;
   motherName?: string;
@@ -610,34 +610,33 @@ export class BulkUploadService {
       },
     });
 
-    // Get all lead stages for the organization to map status
-    const leadStages = await prisma.leadStage.findMany({
+    // Get pipeline stages for the organization to map status
+    const pipelines = await prisma.pipeline.findMany({
       where: { organizationId },
-      select: { id: true, name: true },
+      include: { stages: { select: { id: true, name: true } } },
     });
 
-    // Create a map of stage names to stage IDs (case-insensitive)
+    // Create a map of pipeline stage names to stage IDs (case-insensitive)
     const stageNameMap = new Map<string, string>();
-    leadStages.forEach((stage) => {
-      stageNameMap.set(stage.name.toLowerCase().trim(), stage.id);
+    pipelines.forEach((pipeline) => {
+      pipeline.stages.forEach((stage) => {
+        stageNameMap.set(stage.name.toLowerCase().trim(), stage.id);
+      });
     });
 
-    // Common status mappings (Excel status -> Lead stage name)
+    // Common status mappings (Excel status -> Pipeline stage name)
     const statusMappings: Record<string, string[]> = {
-      'new': ['new', 'fresh', 'uncontacted'],
-      'inquiry': ['inquiry', 'enquiry', 'contacted', 'contact', 'reached'],
-      'interested': ['interested', 'hot', 'warm', 'followup', 'follow up', 'follow-up'],
-      'visit scheduled': ['visit scheduled', 'scheduled', 'appointment', 'meeting scheduled'],
-      'visit completed': ['visit completed', 'visited', 'met'],
-      'documents pending': ['documents pending', 'docs pending', 'documentation'],
-      'processing': ['processing', 'in progress', 'ongoing'],
-      'payment pending': ['payment pending', 'fee pending', 'payment'],
-      'admitted': ['admitted', 'converted', 'won', 'closed won'],
-      'enrolled': ['enrolled', 'joined'],
+      'new enquiry': ['new', 'fresh', 'uncontacted', 'new enquiry', 'enquiry'],
+      'contacted': ['contacted', 'contact', 'reached', 'called'],
+      'counseling done': ['counseling done', 'counseling', 'counselled', 'interested', 'hot', 'warm', 'followup', 'follow up', 'follow-up'],
+      'campus visit': ['campus visit', 'visit scheduled', 'scheduled', 'visit', 'visited', 'meeting'],
+      'application submitted': ['application submitted', 'applied', 'application', 'documents pending', 'docs pending'],
+      'fee discussion': ['fee discussion', 'fee', 'payment pending', 'payment', 'processing'],
+      'enrolled': ['enrolled', 'admitted', 'converted', 'won', 'closed won', 'joined'],
       'dropped': ['dropped', 'lost', 'closed lost', 'not interested', 'cold'],
     };
 
-    // Create a map of various status values to stage IDs
+    // Create a map of various status values to pipeline stage IDs
     const statusToStageMap = new Map<string, string>();
     for (const [stageName, statusAliases] of Object.entries(statusMappings)) {
       const stageId = stageNameMap.get(stageName);
@@ -696,16 +695,16 @@ export class BulkUploadService {
         counselorId = counselors[counselorIndex].id;
       }
 
-      // Map status to stageId
-      let stageId: string | undefined;
+      // Map status to pipelineStageId
+      let pipelineStageId: string | undefined;
       if (lead.status) {
         const statusLower = lead.status.toLowerCase().trim();
-        stageId = statusToStageMap.get(statusLower);
+        pipelineStageId = statusToStageMap.get(statusLower);
         // If no direct match, try partial match
-        if (!stageId) {
+        if (!pipelineStageId) {
           for (const [alias, id] of statusToStageMap.entries()) {
             if (statusLower.includes(alias) || alias.includes(statusLower)) {
-              stageId = id;
+              pipelineStageId = id;
               break;
             }
           }
@@ -721,7 +720,7 @@ export class BulkUploadService {
         alternatePhone: lead.alternatePhone,
         source: LeadSource.BULK_UPLOAD,
         priority: this.mapPriority(lead.priority),
-        stageId,
+        pipelineStageId,
         // Extended fields
         fatherName: lead.fatherName,
         motherName: lead.motherName,
