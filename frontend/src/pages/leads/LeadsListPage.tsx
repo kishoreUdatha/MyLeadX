@@ -973,37 +973,16 @@ export default function LeadsListPage() {
                         <span className="text-xs font-medium text-slate-500">{serialNumber}</span>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`relative w-7 h-7 rounded-full flex items-center justify-center text-white font-medium text-[10px] ${
-                            lead.isConverted
-                              ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
-                              : 'bg-gradient-to-br from-primary-500 to-primary-600'
-                          }`}>
-                            {getNameInitials(lead.firstName, lead.lastName)}
-                            {lead.isConverted && (
-                              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-white rounded-full flex items-center justify-center shadow-sm">
-                                <CheckBadgeSolidIcon className="w-2.5 h-2.5 text-emerald-500" />
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-xs font-medium text-slate-900">
-                                {getDisplayName(lead.firstName, lead.lastName)}
-                              </p>
-                              {lead.isConverted && (
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">
-                                  <CheckBadgeSolidIcon className="w-2.5 h-2.5" />
-                                  Converted
-                                </span>
-                              )}
-                            </div>
-                            {lead.convertedAt && (
-                              <p className="text-[10px] text-emerald-600">
-                                {new Date(lead.convertedAt).toLocaleDateString()}
-                              </p>
-                            )}
-                          </div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-medium text-slate-900">
+                            {getDisplayName(lead.firstName, lead.lastName)}
+                          </p>
+                          {lead.isConverted && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">
+                              <CheckBadgeSolidIcon className="w-2.5 h-2.5" />
+                              Converted
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2">
