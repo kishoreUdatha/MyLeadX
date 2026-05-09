@@ -637,6 +637,11 @@ export class LeadService {
               },
             },
           },
+          notes: {
+            select: { id: true, content: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
         skip: (page - 1) * limit,
         take: limit,

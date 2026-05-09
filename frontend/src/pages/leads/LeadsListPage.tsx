@@ -909,7 +909,9 @@ export default function LeadsListPage() {
                 </th>
                 <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-8">#</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.lead')}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.contact')}</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Phone</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Email</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">Priority</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.status')}</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Last Activity</th>
@@ -921,7 +923,7 @@ export default function LeadsListPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12">
+                  <td colSpan={12} className="text-center py-12">
                     <div className="flex flex-col items-center gap-3">
                       <span className="spinner spinner-lg"></span>
                       <p className="text-slate-500">{t('leads:loading')}</p>
@@ -930,7 +932,7 @@ export default function LeadsListPage() {
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12">
+                  <td colSpan={12} className="text-center py-12">
                     <div className="empty-state">
                       <UserGroupIcon className="empty-state-icon" />
                       <p className="empty-state-title">{t('leads:empty.title')}</p>
@@ -1045,16 +1047,57 @@ export default function LeadsListPage() {
                                 )}
                               </div>
                             </div>
-                            {lead.email && (
-                              <p
-                                className="text-[10px] text-slate-500 truncate max-w-[150px] cursor-help"
-                                title={lead.email}
-                              >
-                                {lead.email}
-                              </p>
-                            )}
                           </div>
                         </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        {lead.email ? (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(lead.email || '');
+                              showToast.success('Email copied!');
+                            }}
+                            className="text-xs text-slate-600 hover:text-primary-600 hover:underline cursor-pointer truncate max-w-[180px] block"
+                            title={lead.email}
+                          >
+                            {lead.email}
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {(() => {
+                          // Get latest note from notes array or imported notes from customFields
+                          const latestNote = lead.notes?.sort((a: any, b: any) =>
+                            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                          )[0];
+                          const importedNotes = (lead.customFields as Record<string, any>)?.notes;
+
+                          if (latestNote) {
+                            const noteText = latestNote.content || '';
+                            const truncated = noteText.length > 50 ? noteText.substring(0, 50) + '...' : noteText;
+                            return (
+                              <span
+                                className="text-xs text-slate-600 cursor-help block truncate max-w-[150px]"
+                                title={noteText}
+                              >
+                                {truncated}
+                              </span>
+                            );
+                          } else if (importedNotes) {
+                            const truncated = importedNotes.length > 50 ? importedNotes.substring(0, 50) + '...' : importedNotes;
+                            return (
+                              <span
+                                className="text-xs text-blue-600 cursor-help block truncate max-w-[150px]"
+                                title={`Imported: ${importedNotes}`}
+                              >
+                                {truncated}
+                              </span>
+                            );
+                          }
+                          return <span className="text-[10px] text-slate-400">—</span>;
+                        })()}
                       </td>
                       <td className="px-3 py-2">
                         {lead.priority === 'HIGH' || lead.priority === 'hot' ? (

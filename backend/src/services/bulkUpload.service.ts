@@ -266,10 +266,10 @@ export class BulkUploadService {
         'enquiry status', 'enquiry_status', 'state', 'lead state', 'lead_state'
       ],
       assignedTo: [
-        'assigned to', 'assigned_to', 'assignedto', 'counselor', 'counselor name',
-        'counselor_name', 'agent', 'agent name', 'agent_name', 'owner', 'lead owner',
-        'lead_owner', 'assigned', 'telecaller', 'telecaller name', 'telecaller_name',
-        'sales person', 'sales_person', 'salesperson', 'executive', 'executive name'
+        'assigned to', 'assigned_to', 'assignedto', 'assign to', 'assign_to', 'assignto',
+        'counselor', 'counselor name', 'counselor_name', 'agent', 'agent name', 'agent_name',
+        'owner', 'lead owner', 'lead_owner', 'assigned', 'telecaller', 'telecaller name',
+        'telecaller_name', 'sales person', 'sales_person', 'salesperson', 'executive', 'executive name'
       ],
     };
 
