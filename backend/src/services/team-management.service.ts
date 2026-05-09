@@ -54,25 +54,82 @@ export interface TeamHierarchy {
 
 class TeamManagementService {
   /**
-   * Get team overview for a manager
+   * Helper to get team member IDs based on user's role
+   * - Admin/Owner/Director: sees all users in org
+   * - Manager: sees direct reports + themselves
+   * - Others: sees just themselves
    */
-  async getTeamOverview(managerId: string, organizationId: string): Promise<TeamOverview> {
-    // Get team members under this manager
-    const teamMembers = await prisma.user.findMany({
-      where: {
-        organizationId,
-        managerId,
-        isActive: true,
-      },
+  private async getTeamMemberIds(userId: string, organizationId: string): Promise<string[]> {
+    // Get current user with role
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    if (!currentUser) return [userId];
+
+    const roleSlug = currentUser.role?.slug?.toLowerCase() || '';
+    const roleName = currentUser.role?.name?.toLowerCase() || '';
+
+    // Check both slug and name for admin-like roles
+    const adminSlugs = ['admin', 'owner', 'super_admin', 'director', 'superadmin'];
+    const adminNames = ['admin', 'owner', 'director', 'super admin', 'administrator', 'ceo', 'founder'];
+
+    const isAdmin = adminSlugs.includes(roleSlug) || adminNames.some(name => roleName.includes(name));
+
+    if (isAdmin) {
+      // Admin sees all users in the organization
+      const allUsers = await prisma.user.findMany({
+        where: { organizationId, isActive: true },
+        select: { id: true },
+      });
+      return allUsers.map(u => u.id);
+    }
+
+    // Check if user has any direct reports
+    const directReports = await prisma.user.findMany({
+      where: { organizationId, managerId: userId, isActive: true },
       select: { id: true },
     });
 
-    const memberIds = teamMembers.map(m => m.id);
+    if (directReports.length > 0) {
+      // Manager with direct reports - include self + all reports recursively
+      const allTeamIds = new Set<string>([userId]);
 
-    // If manager has no direct reports, include themselves
-    if (memberIds.length === 0) {
-      memberIds.push(managerId);
+      // Get all users under this manager (recursive)
+      const getAllReports = async (managerIds: string[]): Promise<void> => {
+        const reports = await prisma.user.findMany({
+          where: { organizationId, managerId: { in: managerIds }, isActive: true },
+          select: { id: true },
+        });
+
+        for (const report of reports) {
+          if (!allTeamIds.has(report.id)) {
+            allTeamIds.add(report.id);
+          }
+        }
+
+        // Get next level reports
+        const newManagerIds = reports.map(r => r.id).filter(id => !managerIds.includes(id));
+        if (newManagerIds.length > 0) {
+          await getAllReports(newManagerIds);
+        }
+      };
+
+      await getAllReports([userId]);
+      return Array.from(allTeamIds);
     }
+
+    // No direct reports - just show themselves
+    return [userId];
+  }
+
+  /**
+   * Get team overview for a manager
+   */
+  async getTeamOverview(managerId: string, organizationId: string): Promise<TeamOverview> {
+    // Get team members based on user's role and permissions
+    const memberIds = await this.getTeamMemberIds(managerId, organizationId);
 
     // Get lead statistics
     const [totalLeads, completedLeads] = await Promise.all([
@@ -133,11 +190,14 @@ class TeamManagementService {
    * Get detailed stats for each team member
    */
   async getTeamMemberStats(managerId: string, organizationId: string): Promise<TeamMemberStats[]> {
-    // Get team members
+    // Get team member IDs based on user's role
+    const memberIds = await this.getTeamMemberIds(managerId, organizationId);
+
+    // Get team members with details
     const teamMembers = await prisma.user.findMany({
       where: {
         organizationId,
-        managerId,
+        id: { in: memberIds },
         isActive: true,
       },
       include: {
@@ -287,17 +347,8 @@ class TeamManagementService {
    * Get team goals and KPIs
    */
   async getTeamGoals(managerId: string, organizationId: string) {
-    const teamMembers = await prisma.user.findMany({
-      where: {
-        organizationId,
-        managerId,
-        isActive: true,
-      },
-      select: { id: true },
-    });
-
-    const memberIds = teamMembers.map(m => m.id);
-    if (memberIds.length === 0) memberIds.push(managerId);
+    // Get team member IDs based on user's role
+    const memberIds = await this.getTeamMemberIds(managerId, organizationId);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -368,14 +419,12 @@ class TeamManagementService {
    * Get capacity planning data
    */
   async getCapacityPlanning(organizationId: string) {
-    // Get all team leads/managers
-    const managers = await prisma.user.findMany({
+    // Get all users who have team members (are managers of someone)
+    // Also include users with admin-like roles even if they don't have direct reports
+    const allUsers = await prisma.user.findMany({
       where: {
         organizationId,
         isActive: true,
-        role: {
-          slug: { in: ['admin', 'manager', 'team_lead'] },
-        },
       },
       include: {
         role: true,
@@ -386,9 +435,22 @@ class TeamManagementService {
       },
     });
 
+    // Filter to users who either:
+    // 1. Have team members (are someone's manager)
+    // 2. Have admin-like roles (admin, owner, manager, director, team_lead, etc.)
+    const adminRoles = ['admin', 'owner', 'super_admin', 'director', 'manager', 'team_lead'];
+    const managers = allUsers.filter(user => {
+      const hasTeamMembers = user.teamMembers.length > 0;
+      const isAdminRole = adminRoles.includes(user.role?.slug?.toLowerCase() || '');
+      return hasTeamMembers || isAdminRole;
+    });
+
+    // If no managers found, show capacity for all users individually
+    const usersToShow = managers.length > 0 ? managers : allUsers;
+
     const capacityData = [];
 
-    for (const manager of managers) {
+    for (const manager of usersToShow) {
       const teamIds = manager.teamMembers.map(m => m.id);
 
       // Get active leads for this team
@@ -397,7 +459,11 @@ class TeamManagementService {
         where: {
           organizationId,
           assignments: { some: { assignedToId: { in: teamOrManagerIds }, isActive: true } },
-          stage: { slug: { notIn: ['converted', 'closed', 'won', 'lost'] } },
+          // Count leads not in terminal stages
+          OR: [
+            { stage: { slug: { notIn: ['converted', 'closed', 'won', 'lost'] } } },
+            { stage: null },
+          ],
         },
       });
 
@@ -412,7 +478,7 @@ class TeamManagementService {
         activeLeads,
         maxCapacity,
         optimalCapacity,
-        capacityUsed: Math.round((activeLeads / maxCapacity) * 100),
+        capacityUsed: maxCapacity > 0 ? Math.round((activeLeads / maxCapacity) * 100) : 0,
         status: activeLeads > maxCapacity ? 'overloaded' :
                 activeLeads > optimalCapacity ? 'high' :
                 activeLeads < optimalCapacity * 0.5 ? 'underutilized' : 'optimal',
