@@ -16,6 +16,7 @@ import {
   PhoneIcon,
   UserGroupIcon,
   CpuChipIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { showToast } from '../../utils/toast';
 import api from '../../services/api';
@@ -154,6 +155,54 @@ export default function BulkUploadPage() {
     navigate(`/outbound-calls/create?source=BULK_UPLOAD&agentId=${selectedAgent}`);
   };
 
+  const downloadSampleTemplate = () => {
+    // Create sample data with all supported columns
+    const sampleData = [
+      {
+        'Name': 'John Doe',
+        'Phone': '9876543210',
+        'Email': 'john@example.com',
+        'Location': 'Mumbai',
+        'Status': 'Contacted',
+        'Priority': 'Hot',
+        'Assigned To': 'Counselor Name',
+        'Notes': 'Interested in MBA program',
+        'Gender': 'Male',
+        'City': 'Mumbai',
+        'State': 'Maharashtra',
+      },
+      {
+        'Name': 'Jane Smith',
+        'Phone': '8765432109',
+        'Email': 'jane@example.com',
+        'Location': 'Delhi',
+        'Status': 'New Enquiry',
+        'Priority': 'Warm',
+        'Assigned To': '',
+        'Notes': 'Follow up next week',
+        'Gender': 'Female',
+        'City': 'Delhi',
+        'State': 'Delhi',
+      },
+    ];
+
+    // Convert to CSV
+    const headers = Object.keys(sampleData[0]);
+    const csvContent = [
+      headers.join(','),
+      ...sampleData.map(row => headers.map(h => `"${row[h as keyof typeof row] || ''}"`).join(','))
+    ].join('\n');
+
+    // Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'lead_upload_template.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showToast.success('Sample template downloaded!');
+  };
+
   return (
     <div>
       <button
@@ -204,14 +253,22 @@ export default function BulkUploadPage() {
                 )}
               </div>
 
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <h3 className="text-sm font-medium text-blue-900 mb-2">
-                  Smart Column Detection
-                </h3>
-                <p className="text-sm text-blue-700">
-                  Upload any spreadsheet - we automatically detect name, phone, and email columns
-                  regardless of header names. All other columns are saved as custom fields.
-                </p>
+              <div className="mt-6 flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                <div>
+                  <h3 className="text-sm font-medium text-blue-900 mb-1">
+                    Smart Column Detection
+                  </h3>
+                  <p className="text-sm text-blue-700">
+                    Upload any spreadsheet - we automatically detect name, phone, and email columns.
+                  </p>
+                </div>
+                <button
+                  onClick={downloadSampleTemplate}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium whitespace-nowrap"
+                >
+                  <ArrowDownTrayIcon className="h-4 w-4" />
+                  Download Template
+                </button>
               </div>
 
               <div className="mt-4">
