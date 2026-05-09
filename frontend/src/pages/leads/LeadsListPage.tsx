@@ -914,7 +914,6 @@ export default function LeadsListPage() {
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">Priority</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.status')}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Last Activity</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.assignedTo')}</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">{t('leads:table.created')}</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">{t('leads:table.actions')}</th>
@@ -923,7 +922,7 @@ export default function LeadsListPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12">
+                  <td colSpan={11} className="text-center py-12">
                     <div className="flex flex-col items-center gap-3">
                       <span className="spinner spinner-lg"></span>
                       <p className="text-slate-500">{t('leads:loading')}</p>
@@ -932,7 +931,7 @@ export default function LeadsListPage() {
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12">
+                  <td colSpan={11} className="text-center py-12">
                     <div className="empty-state">
                       <UserGroupIcon className="empty-state-icon" />
                       <p className="empty-state-title">{t('leads:empty.title')}</p>
@@ -1126,21 +1125,6 @@ export default function LeadsListPage() {
                           <span className={`w-1 h-1 rounded-full ${statusStyle.dot}`}></span>
                           {stageName}
                         </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        {lead.lastContactedAt ? (
-                          <div className="flex items-center gap-1.5">
-                            <ClockIcon className="w-3.5 h-3.5 text-slate-400" />
-                            <span
-                              className="text-[10px] text-slate-600 cursor-help"
-                              title={new Date(lead.lastContactedAt).toLocaleString()}
-                            >
-                              {getRelativeTime(lead.lastContactedAt)}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 italic">No activity</span>
-                        )}
                       </td>
                       <td className="px-3 py-2">
                         {lead.assignments?.[0]?.assignedTo ? (
