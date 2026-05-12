@@ -2076,6 +2076,20 @@ router.put('/calls/:id', async (req: TenantRequest, res: Response) => {
         },
       });
 
+      // Create LeadNote for call notes (consolidated notes table)
+      if (notes) {
+        await prisma.leadNote.create({
+          data: {
+            leadId: existing.leadId,
+            userId,
+            content: notes,
+            type: 'CALL',
+            telecallerCallId: id,
+          },
+        });
+        console.log(`[Telecaller] Created LeadNote for call ${id}`);
+      }
+
       // Create follow-up if callbackAt is provided (for any outcome that requires follow-up)
       // This includes: CALLBACK, NO_ANSWER, BUSY, INTERESTED, VOICEMAIL, and any custom outcomes
       if (callbackAt && existing.leadId) {

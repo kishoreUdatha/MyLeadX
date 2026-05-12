@@ -191,6 +191,9 @@ model Organization {
   // Customer's DLT Templates
   organizationSmsTemplates OrganizationSmsTemplate[]
 
+  // Multiple Sender IDs
+  organizationSenderIds OrganizationSenderId[]
+
   // Messaging Portal Settings
   senderIdRequests  SenderIdRequest[]
   messagingApiKeys  MessagingApiKey[]
@@ -1205,17 +1208,22 @@ model LeadAssignment {
 
 // Lead Notes
 model LeadNote {
-  id        String   @id @default(uuid())
-  leadId    String
-  userId    String
-  content   String
-  isPinned  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(uuid())
+  leadId           String
+  userId           String
+  content          String
+  isPinned         Boolean  @default(false)
+  type             String   @default("MANUAL") // MANUAL or CALL
+  telecallerCallId String?  // Optional link to TelecallerCall
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id])
+  lead           Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id])
+  telecallerCall TelecallerCall? @relation(fields: [telecallerCallId], references: [id], onDelete: SetNull)
 
+  @@index([leadId, createdAt])
+  @@index([telecallerCallId])
   @@map("lead_notes")
 }
 
@@ -5982,8 +5990,9 @@ model OrganizationSmsTemplate {
   description String? // Optional description
 
   // DLT Details (from customer's DLT portal)
-  dltTemplateId String // Customer's DLT-approved Template ID (required)
-  dltContentType String @default("TRANSACTIONAL") // TRANSACTIONAL or PROMOTIONAL
+  dltTemplateId   String  // Customer's DLT-approved Template ID (required)
+  dltContentType  String  @default("TRANSACTIONAL") // TRANSACTIONAL or PROMOTIONAL
+  msg91TemplateId String? // MSG91 Flow API template ID (created in MSG91 dashboard)
 
   // Template Content
   content   String   @db.Text // Template content with variables like {#var#}
@@ -6012,6 +6021,47 @@ model OrganizationSmsTemplate {
   @@unique([organizationId, dltTemplateId])
   @@index([organizationId, isActive])
   @@map("organization_sms_templates")
+}
+
+// Multiple Sender IDs per Organization
+model OrganizationSenderId {
+  id             String @id @default(uuid())
+  organizationId String
+
+  // Sender ID Details
+  senderId    String  // 6-character alphanumeric sender ID (e.g., "MYBRAND")
+  name        String  // Friendly name (e.g., "Marketing", "Transactional")
+  description String? // Optional description
+
+  // DLT Registration Details
+  dltEntityId String? // PE ID under which this sender ID is registered
+  dltPlatform String? // JIO, AIRTEL, VI, BSNL
+
+  // Type Configuration
+  smsType     String  @default("TRANSACTIONAL") // TRANSACTIONAL or PROMOTIONAL
+  isDefault   Boolean @default(false) // Default sender ID for this type
+
+  // Status
+  isActive   Boolean  @default(true)
+  isVerified Boolean  @default(false) // Verified/approved by admin
+  verifiedAt DateTime?
+  verifiedBy String?
+
+  // Usage tracking
+  usageCount Int       @default(0)
+  lastUsedAt DateTime?
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, senderId]) // Each sender ID unique per org
+  @@index([organizationId])
+  @@index([organizationId, smsType, isDefault])
+  @@map("organization_sender_ids")
 }
 
 // ==================== SCHEDULED MESSAGES ====================
@@ -7114,6 +7164,7 @@ model TelecallerCall {
   telecaller    User               @relation("TelecallerCalls", fields: [telecallerId], references: [id])
   lead          Lead?              @relation("LeadTelecallerCalls", fields: [leadId], references: [id], onDelete: SetNull)
   customOutcome CustomCallOutcome? @relation("CustomOutcomeCalls", fields: [customOutcomeId], references: [id], onDelete: SetNull)
+  leadNotes     LeadNote[]
 
   @@index([organizationId, telecallerId])
   @@index([telecallerId, createdAt])
@@ -14993,6 +15044,7 @@ model BulkMessageJob {
   channel       MessageChannel // SMS, WHATSAPP, RCS
   templateId    String?
   dltTemplateId String? // Store DLT template ID at creation time for SMS
+  senderId      String? // Sender ID used for this campaign (6-char alphanumeric)
 
   // Job name for easy identification
   name        String?
@@ -15083,6 +15135,9 @@ model BulkMessageLog {
   phone String
   name  String?
   email String?
+
+  // Sender details
+  senderId String? // Sender ID used for this message (6-char)
 
   // Message content (with variables replaced)
   message String @db.Text

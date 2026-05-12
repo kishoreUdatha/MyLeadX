@@ -799,6 +799,27 @@ export class BulkUploadService {
             skipDuplicates: true,
           });
         }
+
+        // Create LeadNote entries for imported notes
+        const noteRecords = leadsWithIds
+          .filter((item) => {
+            const notes = (item.leadFields as any).customFields?.notes;
+            return notes && notes !== '' && notes !== 'NA' && notes !== 'na' && item.counselorId;
+          })
+          .map((item) => ({
+            id: uuidv4(),
+            leadId: item.id,
+            userId: item.counselorId!,
+            content: `[Imported] ${(item.leadFields as any).customFields.notes}`,
+          }));
+
+        if (noteRecords.length > 0) {
+          await tx.leadNote.createMany({
+            data: noteRecords,
+            skipDuplicates: true,
+          });
+          console.log(`[BulkUpload] Created ${noteRecords.length} imported notes`);
+        }
       }, {
         timeout: 300000, // 5 minute timeout per batch
       });
