@@ -185,7 +185,7 @@ export default function BulkSendPage() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-6">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-slate-200 rounded w-48"></div>
           <div className="h-64 bg-slate-200 rounded-lg"></div>
@@ -195,7 +195,7 @@ export default function BulkSendPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Send Bulk Messages</h1>
