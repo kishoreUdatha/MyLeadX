@@ -29,5 +29,6 @@ router.delete('/:id', platformProspectController.delete.bind(platformProspectCon
 router.post('/:id/stage', platformProspectController.changeStage.bind(platformProspectController));
 router.post('/:id/assign', platformProspectController.assign.bind(platformProspectController));
 router.post('/:id/activities', platformProspectController.logActivity.bind(platformProspectController));
+router.post('/:id/convert', platformProspectController.convertToTenant.bind(platformProspectController));
 
 export default router;

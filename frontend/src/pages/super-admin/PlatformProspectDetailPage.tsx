@@ -12,6 +12,7 @@ import {
   CheckBadgeIcon,
   XCircleIcon,
   ClockIcon,
+  RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import {
@@ -44,6 +45,7 @@ export default function PlatformProspectDetailPage() {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
   const [showStageModal, setShowStageModal] = useState(false);
+  const [showConvertModal, setShowConvertModal] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!id) return;
@@ -137,6 +139,20 @@ export default function PlatformProspectDetailPage() {
           <ActionButton icon={CalendarDaysIcon} onClick={() => toast('Demo scheduling coming in Phase 4b')}>
             Schedule Demo
           </ActionButton>
+          {!prospect.organizationId ? (
+            <button
+              onClick={() => setShowConvertModal(true)}
+              className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium ml-auto"
+            >
+              <RocketLaunchIcon className="w-4 h-4 mr-1.5" />
+              Convert to Trial
+            </button>
+          ) : (
+            <span className="inline-flex items-center px-3 py-2 text-sm text-green-700 ml-auto">
+              <CheckBadgeIcon className="w-4 h-4 mr-1" />
+              Already converted
+            </span>
+          )}
         </div>
       </div>
 
@@ -257,6 +273,16 @@ export default function PlatformProspectDetailPage() {
           onClose={() => setShowStageModal(false)}
           onSaved={() => {
             setShowStageModal(false);
+            refresh();
+          }}
+        />
+      )}
+      {showConvertModal && (
+        <ConvertModal
+          prospect={prospect}
+          onClose={() => setShowConvertModal(false)}
+          onSaved={() => {
+            setShowConvertModal(false);
             refresh();
           }}
         />
@@ -609,6 +635,134 @@ function StageModal({
         </div>
       </div>
       <ModalActions saving={saving} onCancel={onClose} onSubmit={submit} submitLabel="Move stage" />
+    </Modal>
+  );
+}
+
+function ConvertModal({
+  prospect,
+  onClose,
+  onSaved,
+}: {
+  prospect: PlatformProspect;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [planId, setPlanId] = useState('starter');
+  const [trialDurationDays, setTrialDurationDays] = useState(14);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{
+    organization: { id: string; name: string; slug: string };
+    adminUser: { email: string };
+    tempPassword?: string;
+  } | null>(null);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      const data = await platformProspectService.convertToTenant(prospect.id, {
+        planId,
+        trialDurationDays,
+        billingCycle,
+      });
+      setResult(data);
+      toast.success('Trial tenant created successfully');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || 'Failed to convert');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (result) {
+    return (
+      <Modal title="Trial Tenant Created" onClose={onSaved}>
+        <div className="space-y-3 text-sm">
+          <div className="bg-green-50 border border-green-200 rounded p-3">
+            <div className="font-medium text-green-900 mb-1">Success!</div>
+            <p className="text-green-800">
+              Organization <strong>{result.organization.name}</strong> created with subdomain{' '}
+              <strong>{result.organization.slug}</strong>.
+            </p>
+          </div>
+          <div>
+            <strong>Tenant URL:</strong>{' '}
+            <code className="bg-gray-100 px-2 py-0.5 rounded">
+              https://{result.organization.slug}.myleadx.ai
+            </code>
+          </div>
+          <div>
+            <strong>Admin email:</strong> {result.adminUser.email}
+          </div>
+          {result.tempPassword ? (
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+              <div className="text-yellow-900 font-medium mb-1">Temporary password</div>
+              <code className="bg-white px-2 py-1 rounded text-yellow-900 font-mono">
+                {result.tempPassword}
+              </code>
+              <p className="text-xs text-yellow-700 mt-2">
+                A welcome email has been sent. Share this password securely if email fails.
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <ModalActions saving={false} onCancel={onSaved} onSubmit={onSaved} submitLabel="Done" />
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal title="Convert to Trial Tenant" onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-sm text-gray-600">
+          This creates a new organization for <strong>{prospect.companyName || prospect.fullName}</strong>,
+          an admin user for <strong>{prospect.email}</strong>, and a trial subscription. A welcome email
+          with login details will be sent to the prospect.
+        </p>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+          <select
+            value={planId}
+            onChange={(e) => setPlanId(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
+          >
+            <option value="starter">Starter</option>
+            <option value="professional">Professional</option>
+            <option value="business">Business</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Trial duration (days)</label>
+          <input
+            type="number"
+            min="1"
+            max="90"
+            value={trialDurationDays}
+            onChange={(e) => setTrialDurationDays(parseInt(e.target.value, 10) || 14)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Billing cycle (post-trial)</label>
+          <select
+            value={billingCycle}
+            onChange={(e) => setBillingCycle(e.target.value as 'monthly' | 'annual')}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
+          >
+            <option value="monthly">Monthly</option>
+            <option value="annual">Annual</option>
+          </select>
+        </div>
+      </div>
+      <ModalActions
+        saving={saving}
+        onCancel={onClose}
+        onSubmit={submit}
+        submitLabel="Create trial tenant"
+      />
     </Modal>
   );
 }

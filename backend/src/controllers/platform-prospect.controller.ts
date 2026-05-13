@@ -7,11 +7,13 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { platformProspectService } from '../services/platform-prospect.service';
+import { prospectConversionService } from '../services/prospect-conversion.service';
 import { ApiResponse } from '../utils/apiResponse';
 import {
   ProspectSource,
   ProspectStage,
   ProspectActivityType,
+  BillingCycle,
 } from '@prisma/client';
 
 export class PlatformProspectController {
@@ -233,6 +235,25 @@ export class PlatformProspectController {
         toDate ? new Date(toDate as string) : undefined,
       );
       return ApiResponse.success(res, 'Source breakdown', breakdown);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async convertToTenant(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { planId, trialDurationDays, billingCycle } = req.body;
+
+      const result = await prospectConversionService.convert({
+        prospectId: id,
+        actorUserId: req.user!.id,
+        planId,
+        trialDurationDays,
+        billingCycle: billingCycle as BillingCycle | undefined,
+      });
+
+      return ApiResponse.success(res, 'Prospect converted to tenant', result);
     } catch (error) {
       next(error);
     }

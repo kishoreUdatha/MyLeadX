@@ -207,6 +207,21 @@ export const platformProspectService = {
     const response = await api.get('/platform-prospects/source-breakdown', { params });
     return response.data.data;
   },
+
+  async convertToTenant(
+    id: string,
+    options: { planId?: string; trialDurationDays?: number; billingCycle?: 'monthly' | 'annual' } = {},
+  ): Promise<{
+    prospect: PlatformProspect;
+    organization: { id: string; name: string; slug: string };
+    adminUser: { id: string; email: string; firstName: string; lastName: string };
+    tempPassword?: string;
+    trialEndsAt: string;
+    alreadyConverted: boolean;
+  }> {
+    const response = await api.post(`/platform-prospects/${id}/convert`, options);
+    return response.data.data;
+  },
 };
 
 export const PROSPECT_SOURCE_LABELS: Record<ProspectSource, string> = {
