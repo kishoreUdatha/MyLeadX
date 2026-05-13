@@ -38,6 +38,7 @@ import {
   ChatBubbleLeftRightIcon,
   FunnelIcon,
   ViewColumnsIcon,
+  PresentationChartLineIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -65,6 +66,7 @@ const navigationSections: NavSection[] = [
     items: [
       { name: 'Prospects', href: '/super-admin/prospects', icon: FunnelIcon },
       { name: 'Pipeline', href: '/super-admin/sales-pipeline', icon: ViewColumnsIcon },
+      { name: 'Marketing Analytics', href: '/super-admin/marketing-analytics', icon: PresentationChartLineIcon },
     ],
   },
   {

@@ -318,6 +318,7 @@ import {
   PlatformProspectsPage as SuperAdminPlatformProspectsPage,
   PlatformProspectDetailPage as SuperAdminPlatformProspectDetailPage,
   PlatformSalesPipelinePage as SuperAdminPlatformSalesPipelinePage,
+  PlatformMarketingAnalyticsPage as SuperAdminPlatformMarketingAnalyticsPage,
 } from './pages/super-admin';
 import { superAdminService } from './services/super-admin.service';
 
@@ -1001,6 +1002,7 @@ function App() {
         <Route path="/super-admin/prospects" element={<SuperAdminPlatformProspectsPage />} />
         <Route path="/super-admin/prospects/:id" element={<SuperAdminPlatformProspectDetailPage />} />
         <Route path="/super-admin/sales-pipeline" element={<SuperAdminPlatformSalesPipelinePage />} />
+        <Route path="/super-admin/marketing-analytics" element={<SuperAdminPlatformMarketingAnalyticsPage />} />
       </Route>
 
       {/* Messaging Portal (Standalone) */}

@@ -36,3 +36,4 @@ export { default as MessagingManagementPage } from './MessagingManagementPage';
 export { default as PlatformProspectsPage } from './PlatformProspectsPage';
 export { default as PlatformProspectDetailPage } from './PlatformProspectDetailPage';
 export { default as PlatformSalesPipelinePage } from './PlatformSalesPipelinePage';
+export { default as PlatformMarketingAnalyticsPage } from './PlatformMarketingAnalyticsPage';
