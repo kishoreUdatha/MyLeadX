@@ -19,13 +19,16 @@ import {
   useDroppable,
 } from '@dnd-kit/core';
 import toast from 'react-hot-toast';
+import { ViewColumnsIcon, FunnelIcon } from '@heroicons/react/24/outline';
 import {
   platformProspectService,
   PlatformProspect,
   ProspectStage,
   PROSPECT_SOURCE_LABELS,
   PROSPECT_STAGE_LABELS,
+  PROSPECT_STAGE_COLORS,
 } from '../../services/platform-prospect.service';
+import { platformAnalyticsService, FunnelStep } from '../../services/platform-analytics.service';
 
 const PIPELINE_STAGES: ProspectStage[] = [
   'NEW',
@@ -54,10 +57,18 @@ const COLUMN_HEADER_COLORS: Record<ProspectStage, string> = {
   UNRESPONSIVE: 'bg-slate-200 text-slate-900',
 };
 
+type ViewMode = 'kanban' | 'funnel';
+
 export default function PlatformSalesPipelinePage() {
   const [prospects, setProspects] = useState<PlatformProspect[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCard, setActiveCard] = useState<PlatformProspect | null>(null);
+  const [view, setView] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') return 'kanban';
+    return (localStorage.getItem('platform-pipeline-view') as ViewMode) || 'kanban';
+  });
+  const [funnelSteps, setFunnelSteps] = useState<FunnelStep[]>([]);
+  const [funnelLoading, setFunnelLoading] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -76,9 +87,32 @@ export default function PlatformSalesPipelinePage() {
     }
   }, []);
 
+  const fetchFunnel = useCallback(async () => {
+    setFunnelLoading(true);
+    try {
+      const steps = await platformAnalyticsService.conversionFunnel(undefined, {});
+      setFunnelSteps(steps);
+    } catch (error) {
+      console.error('Failed to load funnel', error);
+      toast.error('Failed to load funnel');
+    } finally {
+      setFunnelLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  useEffect(() => {
+    if (view === 'funnel') {
+      fetchFunnel();
+    }
+  }, [view, fetchFunnel]);
+
+  useEffect(() => {
+    localStorage.setItem('platform-pipeline-view', view);
+  }, [view]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
@@ -130,33 +164,147 @@ export default function PlatformSalesPipelinePage() {
 
   return (
     <div className="p-6 space-y-4">
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-end gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sales Pipeline</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Drag prospects between stages — changes are saved automatically
+            {view === 'kanban'
+              ? 'Drag prospects between stages — changes are saved automatically'
+              : 'Stage-by-stage drop-off across all prospects (counts every prospect that reached the stage)'}
           </p>
         </div>
-        <div className="text-sm text-gray-600">
-          Total: <span className="font-semibold text-gray-900">{prospects.length}</span>
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-gray-600">
+            Total: <span className="font-semibold text-gray-900">{prospects.length}</span>
+          </div>
+          <div className="inline-flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setView('kanban')}
+              className={`inline-flex items-center px-3 py-1.5 rounded text-sm font-medium ${
+                view === 'kanban'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <ViewColumnsIcon className="w-4 h-4 mr-1.5" />
+              Kanban
+            </button>
+            <button
+              onClick={() => setView('funnel')}
+              className={`inline-flex items-center px-3 py-1.5 rounded text-sm font-medium ${
+                view === 'funnel'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FunnelIcon className="w-4 h-4 mr-1.5" />
+              Funnel
+            </button>
+          </div>
         </div>
       </div>
 
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex gap-3 overflow-x-auto pb-4">
-          {PIPELINE_STAGES.map((stage) => (
-            <KanbanColumn
-              key={stage}
-              stage={stage}
-              prospects={grouped[stage] || []}
-            />
-          ))}
-        </div>
+      {view === 'kanban' ? (
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="flex gap-3 overflow-x-auto pb-4">
+            {PIPELINE_STAGES.map((stage) => (
+              <KanbanColumn
+                key={stage}
+                stage={stage}
+                prospects={grouped[stage] || []}
+              />
+            ))}
+          </div>
+          <DragOverlay>
+            {activeCard ? <ProspectCard prospect={activeCard} dragging /> : null}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        <FunnelView steps={funnelSteps} loading={funnelLoading} />
+      )}
+    </div>
+  );
+}
 
-        <DragOverlay>
-          {activeCard ? <ProspectCard prospect={activeCard} dragging /> : null}
-        </DragOverlay>
-      </DndContext>
+function FunnelView({ steps, loading }: { steps: FunnelStep[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600"></div>
+      </div>
+    );
+  }
+  if (steps.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-sm text-gray-500">
+        No funnel data yet. Add a few prospects to see drop-off rates.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 max-w-3xl">
+      <div className="space-y-4">
+        {steps.map((step, i) => {
+          const prevCount = i === 0 ? step.count : steps[i - 1].count;
+          const dropOff = prevCount > 0 ? 1 - step.count / prevCount : 0;
+          const width = Math.max(step.pctOfTop * 100, 4);
+          const colorClass = PROSPECT_STAGE_COLORS[step.stage] || 'bg-gray-200 text-gray-900';
+          return (
+            <div key={step.stage}>
+              <div className="flex justify-between items-baseline mb-1.5">
+                <div className="flex items-baseline gap-3">
+                  <span className="font-semibold text-gray-900 text-sm">
+                    {PROSPECT_STAGE_LABELS[step.stage]}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {step.count} {step.count === 1 ? 'prospect' : 'prospects'}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-3 text-sm">
+                  <span className="text-gray-600">{(step.pctOfTop * 100).toFixed(1)}%</span>
+                  {i > 0 && dropOff > 0 && (
+                    <span className="text-xs text-red-600">
+                      ▼ {(dropOff * 100).toFixed(0)}% drop
+                    </span>
+                  )}
+                  {i > 0 && dropOff === 0 && (
+                    <span className="text-xs text-gray-400">— no drop</span>
+                  )}
+                </div>
+              </div>
+              <div className="relative bg-gray-100 rounded-md h-10 overflow-hidden">
+                <div
+                  className={`h-full ${colorClass} flex items-center px-3 text-xs font-medium transition-all duration-500`}
+                  style={{ width: `${width}%` }}
+                >
+                  {width > 12 && <span>{step.count}</span>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {steps.length > 0 && (
+        <div className="mt-6 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold text-gray-900">{steps[0].count}</div>
+            <div className="text-xs text-gray-500 mt-1">Top of funnel</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-900">{steps[steps.length - 1].count}</div>
+            <div className="text-xs text-gray-500 mt-1">Bottom (Converted)</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-cyan-600">
+              {steps[0].count > 0
+                ? `${((steps[steps.length - 1].count / steps[0].count) * 100).toFixed(1)}%`
+                : '—'}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">Overall conversion</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
