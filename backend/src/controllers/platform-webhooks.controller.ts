@@ -10,6 +10,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { metaLeadAdsService } from '../services/meta-lead-ads.service';
+import { googleLeadFormsService } from '../services/google-lead-forms.service';
 
 export class PlatformWebhooksController {
   /**
@@ -60,6 +61,33 @@ export class PlatformWebhooksController {
         })
         .catch((err) => {
           console.error('[MetaLeadAds] Webhook handler error:', err.message);
+        });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /platform-webhooks/google
+   * Google Ads Lead Form Extension delivery. Body contains the lead
+   * answers and a google_key field for authentication.
+   */
+  async googleWebhook(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!googleLeadFormsService.verifyKey(req.body)) {
+        return res.status(401).json({ success: false, message: 'Invalid google_key' });
+      }
+
+      // Respond fast then process async
+      res.status(200).json({ success: true });
+
+      googleLeadFormsService
+        .handleWebhook(req.body)
+        .then((summary) => {
+          console.log('[GoogleLeadForms] Webhook processed:', summary);
+        })
+        .catch((err) => {
+          console.error('[GoogleLeadForms] Webhook handler error:', err.message);
         });
     } catch (error) {
       next(error);

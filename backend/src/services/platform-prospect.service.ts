@@ -15,6 +15,7 @@ import {
 } from '@prisma/client';
 import { resendService } from './resend.service';
 import { metaCapiService } from './meta-capi.service';
+import { googleAdsCapiService } from './google-ads-capi.service';
 
 const PROSPECT_SOURCE_LABELS: Record<ProspectSource, string> = {
   META_LEAD_AD: 'Meta Lead Ad',
@@ -70,6 +71,10 @@ export interface CreateProspectInput {
   metaFbp?: string;
   metaFbc?: string;
   pageUrl?: string;
+
+  // Google Ads click id — fed to Enhanced Conversions for accurate
+  // server-side attribution back to the ad that drove the lead
+  gclid?: string;
 }
 
 export interface UpdateProspectInput {
@@ -167,6 +172,21 @@ export class PlatformProspectService {
     this.notifyNewProspect(prospect.id).catch((err) => {
       console.error('[PlatformProspect] notification failed:', err.message);
     });
+
+    // Fire-and-forget Google Ads click conversion — only if a gclid came
+    // in (means the visitor arrived via a Google ad click).
+    if (input.gclid && googleAdsCapiService.isConfigured()) {
+      googleAdsCapiService
+        .uploadClickConversion({
+          gclid: input.gclid,
+          email: input.email,
+          phone: input.phone,
+          orderId: prospect.id,
+        })
+        .catch((err) => {
+          console.error('[PlatformProspect] Google CAPI failed:', err.message);
+        });
+    }
 
     // Fire-and-forget Meta CAPI Lead event — no-op if META_CAPI_ACCESS_TOKEN unset
     if (input.metaEventId && metaCapiService.isConfigured()) {

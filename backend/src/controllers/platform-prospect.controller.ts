@@ -47,6 +47,7 @@ export class PlatformProspectController {
         metaFbp,
         metaFbc,
         pageUrl,
+        gclid,
       } = req.body;
 
       if (!fullName || !email || !phone) {
@@ -81,6 +82,7 @@ export class PlatformProspectController {
         metaFbp,
         metaFbc,
         pageUrl,
+        gclid,
       });
 
       return ApiResponse.created(res, 'Prospect captured successfully', {

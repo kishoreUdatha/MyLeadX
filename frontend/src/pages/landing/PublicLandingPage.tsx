@@ -34,10 +34,14 @@ interface LandingPage {
 
 // Meta Pixel — initialised once per page load when VITE_META_PIXEL_ID is set.
 // fbq is the global function injected by Meta's Pixel script.
+// Google Ads conversion tracking — gtag is injected when
+// VITE_GOOGLE_ADS_ID is set.
 declare global {
   interface Window {
     fbq?: (...args: unknown[]) => void;
     _fbq?: unknown;
+    gtag?: (...args: unknown[]) => void;
+    dataLayer?: unknown[];
   }
 }
 
@@ -77,6 +81,46 @@ function fireMetaLeadEvent(eventId: string) {
   if (typeof window !== 'undefined' && window.fbq) {
     window.fbq('track', 'Lead', {}, { eventID: eventId });
   }
+}
+
+function installGoogleAdsTag(googleAdsId: string) {
+  if (typeof window === 'undefined') return;
+  if (window.gtag) return; // already installed
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${googleAdsId}`;
+  document.head.appendChild(script);
+
+  window.dataLayer = window.dataLayer || [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  window.gtag = function (...args: any[]) {
+    window.dataLayer!.push(args);
+  };
+  window.gtag('js', new Date());
+  window.gtag('config', googleAdsId);
+}
+
+interface GoogleEnhancedUserData {
+  email?: string;
+  phone_number?: string;
+}
+
+function fireGoogleConversion(userData?: GoogleEnhancedUserData) {
+  if (typeof window === 'undefined' || !window.gtag) return;
+  const conversionLabel = import.meta.env.VITE_GOOGLE_ADS_CONVERSION_LABEL;
+  const googleAdsId = import.meta.env.VITE_GOOGLE_ADS_ID;
+  if (!conversionLabel || !googleAdsId) return;
+
+  // Enhanced Conversions: send hashed PII directly so Google can match
+  // even when the gclid isn't available (e.g. user blocks cookies).
+  if (userData) {
+    window.gtag('set', 'user_data', userData);
+  }
+  window.gtag('event', 'conversion', {
+    send_to: `${googleAdsId}/${conversionLabel}`,
+    value: 0,
+    currency: 'INR',
+  });
 }
 
 function readCookie(name: string): string | undefined {
@@ -129,6 +173,10 @@ export default function PublicLandingPage() {
     const pixelId = import.meta.env.VITE_META_PIXEL_ID;
     if (pixelId) {
       installMetaPixel(pixelId);
+    }
+    const googleAdsId = import.meta.env.VITE_GOOGLE_ADS_ID;
+    if (googleAdsId) {
+      installGoogleAdsTag(googleAdsId);
     }
   }, []);
 
@@ -186,6 +234,7 @@ export default function PublicLandingPage() {
     utmTerm: searchParams.get('utm_term') || undefined,
     adId: searchParams.get('ad_id') || undefined,
     adName: searchParams.get('ad_name') || undefined,
+    gclid: searchParams.get('gclid') || undefined, // Google Click ID — needed for Enhanced Conversions
   };
   const source = inferSource(utmParams.utmSource ?? null, utmParams.utmMedium ?? null);
 
@@ -416,15 +465,17 @@ function ProspectFormSection({
         adName: utm.adName,
         landingPageId,
         referrerUrl: typeof document !== 'undefined' ? document.referrer : undefined,
-        rawData: values,
+        rawData: { ...values, gclid: utm.gclid },
         metaEventId: eventId,
         metaFbp: readCookie('_fbp'),
         metaFbc: readCookie('_fbc'),
+        gclid: utm.gclid,
         pageUrl: typeof window !== 'undefined' ? window.location.href : undefined,
       });
       setSubmitted(true);
       toast.success("Thanks! We'll be in touch shortly.");
       fireMetaLeadEvent(eventId);
+      fireGoogleConversion({ email, phone_number: phone });
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
       toast.error(e.response?.data?.message || 'Failed to submit. Please try again.');

@@ -23,4 +23,10 @@ router.post(
   platformWebhooksController.metaWebhook.bind(platformWebhooksController),
 );
 
+// Google Ads Lead Form Extensions
+router.post(
+  '/google',
+  platformWebhooksController.googleWebhook.bind(platformWebhooksController),
+);
+
 export default router;
