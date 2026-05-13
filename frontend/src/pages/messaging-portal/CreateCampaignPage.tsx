@@ -21,6 +21,16 @@ import {
   MessageTemplate,
   MessageBalance,
 } from '../../services/messaging.service';
+import api from '../../services/api';
+
+interface OrganizationSenderId {
+  id: string;
+  senderId: string;
+  name: string;
+  smsType: 'TRANSACTIONAL' | 'PROMOTIONAL';
+  isDefault: boolean;
+  isActive: boolean;
+}
 
 // WhatsApp Icon
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -42,6 +52,7 @@ interface CampaignData {
   mediaUrl: string;
   scheduleAt: string;
   sendNow: boolean;
+  senderId: string;
 }
 
 interface CsvRecipient {
@@ -61,6 +72,7 @@ const CreateCampaignPage = () => {
   const [csvPhones, setCsvPhones] = useState<string[]>([]);
   const [csvRecipients, setCsvRecipients] = useState<CsvRecipient[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [senderIds, setSenderIds] = useState<OrganizationSenderId[]>([]);
 
   const [campaignData, setCampaignData] = useState<CampaignData>({
     channel: 'sms',
@@ -72,6 +84,7 @@ const CreateCampaignPage = () => {
     mediaUrl: '',
     scheduleAt: '',
     sendNow: true,
+    senderId: '',
   });
 
   useEffect(() => {
@@ -91,15 +104,26 @@ const CreateCampaignPage = () => {
 
   const loadInitialData = async () => {
     try {
-      const [balanceData, groupsData, templatesData] = await Promise.all([
+      const [balanceData, groupsData, templatesData, senderIdsRes] = await Promise.all([
         messagingCreditsApi.getBalance(),
         contactsApi.listGroups(),
         templatesApi.listTemplates(),
+        api.get('/messaging-portal/settings/sender-ids').catch(() => ({ data: [] })),
       ]);
       console.log('[CreateCampaign] Balance loaded:', balanceData);
       setBalance(balanceData);
       setGroups(groupsData || []);
       setTemplates(templatesData || []);
+
+      // Set sender IDs and default
+      const activeSenderIds = (senderIdsRes.data || []).filter((s: OrganizationSenderId) => s.isActive);
+      setSenderIds(activeSenderIds);
+      const defaultSenderId = activeSenderIds.find((s: OrganizationSenderId) => s.isDefault);
+      if (defaultSenderId) {
+        setCampaignData(prev => ({ ...prev, senderId: defaultSenderId.id }));
+      } else if (activeSenderIds.length > 0) {
+        setCampaignData(prev => ({ ...prev, senderId: activeSenderIds[0].id }));
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -263,6 +287,9 @@ const CreateCampaignPage = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      // Get sender ID string from selected ID
+      const selectedSender = senderIds.find(s => s.id === campaignData.senderId);
+
       const payload: Record<string, unknown> = {
         channel: campaignData.channel.toUpperCase(), // Backend expects uppercase
         message: campaignData.templateId
@@ -272,6 +299,7 @@ const CreateCampaignPage = () => {
         mediaUrl: campaignData.mediaUrl || undefined,
         scheduledAt: campaignData.sendNow ? undefined : campaignData.scheduleAt,
         startImmediately: campaignData.sendNow, // Start the job immediately if sendNow is true
+        senderId: selectedSender?.senderId || undefined, // Pass the sender ID string
       };
 
       if (campaignData.recipientSource === 'group') {
@@ -302,7 +330,7 @@ const CreateCampaignPage = () => {
   const channelTemplates = templates.filter((t) => t.type?.toLowerCase() === campaignData.channel);
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="p-6">
       <div className="mb-6">
         <button
           onClick={() => navigate(-1)}
@@ -385,6 +413,48 @@ const CreateCampaignPage = () => {
                 <p className="text-xs text-gray-500 mt-1">{balance?.rcsCredits || 0} credits</p>
               </button>
             </div>
+
+            {/* Sender ID Selection (SMS only) */}
+            {campaignData.channel === 'sms' && (
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Sender ID <span className="text-red-500">*</span>
+                </label>
+                {senderIds.length > 0 ? (
+                  <>
+                    <select
+                      value={campaignData.senderId}
+                      onChange={(e) => setCampaignData({ ...campaignData, senderId: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    >
+                      {senderIds.map((sid) => (
+                        <option key={sid.id} value={sid.id}>
+                          {sid.senderId} - {sid.name} ({sid.smsType})
+                          {sid.isDefault && ' ★ Default'}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Choose which sender ID will appear on recipients' phones
+                    </p>
+                  </>
+                ) : (
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800 font-medium">No Sender IDs configured</p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      You need to add at least one Sender ID before sending SMS campaigns.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/messaging-portal/settings')}
+                      className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    >
+                      Go to Settings → Sender IDs
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -649,6 +719,15 @@ const CreateCampaignPage = () => {
                 <p className="font-medium text-gray-900 capitalize">{campaignData.channel}</p>
               </div>
 
+              {campaignData.channel === 'sms' && campaignData.senderId && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-500">Sender ID</p>
+                  <p className="font-medium text-gray-900 font-mono">
+                    {senderIds.find(s => s.id === campaignData.senderId)?.senderId || 'Default'}
+                  </p>
+                </div>
+              )}
+
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-500">Recipients</p>
                 <p className="font-medium text-gray-900">{recipientCount} contacts</p>
@@ -700,6 +779,8 @@ const CreateCampaignPage = () => {
             <button
               onClick={() => setStep(step + 1)}
               disabled={
+                (step === 1 && campaignData.channel === 'sms' && senderIds.length > 0 && !campaignData.senderId) ||
+                (step === 1 && campaignData.channel === 'sms' && senderIds.length === 0) ||
                 (step === 2 && recipientCount === 0) ||
                 (step === 3 && campaignData.channel === 'sms' && !campaignData.templateId) ||
                 (step === 3 && campaignData.channel !== 'sms' && !campaignData.templateId && !campaignData.customMessage)

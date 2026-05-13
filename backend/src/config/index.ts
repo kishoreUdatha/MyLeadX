@@ -170,12 +170,17 @@ export const config = {
   // MSG91 SMS Configuration
   msg91: {
     authKey: process.env.MSG91_AUTH_KEY,
+    // Transactional SMS (Route 4)
     senderId: process.env.MSG91_SENDER_ID || 'MYLEADX',
     dltEntityId: process.env.MSG91_DLT_ENTITY_ID,
     route: process.env.MSG91_ROUTE || '4', // 4 = Transactional, 1 = Promotional
     baseUrl: process.env.MSG91_BASE_URL || 'https://control.msg91.com',
     otpTemplateId: process.env.MSG91_OTP_TEMPLATE_ID, // DLT registered OTP template
-    defaultTemplateId: process.env.MSG91_DEFAULT_TEMPLATE_ID,
+    defaultTemplateId: process.env.MSG91_DEFAULT_TEMPLATE_ID, // DLT Template ID (fallback)
+    defaultFlowTemplateId: process.env.MSG91_DEFAULT_FLOW_TEMPLATE_ID, // MSG91 Flow API template ID (preferred)
+    // Promotional SMS (Route 1) - separate sender ID with prefix like "LM-MYLEAX"
+    promoSenderId: process.env.MSG91_PROMO_SENDER_ID,
+    promoFlowTemplateId: process.env.MSG91_PROMO_FLOW_TEMPLATE_ID,
   },
 
   // Gupshup Configuration (WhatsApp, RCS, SMS)

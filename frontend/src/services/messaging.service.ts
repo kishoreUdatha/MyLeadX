@@ -55,6 +55,8 @@ export interface BulkMessageJob {
   userId: string;
   channel: MessageChannel;
   templateId?: string;
+  dltTemplateId?: string;
+  senderId?: string;
   name?: string;
   description?: string;
   recipientSource: BulkRecipientSource;
@@ -437,6 +439,24 @@ export const contactsApi = {
   },
 
   /**
+   * Update a contact
+   */
+  updateContact: async (
+    id: string,
+    data: { name?: string; email?: string; customFields?: Record<string, string> }
+  ): Promise<MessagingContact> => {
+    const response = await api.put(`/messaging-portal/contacts/${id}`, data);
+    return response.data.data;
+  },
+
+  /**
+   * Delete a contact
+   */
+  deleteContact: async (id: string): Promise<void> => {
+    await api.delete(`/messaging-portal/contacts/${id}`);
+  },
+
+  /**
    * Get upload status
    */
   getUploadStatus: async (uploadId: string): Promise<ContactUpload> => {
@@ -611,6 +631,51 @@ export const messagingPortalApi = {
     return response.data.data;
   },
 
+  // Quick Send
+  quickSend: async (data: {
+    channel: 'SMS' | 'WHATSAPP';
+    phone: string;
+    message: string;
+    templateId?: string;
+    contactName?: string;
+    senderId?: string;
+  }): Promise<{
+    messageId: string;
+    phone: string;
+    channel: string;
+    creditsUsed: number;
+    remainingCredits: number;
+  }> => {
+    const response = await api.post('/messaging-portal/quick-send', data);
+    return response.data.data;
+  },
+
+  getQuickSendHistory: async (
+    page = 1,
+    limit = 20,
+    channel?: 'SMS' | 'WHATSAPP'
+  ): Promise<{
+    messages: Array<{
+      id: string;
+      phone: string;
+      name?: string;
+      message: string;
+      channel: MessageChannel;
+      status: string;
+      sentAt?: string;
+      createdAt: string;
+    }>;
+    pagination: PaginationMeta;
+  }> => {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (channel) params.append('channel', channel);
+    const response = await api.get(`/messaging-portal/quick-send/history?${params}`);
+    return response.data.data;
+  },
+
   // Contacts
   listContacts: contactsApi.listContacts,
   createContact: contactsApi.createContact,
@@ -774,7 +839,249 @@ export const messagingPortalApi = {
     const response = await api.get(`/messaging-portal/billing/purchases?page=${page}&limit=${limit}`);
     return response.data.data;
   },
+
+  // Opt-Out Management
+  getOptOuts: async (
+    page = 1,
+    limit = 50,
+    channel?: 'SMS' | 'WHATSAPP' | 'RCS',
+    search?: string
+  ): Promise<{
+    contacts: MessagingContact[];
+    pagination: PaginationMeta;
+    stats: {
+      totalContacts: number;
+      smsOptOuts: number;
+      whatsappOptOuts: number;
+      rcsOptOuts: number;
+    };
+  }> => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (channel) params.append('channel', channel);
+    if (search) params.append('search', search);
+    const response = await api.get(`/messaging-portal/opt-outs?${params}`);
+    return response.data.data;
+  },
+
+  updateOptOut: async (
+    id: string,
+    data: { smsOptOut?: boolean; whatsappOptOut?: boolean; rcsOptOut?: boolean }
+  ): Promise<MessagingContact> => {
+    const response = await api.put(`/messaging-portal/opt-outs/${id}`, data);
+    return response.data.data;
+  },
+
+  bulkOptOut: async (
+    phoneNumbers: string[],
+    channel: 'SMS' | 'WHATSAPP' | 'RCS'
+  ): Promise<{ processed: number; optedOut: number }> => {
+    const response = await api.post('/messaging-portal/opt-outs/bulk', { phoneNumbers, channel });
+    return response.data.data;
+  },
+
+  exportOptOuts: async (channel?: 'SMS' | 'WHATSAPP' | 'RCS'): Promise<Blob> => {
+    const params = channel ? `?channel=${channel}` : '';
+    const response = await api.get(`/messaging-portal/opt-outs/export${params}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  // CRM Import
+  getCrmImportSources: async (): Promise<{
+    pipelines: Array<{
+      id: string;
+      name: string;
+      stages: Array<{ id: string; name: string }>;
+    }>;
+    campaigns: Array<{ id: string; name: string; leadCount: number }>;
+    tags: Array<{ id: string; name: string; color?: string }>;
+    leadSources: Array<{ id: string; name: string }>;
+    totalLeads: number;
+  }> => {
+    const response = await api.get('/messaging-portal/crm-import/sources');
+    return response.data.data;
+  },
+
+  previewCrmImport: async (filters: {
+    pipelineId?: string;
+    stageIds?: string[];
+    campaignId?: string;
+    tagIds?: string[];
+    sourceId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<{
+    total: number;
+    preview: Array<{
+      id: string;
+      name: string;
+      phone: string;
+      email?: string;
+      createdAt: string;
+      isDuplicate: boolean;
+    }>;
+    estimatedDuplicates: number;
+  }> => {
+    const response = await api.post('/messaging-portal/crm-import/preview', filters);
+    return response.data.data;
+  },
+
+  importFromCrm: async (options: {
+    pipelineId?: string;
+    stageIds?: string[];
+    campaignId?: string;
+    tagIds?: string[];
+    sourceId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    skipDuplicates?: boolean;
+    targetGroupId?: string;
+  }): Promise<{
+    total: number;
+    imported: number;
+    updated: number;
+    skipped: number;
+  }> => {
+    const response = await api.post('/messaging-portal/crm-import/import', options);
+    return response.data.data;
+  },
+
+  // Scheduled Messages
+  getScheduledMessages: async (
+    page = 1,
+    limit = 20,
+    status?: string,
+    type?: string
+  ): Promise<{
+    messages: ScheduledMessage[];
+    stats: { pending: number; completed: number; failed: number; total: number };
+    pagination: PaginationMeta;
+  }> => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (status) params.append('status', status);
+    if (type) params.append('type', type);
+    const response = await api.get(`/messaging-portal/scheduled-messages?${params}`);
+    return response.data.data;
+  },
+
+  getScheduledMessage: async (id: string): Promise<ScheduledMessage> => {
+    const response = await api.get(`/messaging-portal/scheduled-messages/${id}`);
+    return response.data.data;
+  },
+
+  createScheduledMessage: async (data: {
+    type: 'SMS' | 'WHATSAPP';
+    recipients: string[];
+    content: string;
+    scheduledAt: string;
+    name?: string;
+    templateId?: string;
+    variables?: Record<string, string>;
+    timezone?: string;
+    isRecurring?: boolean;
+    recurringRule?: string;
+    recurringEndAt?: string;
+  }): Promise<ScheduledMessage> => {
+    const response = await api.post('/messaging-portal/scheduled-messages', data);
+    return response.data.data;
+  },
+
+  updateScheduledMessage: async (
+    id: string,
+    data: {
+      content?: string;
+      scheduledAt?: string;
+      name?: string;
+      recipients?: string[];
+    }
+  ): Promise<ScheduledMessage> => {
+    const response = await api.put(`/messaging-portal/scheduled-messages/${id}`, data);
+    return response.data.data;
+  },
+
+  pauseScheduledMessage: async (id: string): Promise<void> => {
+    await api.post(`/messaging-portal/scheduled-messages/${id}/pause`);
+  },
+
+  resumeScheduledMessage: async (id: string): Promise<void> => {
+    await api.post(`/messaging-portal/scheduled-messages/${id}/resume`);
+  },
+
+  cancelScheduledMessage: async (id: string): Promise<void> => {
+    await api.delete(`/messaging-portal/scheduled-messages/${id}`);
+  },
+
+  sendScheduledMessageNow: async (id: string): Promise<{ sentCount: number; failedCount: number }> => {
+    const response = await api.post(`/messaging-portal/scheduled-messages/${id}/send-now`);
+    return response.data.data;
+  },
+
+  // Message History
+  getMessageHistory: async (params: {
+    page?: number;
+    limit?: number;
+    channel?: string;
+    status?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{
+    messages: Array<{
+      id: string;
+      phone: string;
+      channel: string;
+      content: string;
+      status: string;
+      senderId?: string;
+      templateId?: string;
+      dltTemplateId?: string;
+      externalId?: string;
+      error?: string;
+      source: string;
+      campaignName?: string;
+      createdAt: string;
+      sentAt?: string;
+      deliveredAt?: string;
+    }>;
+    pagination: PaginationMeta;
+  }> => {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.append('page', String(params.page));
+    if (params.limit) searchParams.append('limit', String(params.limit));
+    if (params.channel) searchParams.append('channel', params.channel);
+    if (params.status) searchParams.append('status', params.status);
+    if (params.search) searchParams.append('search', params.search);
+    if (params.startDate) searchParams.append('startDate', params.startDate);
+    if (params.endDate) searchParams.append('endDate', params.endDate);
+    const response = await api.get(`/messaging-portal/message-history?${searchParams}`);
+    return response.data.data;
+  },
 };
+
+// Scheduled Message type
+export interface ScheduledMessage {
+  id: string;
+  name: string | null;
+  type: 'SMS' | 'WHATSAPP';
+  content: string;
+  recipients: string[];
+  recipientCount?: number;
+  templateId: string | null;
+  variables: Record<string, string>;
+  scheduledAt: string;
+  timezone: string;
+  isRecurring: boolean;
+  recurringRule: string | null;
+  recurringEndAt: string | null;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'PAUSED';
+  totalRecipients: number;
+  sentCount: number;
+  failedCount: number;
+  processedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
 
 // Default export for backward compatibility
 export default {

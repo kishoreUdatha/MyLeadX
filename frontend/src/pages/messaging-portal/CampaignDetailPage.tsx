@@ -198,13 +198,38 @@ const CampaignDetailPage = () => {
         </div>
       </div>
 
-      {/* Message */}
-      {campaign.message && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Message</h2>
-          <p className="text-gray-600 whitespace-pre-wrap">{campaign.message}</p>
+      {/* Campaign Details */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Campaign Details</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-sm text-gray-500">Channel</p>
+            <p className="font-medium text-gray-900">{campaign.channel}</p>
+          </div>
+          {campaign.senderId && (
+            <div>
+              <p className="text-sm text-gray-500">Sender ID</p>
+              <p className="font-medium text-gray-900 font-mono">{campaign.senderId}</p>
+            </div>
+          )}
+          {campaign.dltTemplateId && (
+            <div>
+              <p className="text-sm text-gray-500">DLT Template ID</p>
+              <p className="font-medium text-gray-900 font-mono text-xs">{campaign.dltTemplateId}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-sm text-gray-500">Recipient Source</p>
+            <p className="font-medium text-gray-900">{campaign.recipientSource}</p>
+          </div>
         </div>
-      )}
+        {campaign.message && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <p className="text-sm text-gray-500 mb-2">Message Content</p>
+            <p className="text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg">{campaign.message}</p>
+          </div>
+        )}
+      </div>
 
       {/* Delivery Report */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

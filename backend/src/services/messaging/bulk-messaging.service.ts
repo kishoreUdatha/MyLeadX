@@ -31,6 +31,7 @@ export interface CreateBulkJobParams {
   recipients?: Array<{ phone: string; variables?: Record<string, string> }>;
   scheduledAt?: Date;
   variables?: string[];
+  senderId?: string; // Sender ID for SMS campaigns
   rcsRichCardPayload?: Record<string, unknown>;
   rcsCarouselPayload?: Record<string, unknown>;
   rcsSuggestedReplies?: Record<string, unknown>;
@@ -73,6 +74,7 @@ class BulkMessagingService {
       recipients,
       scheduledAt,
       variables,
+      senderId,
       rcsRichCardPayload,
       rcsCarouselPayload,
       rcsSuggestedReplies,
@@ -180,6 +182,7 @@ class BulkMessagingService {
         description,
         templateId,
         dltTemplateId, // Store DLT template ID for SMS sending
+        senderId, // Store sender ID for tracking
         recipientSource,
         recipientFilter: recipientFilter || {},
         recipientListId,
@@ -443,11 +446,12 @@ class BulkMessagingService {
 
     switch (job.channel) {
       case MessageChannel.SMS:
-        // Use stored DLT template ID from job (captured at job creation time)
+        // Use stored DLT template ID and sender ID from job (captured at job creation time)
         return smsService.send({
           phone: recipient.phone,
           message,
           dltTemplateId: job.dltTemplateId || undefined,
+          senderId: job.senderId || undefined, // Pass sender ID for bulk campaigns
           organizationId: job.organizationId,
           userId: job.userId,
         });
@@ -495,6 +499,7 @@ class BulkMessagingService {
         phone: recipient.phone,
         name: recipient.name,
         email: recipient.email,
+        senderId: job.senderId || null, // Store sender ID used for this message
         message: this.replaceVariables(job.message, recipient.variables || {}),
         channel: job.channel,
         status,

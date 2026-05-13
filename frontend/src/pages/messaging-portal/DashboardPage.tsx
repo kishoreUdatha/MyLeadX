@@ -10,6 +10,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
+  RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 import {
   AreaChart,
@@ -138,7 +139,7 @@ const DashboardPage = () => {
   if (loading) return <div className="flex items-center justify-center h-32"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div></div>;
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -324,26 +325,26 @@ const DashboardPage = () => {
           )}
         </div>
 
-        {/* Quick Actions */}
+        {/* Send Messages */}
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-base font-semibold text-gray-900 mb-4">Quick Actions</p>
+          <p className="text-base font-semibold text-gray-900 mb-4">Send Messages</p>
           <div className="space-y-2">
-            <Link to="/messaging-portal/campaigns/create" className="flex items-center p-3 rounded-lg bg-primary-50 border border-primary-100 hover:bg-primary-100 transition-colors">
-              <div className="w-10 h-10 rounded-lg bg-primary-500 text-white flex items-center justify-center mr-3">
+            <Link to="/messaging-portal/quick-send" className="flex items-center p-3 rounded-lg bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-colors">
+              <div className="w-10 h-10 rounded-lg bg-blue-500 text-white flex items-center justify-center mr-3">
                 <PaperAirplaneIcon className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-900">Send Campaign</p>
-                <p className="text-xs text-gray-500">Create and send messages</p>
+                <p className="text-sm font-medium text-gray-900">Quick Send</p>
+                <p className="text-xs text-gray-500">Send SMS to a single number</p>
               </div>
             </Link>
-            <Link to="/messaging-portal/contacts" className="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center mr-3">
-                <UsersIcon className="h-5 w-5" />
+            <Link to="/messaging-portal/campaigns/create" className="flex items-center p-3 rounded-lg bg-primary-50 border border-primary-100 hover:bg-primary-100 transition-colors">
+              <div className="w-10 h-10 rounded-lg bg-primary-500 text-white flex items-center justify-center mr-3">
+                <RocketLaunchIcon className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-900">Import Contacts</p>
-                <p className="text-xs text-gray-500">Upload CSV or add manually</p>
+                <p className="text-sm font-medium text-gray-900">Bulk Send</p>
+                <p className="text-xs text-gray-500">Send to multiple contacts or groups</p>
               </div>
             </Link>
             <Link to="/messaging-portal/templates" className="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">

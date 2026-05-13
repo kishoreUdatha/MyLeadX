@@ -17,6 +17,7 @@ import {
 } from '../services/messaging';
 import { MessageChannel, BulkRecipientSource, BulkMessageJobStatus, TemplateType } from '@prisma/client';
 import { prisma } from '../config/database';
+import { config } from '../config';
 import bcrypt from 'bcryptjs';
 import settingsRoutes from './messaging-portal-settings.routes';
 
@@ -507,6 +508,666 @@ router.get(
   })
 );
 
+// ==================== OPT-OUT MANAGEMENT ====================
+
+/**
+ * GET /messaging-portal/opt-outs
+ * List contacts who have opted out
+ */
+router.get(
+  '/opt-outs',
+  validate([
+    query('page').optional().isInt({ min: 1 }).toInt(),
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('channel').optional().isIn(['SMS', 'WHATSAPP', 'RCS', 'ALL']),
+    query('search').optional().isString(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { page = 1, limit = 50, channel = 'ALL', search } = req.query;
+    const organizationId = req.user!.organizationId;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Build where clause
+    const where: any = { organizationId };
+
+    // Filter by opt-out channel
+    if (channel === 'SMS') {
+      where.smsOptOut = true;
+    } else if (channel === 'WHATSAPP') {
+      where.whatsappOptOut = true;
+    } else if (channel === 'RCS') {
+      where.rcsOptOut = true;
+    } else {
+      // ALL - any opt-out
+      where.OR = [
+        { smsOptOut: true },
+        { whatsappOptOut: true },
+        { rcsOptOut: true },
+      ];
+    }
+
+    // Search filter
+    if (search) {
+      where.AND = [
+        {
+          OR: [
+            { phone: { contains: search } },
+            { name: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
+
+    const [contacts, total] = await Promise.all([
+      prisma.messagingContact.findMany({
+        where,
+        orderBy: { optOutAt: 'desc' },
+        skip,
+        take: Number(limit),
+        select: {
+          id: true,
+          phone: true,
+          name: true,
+          email: true,
+          smsOptOut: true,
+          whatsappOptOut: true,
+          rcsOptOut: true,
+          optOutAt: true,
+          createdAt: true,
+        },
+      }),
+      prisma.messagingContact.count({ where }),
+    ]);
+
+    // Get summary stats
+    const stats = await prisma.messagingContact.aggregate({
+      where: { organizationId },
+      _count: {
+        _all: true,
+      },
+    });
+
+    const smsOptOuts = await prisma.messagingContact.count({
+      where: { organizationId, smsOptOut: true },
+    });
+    const whatsappOptOuts = await prisma.messagingContact.count({
+      where: { organizationId, whatsappOptOut: true },
+    });
+    const rcsOptOuts = await prisma.messagingContact.count({
+      where: { organizationId, rcsOptOut: true },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        contacts,
+        stats: {
+          totalContacts: stats._count._all,
+          smsOptOuts,
+          whatsappOptOuts,
+          rcsOptOuts,
+        },
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  })
+);
+
+/**
+ * PUT /messaging-portal/opt-outs/:id
+ * Update opt-out status for a contact
+ */
+router.put(
+  '/opt-outs/:id',
+  validate([
+    param('id').isUUID(),
+    body('smsOptOut').optional().isBoolean(),
+    body('whatsappOptOut').optional().isBoolean(),
+    body('rcsOptOut').optional().isBoolean(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { smsOptOut, whatsappOptOut, rcsOptOut } = req.body;
+    const organizationId = req.user!.organizationId;
+
+    // Verify contact belongs to organization
+    const contact = await prisma.messagingContact.findFirst({
+      where: { id, organizationId },
+    });
+
+    if (!contact) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contact not found',
+      });
+    }
+
+    // Determine if this is opting out or resubscribing
+    const isOptingOut = smsOptOut || whatsappOptOut || rcsOptOut;
+    const wasOptedOut = contact.smsOptOut || contact.whatsappOptOut || contact.rcsOptOut;
+
+    const updated = await prisma.messagingContact.update({
+      where: { id },
+      data: {
+        smsOptOut: smsOptOut !== undefined ? smsOptOut : contact.smsOptOut,
+        whatsappOptOut: whatsappOptOut !== undefined ? whatsappOptOut : contact.whatsappOptOut,
+        rcsOptOut: rcsOptOut !== undefined ? rcsOptOut : contact.rcsOptOut,
+        optOutAt: isOptingOut && !wasOptedOut ? new Date() : contact.optOutAt,
+      },
+      select: {
+        id: true,
+        phone: true,
+        name: true,
+        email: true,
+        smsOptOut: true,
+        whatsappOptOut: true,
+        rcsOptOut: true,
+        optOutAt: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Opt-out status updated',
+      data: updated,
+    });
+  })
+);
+
+/**
+ * POST /messaging-portal/opt-outs/bulk
+ * Bulk add opt-outs (e.g., from imported list)
+ */
+router.post(
+  '/opt-outs/bulk',
+  validate([
+    body('phoneNumbers').isArray({ min: 1, max: 10000 }),
+    body('phoneNumbers.*').isString(),
+    body('channel').isIn(['SMS', 'WHATSAPP', 'RCS']),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { phoneNumbers, channel } = req.body;
+    const organizationId = req.user!.organizationId;
+
+    const optOutField = channel === 'SMS' ? 'smsOptOut' :
+                        channel === 'WHATSAPP' ? 'whatsappOptOut' : 'rcsOptOut';
+
+    let updated = 0;
+    let created = 0;
+
+    for (const phone of phoneNumbers) {
+      // Normalize phone number
+      let normalizedPhone = phone.replace(/\D/g, '');
+      if (normalizedPhone.length === 10) {
+        normalizedPhone = '91' + normalizedPhone;
+      }
+
+      // Try to find existing contact
+      const existing = await prisma.messagingContact.findUnique({
+        where: {
+          organizationId_phone: {
+            organizationId,
+            phone: normalizedPhone,
+          },
+        },
+      });
+
+      if (existing) {
+        // Update existing contact
+        await prisma.messagingContact.update({
+          where: { id: existing.id },
+          data: {
+            [optOutField]: true,
+            optOutAt: existing.optOutAt || new Date(),
+          },
+        });
+        updated++;
+      } else {
+        // Create new contact with opt-out
+        await prisma.messagingContact.create({
+          data: {
+            organizationId,
+            phone: normalizedPhone,
+            [optOutField]: true,
+            optOutAt: new Date(),
+            source: 'OPT_OUT_IMPORT',
+          },
+        });
+        created++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Processed ${phoneNumbers.length} phone numbers`,
+      data: {
+        updated,
+        created,
+        total: updated + created,
+      },
+    });
+  })
+);
+
+/**
+ * GET /messaging-portal/opt-outs/export
+ * Export opt-out list to CSV
+ */
+router.get(
+  '/opt-outs/export',
+  validate([
+    query('channel').optional().isIn(['SMS', 'WHATSAPP', 'RCS', 'ALL']),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { channel = 'ALL' } = req.query;
+    const organizationId = req.user!.organizationId;
+
+    // Build where clause
+    const where: any = { organizationId };
+
+    if (channel === 'SMS') {
+      where.smsOptOut = true;
+    } else if (channel === 'WHATSAPP') {
+      where.whatsappOptOut = true;
+    } else if (channel === 'RCS') {
+      where.rcsOptOut = true;
+    } else {
+      where.OR = [
+        { smsOptOut: true },
+        { whatsappOptOut: true },
+        { rcsOptOut: true },
+      ];
+    }
+
+    const contacts = await prisma.messagingContact.findMany({
+      where,
+      orderBy: { optOutAt: 'desc' },
+      select: {
+        phone: true,
+        name: true,
+        email: true,
+        smsOptOut: true,
+        whatsappOptOut: true,
+        rcsOptOut: true,
+        optOutAt: true,
+      },
+    });
+
+    // Generate CSV
+    const headers = ['Phone', 'Name', 'Email', 'SMS Opt-Out', 'WhatsApp Opt-Out', 'RCS Opt-Out', 'Opt-Out Date'];
+    const rows = contacts.map(c => [
+      c.phone,
+      c.name || '',
+      c.email || '',
+      c.smsOptOut ? 'Yes' : 'No',
+      c.whatsappOptOut ? 'Yes' : 'No',
+      c.rcsOptOut ? 'Yes' : 'No',
+      c.optOutAt ? new Date(c.optOutAt).toISOString() : '',
+    ]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=opt-outs.csv');
+    res.send(csv);
+  })
+);
+
+// ==================== CRM IMPORT ====================
+
+/**
+ * GET /messaging-portal/crm-import/sources
+ * Get available CRM import sources (pipelines, campaigns, tags)
+ */
+router.get(
+  '/crm-import/sources',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+
+    // Get pipelines with stages
+    const pipelines = await prisma.pipeline.findMany({
+      where: { organizationId, isActive: true },
+      include: {
+        stages: {
+          where: { isActive: true },
+          orderBy: { order: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get campaigns
+    const campaigns = await prisma.campaign.findMany({
+      where: { organizationId },
+      select: {
+        id: true,
+        name: true,
+        _count: { select: { leads: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    // Get tags
+    const tags = await prisma.tag.findMany({
+      where: { organizationId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Get lead sources
+    const leadSources = await prisma.leadSource.findMany({
+      where: { organizationId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Get total lead count
+    const totalLeads = await prisma.lead.count({
+      where: { organizationId },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        pipelines: pipelines.map((p) => ({
+          id: p.id,
+          name: p.name,
+          stages: p.stages.map((s) => ({ id: s.id, name: s.name })),
+        })),
+        campaigns: campaigns.map((c) => ({
+          id: c.id,
+          name: c.name,
+          leadCount: c._count.leads,
+        })),
+        tags,
+        leadSources,
+        totalLeads,
+      },
+    });
+  })
+);
+
+/**
+ * POST /messaging-portal/crm-import/preview
+ * Preview leads to import based on filters
+ */
+router.post(
+  '/crm-import/preview',
+  validate([
+    body('pipelineId').optional().isUUID(),
+    body('stageIds').optional().isArray(),
+    body('campaignId').optional().isUUID(),
+    body('tagIds').optional().isArray(),
+    body('sourceId').optional().isUUID(),
+    body('dateFrom').optional().isISO8601(),
+    body('dateTo').optional().isISO8601(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+    const { pipelineId, stageIds, campaignId, tagIds, sourceId, dateFrom, dateTo } = req.body;
+
+    // Build where clause
+    const where: any = {
+      organizationId,
+      phone: { not: null },
+    };
+
+    if (pipelineId) {
+      where.pipelineId = pipelineId;
+    }
+
+    if (stageIds && stageIds.length > 0) {
+      where.pipelineStageId = { in: stageIds };
+    }
+
+    if (campaignId) {
+      where.campaignId = campaignId;
+    }
+
+    if (tagIds && tagIds.length > 0) {
+      where.tags = {
+        some: {
+          tagId: { in: tagIds },
+        },
+      };
+    }
+
+    if (sourceId) {
+      where.sourceId = sourceId;
+    }
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo) where.createdAt.lte = new Date(dateTo);
+    }
+
+    // Get count and preview
+    const [total, preview] = await Promise.all([
+      prisma.lead.count({ where }),
+      prisma.lead.findMany({
+        where,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+          createdAt: true,
+        },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    // Check for existing contacts to show duplicates
+    const phones = preview.map((l) => l.phone).filter(Boolean) as string[];
+    const existingContacts = await prisma.messagingContact.findMany({
+      where: {
+        organizationId,
+        phone: { in: phones },
+      },
+      select: { phone: true },
+    });
+    const existingPhones = new Set(existingContacts.map((c) => c.phone));
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        preview: preview.map((l) => ({
+          id: l.id,
+          name: [l.firstName, l.lastName].filter(Boolean).join(' ') || 'Unknown',
+          phone: l.phone,
+          email: l.email,
+          createdAt: l.createdAt,
+          isDuplicate: existingPhones.has(l.phone || ''),
+        })),
+        estimatedDuplicates: preview.filter((l) => existingPhones.has(l.phone || '')).length,
+      },
+    });
+  })
+);
+
+/**
+ * POST /messaging-portal/crm-import/import
+ * Import leads from CRM as messaging contacts
+ */
+router.post(
+  '/crm-import/import',
+  validate([
+    body('pipelineId').optional().isUUID(),
+    body('stageIds').optional().isArray(),
+    body('campaignId').optional().isUUID(),
+    body('tagIds').optional().isArray(),
+    body('sourceId').optional().isUUID(),
+    body('dateFrom').optional().isISO8601(),
+    body('dateTo').optional().isISO8601(),
+    body('skipDuplicates').optional().isBoolean(),
+    body('targetGroupId').optional().isUUID(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+    const {
+      pipelineId, stageIds, campaignId, tagIds, sourceId,
+      dateFrom, dateTo, skipDuplicates = true, targetGroupId
+    } = req.body;
+
+    // Build where clause
+    const where: any = {
+      organizationId,
+      phone: { not: null },
+    };
+
+    if (pipelineId) {
+      where.pipelineId = pipelineId;
+    }
+
+    if (stageIds && stageIds.length > 0) {
+      where.pipelineStageId = { in: stageIds };
+    }
+
+    if (campaignId) {
+      where.campaignId = campaignId;
+    }
+
+    if (tagIds && tagIds.length > 0) {
+      where.tags = {
+        some: {
+          tagId: { in: tagIds },
+        },
+      };
+    }
+
+    if (sourceId) {
+      where.sourceId = sourceId;
+    }
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo) where.createdAt.lte = new Date(dateTo);
+    }
+
+    // Fetch all matching leads
+    const leads = await prisma.lead.findMany({
+      where,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        email: true,
+      },
+    });
+
+    // Get existing contacts for duplicate detection
+    const existingContacts = await prisma.messagingContact.findMany({
+      where: { organizationId },
+      select: { phone: true },
+    });
+    const existingPhones = new Set(existingContacts.map((c) => c.phone));
+
+    let imported = 0;
+    let skipped = 0;
+    let updated = 0;
+
+    for (const lead of leads) {
+      if (!lead.phone) {
+        skipped++;
+        continue;
+      }
+
+      // Normalize phone number
+      let normalizedPhone = lead.phone.replace(/\D/g, '');
+      if (normalizedPhone.length === 10) {
+        normalizedPhone = '91' + normalizedPhone;
+      }
+
+      const name = [lead.firstName, lead.lastName].filter(Boolean).join(' ') || undefined;
+
+      if (existingPhones.has(normalizedPhone)) {
+        if (skipDuplicates) {
+          skipped++;
+        } else {
+          // Update existing contact
+          await prisma.messagingContact.updateMany({
+            where: { organizationId, phone: normalizedPhone },
+            data: {
+              name: name || undefined,
+              email: lead.email || undefined,
+              source: 'CRM_IMPORT',
+            },
+          });
+          updated++;
+        }
+        continue;
+      }
+
+      try {
+        const contact = await prisma.messagingContact.create({
+          data: {
+            organizationId,
+            phone: normalizedPhone,
+            name,
+            email: lead.email || undefined,
+            source: 'CRM_IMPORT',
+            customFields: {
+              crmLeadId: lead.id,
+            },
+          },
+        });
+
+        // Add to target group if specified
+        if (targetGroupId) {
+          await prisma.messagingContactGroupMember.create({
+            data: {
+              contactId: contact.id,
+              groupId: targetGroupId,
+            },
+          }).catch(() => {}); // Ignore if already exists
+        }
+
+        existingPhones.add(normalizedPhone);
+        imported++;
+      } catch (error: any) {
+        // Skip on unique constraint violation (race condition)
+        if (error.code === 'P2002') {
+          skipped++;
+        } else {
+          console.error('[CRM Import] Error creating contact:', error);
+          skipped++;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Imported ${imported} contacts from CRM`,
+      data: {
+        total: leads.length,
+        imported,
+        updated,
+        skipped,
+      },
+    });
+  })
+);
+
 // ==================== GROUPS ====================
 
 /**
@@ -733,6 +1394,870 @@ router.delete(
   })
 );
 
+// ==================== SCHEDULED MESSAGES ====================
+
+/**
+ * GET /messaging-portal/scheduled-messages
+ * List scheduled messages
+ */
+router.get(
+  '/scheduled-messages',
+  validate([
+    query('page').optional().isInt({ min: 1 }).toInt(),
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('status').optional().isIn(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED', 'PAUSED']),
+    query('type').optional().isIn(['SMS', 'WHATSAPP']),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { page = 1, limit = 20, status, type } = req.query;
+    const organizationId = req.user!.organizationId;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where: any = { organizationId };
+    if (status) where.status = status;
+    if (type) where.type = type;
+
+    const [messages, total] = await Promise.all([
+      prisma.scheduledMessage.findMany({
+        where,
+        orderBy: { scheduledAt: 'asc' },
+        skip,
+        take: Number(limit),
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          content: true,
+          recipients: true,
+          templateId: true,
+          scheduledAt: true,
+          timezone: true,
+          isRecurring: true,
+          recurringRule: true,
+          status: true,
+          totalRecipients: true,
+          sentCount: true,
+          failedCount: true,
+          processedAt: true,
+          errorMessage: true,
+          createdAt: true,
+        },
+      }),
+      prisma.scheduledMessage.count({ where }),
+    ]);
+
+    // Get stats
+    const stats = await prisma.scheduledMessage.groupBy({
+      by: ['status'],
+      where: { organizationId },
+      _count: true,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        messages: messages.map((m) => ({
+          ...m,
+          recipientCount: Array.isArray(m.recipients) ? (m.recipients as any[]).length : 0,
+        })),
+        stats: {
+          pending: stats.find((s) => s.status === 'PENDING')?._count || 0,
+          completed: stats.find((s) => s.status === 'COMPLETED')?._count || 0,
+          failed: stats.find((s) => s.status === 'FAILED')?._count || 0,
+          total: stats.reduce((sum, s) => sum + s._count, 0),
+        },
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  })
+);
+
+/**
+ * GET /messaging-portal/scheduled-messages/:id
+ * Get a single scheduled message
+ */
+router.get(
+  '/scheduled-messages/:id',
+  validate([param('id').isUUID()]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+
+    const message = await prisma.scheduledMessage.findFirst({
+      where: { id: req.params.id, organizationId },
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scheduled message not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: message,
+    });
+  })
+);
+
+/**
+ * POST /messaging-portal/scheduled-messages
+ * Create a scheduled message
+ */
+router.post(
+  '/scheduled-messages',
+  validate([
+    body('type').isIn(['SMS', 'WHATSAPP']).withMessage('Type must be SMS or WHATSAPP'),
+    body('recipients').isArray({ min: 1 }).withMessage('At least one recipient is required'),
+    body('content').trim().notEmpty().isLength({ max: 1600 }).withMessage('Content is required'),
+    body('scheduledAt').isISO8601().withMessage('Scheduled date is required'),
+    body('name').optional().isString(),
+    body('templateId').optional().isUUID(),
+    body('timezone').optional().isString(),
+    body('isRecurring').optional().isBoolean(),
+    body('recurringRule').optional().isString(),
+    body('recurringEndAt').optional().isISO8601(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+    const userId = req.user!.id;
+    const {
+      type,
+      recipients,
+      content,
+      scheduledAt,
+      name,
+      templateId,
+      variables,
+      timezone = 'Asia/Kolkata',
+      isRecurring = false,
+      recurringRule,
+      recurringEndAt,
+    } = req.body;
+
+    // Validate scheduled time is in the future
+    const scheduledDate = new Date(scheduledAt);
+    if (scheduledDate <= new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Scheduled time must be in the future',
+      });
+    }
+
+    // Normalize phone numbers
+    const normalizedRecipients = recipients.map((phone: string) => {
+      let normalized = phone.replace(/\D/g, '');
+      if (normalized.length === 10) {
+        normalized = '91' + normalized;
+      }
+      return normalized;
+    });
+
+    // Check credit balance
+    const balance = await messageCreditsService.getBalance(organizationId);
+    const creditField = type === 'SMS' ? 'smsCredits' : 'whatsappCredits';
+
+    if (balance[creditField] < normalizedRecipients.length) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient ${type} credits. Need ${normalizedRecipients.length}, have ${balance[creditField]}`,
+        code: 'INSUFFICIENT_CREDITS',
+      });
+    }
+
+    const message = await prisma.scheduledMessage.create({
+      data: {
+        organizationId,
+        type,
+        recipients: normalizedRecipients,
+        content,
+        scheduledAt: scheduledDate,
+        timezone,
+        name: name || `Scheduled ${type} - ${new Date().toLocaleString()}`,
+        templateId,
+        variables: variables || {},
+        isRecurring,
+        recurringRule: isRecurring ? recurringRule : null,
+        recurringEndAt: isRecurring && recurringEndAt ? new Date(recurringEndAt) : null,
+        nextRunAt: isRecurring ? scheduledDate : null,
+        totalRecipients: normalizedRecipients.length,
+        createdById: userId,
+        status: 'PENDING',
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Message scheduled successfully',
+      data: message,
+    });
+  })
+);
+
+/**
+ * PUT /messaging-portal/scheduled-messages/:id
+ * Update a scheduled message (only if PENDING)
+ */
+router.put(
+  '/scheduled-messages/:id',
+  validate([
+    param('id').isUUID(),
+    body('content').optional().isString().isLength({ max: 1600 }),
+    body('scheduledAt').optional().isISO8601(),
+    body('name').optional().isString(),
+    body('recipients').optional().isArray(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+    const { content, scheduledAt, name, recipients } = req.body;
+
+    const message = await prisma.scheduledMessage.findFirst({
+      where: { id: req.params.id, organizationId },
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scheduled message not found',
+      });
+    }
+
+    if (message.status !== 'PENDING' && message.status !== 'PAUSED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only edit pending or paused scheduled messages',
+      });
+    }
+
+    // Validate new scheduled time if provided
+    if (scheduledAt) {
+      const scheduledDate = new Date(scheduledAt);
+      if (scheduledDate <= new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Scheduled time must be in the future',
+        });
+      }
+    }
+
+    const updateData: any = {};
+    if (content !== undefined) updateData.content = content;
+    if (scheduledAt) updateData.scheduledAt = new Date(scheduledAt);
+    if (name !== undefined) updateData.name = name;
+    if (recipients) {
+      const normalizedRecipients = recipients.map((phone: string) => {
+        let normalized = phone.replace(/\D/g, '');
+        if (normalized.length === 10) {
+          normalized = '91' + normalized;
+        }
+        return normalized;
+      });
+      updateData.recipients = normalizedRecipients;
+      updateData.totalRecipients = normalizedRecipients.length;
+    }
+
+    const updated = await prisma.scheduledMessage.update({
+      where: { id: req.params.id },
+      data: updateData,
+    });
+
+    res.json({
+      success: true,
+      message: 'Scheduled message updated',
+      data: updated,
+    });
+  })
+);
+
+/**
+ * POST /messaging-portal/scheduled-messages/:id/pause
+ * Pause a scheduled message
+ */
+router.post(
+  '/scheduled-messages/:id/pause',
+  validate([param('id').isUUID()]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+
+    const message = await prisma.scheduledMessage.findFirst({
+      where: { id: req.params.id, organizationId },
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scheduled message not found',
+      });
+    }
+
+    if (message.status !== 'PENDING') {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only pause pending scheduled messages',
+      });
+    }
+
+    await prisma.scheduledMessage.update({
+      where: { id: req.params.id },
+      data: { status: 'PAUSED' },
+    });
+
+    res.json({
+      success: true,
+      message: 'Scheduled message paused',
+    });
+  })
+);
+
+/**
+ * POST /messaging-portal/scheduled-messages/:id/resume
+ * Resume a paused scheduled message
+ */
+router.post(
+  '/scheduled-messages/:id/resume',
+  validate([param('id').isUUID()]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+
+    const message = await prisma.scheduledMessage.findFirst({
+      where: { id: req.params.id, organizationId },
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scheduled message not found',
+      });
+    }
+
+    if (message.status !== 'PAUSED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only resume paused scheduled messages',
+      });
+    }
+
+    // Check if scheduled time has passed
+    if (message.scheduledAt <= new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Scheduled time has passed. Please update the scheduled time first.',
+      });
+    }
+
+    await prisma.scheduledMessage.update({
+      where: { id: req.params.id },
+      data: { status: 'PENDING' },
+    });
+
+    res.json({
+      success: true,
+      message: 'Scheduled message resumed',
+    });
+  })
+);
+
+/**
+ * DELETE /messaging-portal/scheduled-messages/:id
+ * Cancel/delete a scheduled message
+ */
+router.delete(
+  '/scheduled-messages/:id',
+  validate([param('id').isUUID()]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+
+    const message = await prisma.scheduledMessage.findFirst({
+      where: { id: req.params.id, organizationId },
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scheduled message not found',
+      });
+    }
+
+    if (message.status === 'PROCESSING') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete a message that is currently being processed',
+      });
+    }
+
+    // If pending or paused, mark as cancelled; if completed/failed, delete
+    if (message.status === 'PENDING' || message.status === 'PAUSED') {
+      await prisma.scheduledMessage.update({
+        where: { id: req.params.id },
+        data: { status: 'CANCELLED' },
+      });
+    } else {
+      await prisma.scheduledMessage.delete({
+        where: { id: req.params.id },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Scheduled message cancelled',
+    });
+  })
+);
+
+/**
+ * POST /messaging-portal/scheduled-messages/:id/send-now
+ * Send a scheduled message immediately
+ */
+router.post(
+  '/scheduled-messages/:id/send-now',
+  validate([param('id').isUUID()]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+    const userId = req.user!.id;
+
+    const message = await prisma.scheduledMessage.findFirst({
+      where: { id: req.params.id, organizationId },
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scheduled message not found',
+      });
+    }
+
+    if (message.status !== 'PENDING' && message.status !== 'PAUSED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only send pending or paused scheduled messages',
+      });
+    }
+
+    // Check credit balance
+    const recipients = message.recipients as string[];
+    const balance = await messageCreditsService.getBalance(organizationId);
+    const creditField = message.type === 'SMS' ? 'smsCredits' : 'whatsappCredits';
+
+    if (balance[creditField] < recipients.length) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient ${message.type} credits`,
+        code: 'INSUFFICIENT_CREDITS',
+      });
+    }
+
+    // Mark as processing
+    await prisma.scheduledMessage.update({
+      where: { id: req.params.id },
+      data: { status: 'PROCESSING' },
+    });
+
+    // Process in background
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const phone of recipients) {
+      try {
+        let result: { success: boolean; messageId?: string; error?: string };
+
+        if (message.type === 'SMS') {
+          result = await smsService.send({
+            phone,
+            message: message.content,
+            templateId: message.templateId || undefined,
+            organizationId,
+            userId,
+          });
+        } else {
+          result = await whatsappService.send({
+            phone,
+            message: message.content,
+            templateId: message.templateId || undefined,
+            organizationId,
+            userId,
+          });
+        }
+
+        if (result.success) {
+          // Deduct credit
+          await messageCreditsService.deductCredits(
+            organizationId,
+            message.type as MessageChannel,
+            1,
+            result.messageId,
+            userId
+          );
+          sentCount++;
+        } else {
+          failedCount++;
+        }
+      } catch (error) {
+        console.error(`[ScheduledMessage] Error sending to ${phone}:`, error);
+        failedCount++;
+      }
+    }
+
+    // Update message status
+    await prisma.scheduledMessage.update({
+      where: { id: req.params.id },
+      data: {
+        status: failedCount === recipients.length ? 'FAILED' : 'COMPLETED',
+        sentCount,
+        failedCount,
+        processedAt: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Sent ${sentCount} messages, ${failedCount} failed`,
+      data: { sentCount, failedCount },
+    });
+  })
+);
+
+// ==================== QUICK SEND ====================
+
+/**
+ * POST /messaging-portal/quick-send
+ * Send a single message to one recipient
+ * Includes DLT validation for SMS and atomic credit reservation
+ */
+router.post(
+  '/quick-send',
+  validate([
+    body('channel').isIn(['SMS', 'WHATSAPP']).withMessage('Channel must be SMS or WHATSAPP'),
+    body('phone').trim().notEmpty().withMessage('Phone number is required'),
+    body('message').trim().notEmpty().isLength({ min: 1, max: 1600 }).withMessage('Message is required (max 1600 chars)'),
+    body('templateId').optional().isUUID(),
+    body('contactName').optional().isString(),
+    body('senderId').optional().isString().isLength({ min: 6, max: 6 }),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { channel, phone, message, templateId, contactName, senderId } = req.body;
+    const organizationId = req.user!.organizationId;
+    const userId = req.user!.id;
+
+    // For SMS, validate DLT configuration before proceeding
+    if (channel === 'SMS') {
+      let hasDltTemplate = false;
+
+      // Check if template has DLT Template ID
+      if (templateId) {
+        const template = await prisma.messageTemplate.findFirst({
+          where: { id: templateId, type: TemplateType.SMS, isActive: true },
+          select: { dltTemplateId: true },
+        });
+        if (template?.dltTemplateId) {
+          hasDltTemplate = true;
+        }
+      }
+
+      // Check config default template ID
+      if (!hasDltTemplate && config.msg91?.defaultTemplateId) {
+        hasDltTemplate = true;
+      }
+
+      if (!hasDltTemplate) {
+        return res.status(400).json({
+          success: false,
+          message: 'SMS requires DLT Template ID for compliance in India. Please select a template with DLT ID configured or contact support.',
+          code: 'DLT_TEMPLATE_REQUIRED',
+        });
+      }
+    }
+
+    // Normalize phone number
+    let normalizedPhone = phone.replace(/\D/g, '');
+    if (normalizedPhone.length === 10) {
+      normalizedPhone = '91' + normalizedPhone;
+    }
+
+    // Reserve credit atomically before sending (prevents race conditions)
+    const reservation = await messageCreditsService.reserveCredits(
+      organizationId,
+      channel as MessageChannel,
+      1,
+      userId
+    );
+
+    if (!reservation.success) {
+      return res.status(400).json({
+        success: false,
+        message: reservation.error || `Insufficient ${channel} credits. Please purchase more credits.`,
+        code: 'INSUFFICIENT_CREDITS',
+      });
+    }
+
+    let result: { success: boolean; messageId?: string; error?: string };
+
+    try {
+      if (channel === 'SMS') {
+        result = await smsService.send({
+          phone: normalizedPhone,
+          message,
+          templateId,
+          organizationId,
+          userId,
+          senderId, // Pass custom sender ID if provided
+        });
+      } else {
+        result = await whatsappService.send({
+          phone: normalizedPhone,
+          message,
+          templateId,
+          organizationId,
+          userId,
+        });
+      }
+
+      if (result.success) {
+        // Confirm the reservation (credits already deducted)
+        await messageCreditsService.confirmReservation(reservation.reservationId!, result.messageId);
+
+        // Log the quick send message
+        await prisma.bulkMessageLog.create({
+          data: {
+            organizationId,
+            bulkJobId: 'quick-send', // Special identifier for quick send
+            userId,
+            phone: normalizedPhone,
+            name: contactName || null,
+            senderId: senderId || null, // Store sender ID used
+            message,
+            channel: channel as MessageChannel,
+            status: 'SENT',
+            provider: channel === 'SMS' ? 'MSG91' : 'GUPSHUP',
+            providerMsgId: result.messageId,
+            sentAt: new Date(),
+            creditCost: 1,
+          },
+        });
+
+        // Get updated balance
+        const newBalance = await messageCreditsService.getBalance(organizationId);
+        const creditField = channel === 'SMS' ? 'smsCredits' : 'whatsappCredits';
+
+        return res.json({
+          success: true,
+          message: 'Message sent successfully',
+          data: {
+            messageId: result.messageId,
+            phone: normalizedPhone,
+            channel,
+            creditsUsed: 1,
+            remainingCredits: newBalance[creditField],
+          },
+        });
+      } else {
+        // Cancel reservation and refund credit
+        await messageCreditsService.cancelReservation(
+          organizationId,
+          channel as MessageChannel,
+          1,
+          reservation.reservationId!,
+          `Send failed: ${result.error}`
+        );
+
+        return res.status(400).json({
+          success: false,
+          message: result.error || 'Failed to send message',
+          code: 'SEND_FAILED',
+        });
+      }
+    } catch (error: any) {
+      // Cancel reservation and refund credit on error
+      await messageCreditsService.cancelReservation(
+        organizationId,
+        channel as MessageChannel,
+        1,
+        reservation.reservationId!,
+        `Error: ${error.message}`
+      );
+
+      console.error('[QuickSend] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to send message',
+        code: 'INTERNAL_ERROR',
+      });
+    }
+  })
+);
+
+/**
+ * GET /messaging-portal/quick-send/history
+ * Get quick send message history
+ */
+router.get(
+  '/quick-send/history',
+  validate([
+    query('page').optional().isInt({ min: 1 }).toInt(),
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('channel').optional().isIn(['SMS', 'WHATSAPP']),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { page = 1, limit = 20, channel } = req.query;
+    const organizationId = req.user!.organizationId;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where: any = {
+      organizationId,
+      bulkJobId: 'quick-send',
+    };
+
+    if (channel) {
+      where.channel = channel;
+    }
+
+    const [messages, total] = await Promise.all([
+      prisma.bulkMessageLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Number(limit),
+      }),
+      prisma.bulkMessageLog.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        messages,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  })
+);
+
+// ==================== MESSAGE HISTORY ====================
+
+/**
+ * GET /messaging-portal/message-history
+ * Get all SMS transaction history
+ */
+router.get(
+  '/message-history',
+  validate([
+    query('page').optional().isInt({ min: 1 }).toInt(),
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('channel').optional().isIn(['SMS', 'WHATSAPP', 'RCS']),
+    query('status').optional().isIn(['PENDING', 'SENT', 'DELIVERED', 'FAILED', 'READ']),
+    query('search').optional().isString(),
+    query('startDate').optional().isISO8601(),
+    query('endDate').optional().isISO8601(),
+  ]),
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const organizationId = req.user!.organizationId;
+    const { page = 1, limit = 20, channel, status, search, startDate, endDate } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Build where clause
+    const where: any = { organizationId };
+
+    if (channel) {
+      where.channel = channel;
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search) {
+      where.phone = { contains: String(search) };
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(String(startDate));
+      if (endDate) where.createdAt.lte = new Date(String(endDate));
+    }
+
+    // Get messages from BulkMessageLog (includes quick-send, campaigns, etc.)
+    const [messages, total] = await Promise.all([
+      prisma.bulkMessageLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Number(limit),
+      }),
+      prisma.bulkMessageLog.count({ where }),
+    ]);
+
+    // Get campaign names for messages that belong to campaigns
+    const campaignIds = messages
+      .filter((msg) => msg.bulkJobId && !['quick-send', 'scheduled', 'api'].includes(msg.bulkJobId))
+      .map((msg) => msg.bulkJobId);
+
+    const campaigns = campaignIds.length > 0
+      ? await prisma.bulkMessageJob.findMany({
+          where: { id: { in: campaignIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+    const campaignMap = new Map(campaigns.map((c) => [c.id, c.name]));
+
+    // Get sender IDs from campaigns (for messages that don't have senderId stored directly)
+    const campaignSenderIds = new Map<string, string>();
+    if (campaignIds.length > 0) {
+      const campaignsWithSenderId = await prisma.bulkMessageJob.findMany({
+        where: { id: { in: campaignIds } },
+        select: { id: true, senderId: true },
+      });
+      campaignsWithSenderId.forEach((c) => {
+        if (c.senderId) campaignSenderIds.set(c.id, c.senderId);
+      });
+    }
+
+    // Transform messages for frontend
+    const formattedMessages = messages.map((msg: any) => ({
+      id: msg.id,
+      phone: msg.phone,
+      name: msg.name || null,
+      channel: msg.channel,
+      content: msg.message || '',
+      status: msg.status,
+      // Use senderId from message log first, then fall back to campaign's senderId
+      senderId: msg.senderId || campaignSenderIds.get(msg.bulkJobId) || null,
+      templateId: null,
+      dltTemplateId: null,
+      externalId: msg.providerMsgId,
+      error: msg.errorMessage,
+      source: msg.bulkJobId === 'quick-send' ? 'quick-send' :
+              msg.bulkJobId === 'scheduled' ? 'scheduled' :
+              msg.bulkJobId === 'api' ? 'api' : 'campaign',
+      campaignName: campaignMap.get(msg.bulkJobId) || null,
+      createdAt: msg.createdAt.toISOString(),
+      sentAt: msg.sentAt?.toISOString(),
+      deliveredAt: msg.deliveredAt?.toISOString(),
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        messages: formattedMessages,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  })
+);
+
 // ==================== CAMPAIGNS ====================
 
 /**
@@ -791,6 +2316,7 @@ router.get(
 /**
  * POST /messaging-portal/campaigns
  * Create a campaign
+ * Includes DLT validation for SMS campaigns
  */
 router.post(
   '/campaigns',
@@ -803,6 +2329,7 @@ router.post(
     body('recipientListId').optional().isUUID(),
     body('phoneNumbers').optional().isArray(),
     body('scheduledAt').optional().isISO8601(),
+    body('senderId').optional().isString().isLength({ min: 6, max: 6 }).withMessage('Sender ID must be 6 characters'),
   ]),
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const {
@@ -817,7 +2344,54 @@ router.post(
       phoneNumbers,
       scheduledAt,
       variables,
+      senderId,
     } = req.body;
+
+    // For SMS campaigns, validate DLT configuration and sender ID before creating
+    if (channel === 'SMS') {
+      let hasDltTemplate = false;
+
+      // Check if template has DLT Template ID
+      if (templateId) {
+        const template = await prisma.messageTemplate.findFirst({
+          where: { id: templateId, type: TemplateType.SMS, isActive: true },
+          select: { dltTemplateId: true },
+        });
+        if (template?.dltTemplateId) {
+          hasDltTemplate = true;
+        }
+      }
+
+      // Check config default template ID
+      if (!hasDltTemplate && config.msg91?.defaultTemplateId) {
+        hasDltTemplate = true;
+      }
+
+      if (!hasDltTemplate) {
+        return res.status(400).json({
+          success: false,
+          message: 'SMS campaigns require a template with DLT Template ID for compliance in India. Please select a valid SMS template.',
+          code: 'DLT_TEMPLATE_REQUIRED',
+        });
+      }
+
+      // Validate sender ID for SMS campaigns
+      if (!senderId) {
+        // Check if organization has any sender IDs configured
+        const senderIdCount = await prisma.organizationSenderId.count({
+          where: { organizationId: req.user!.organizationId, isActive: true },
+        });
+
+        if (senderIdCount > 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please select a Sender ID for this SMS campaign.',
+            code: 'SENDER_ID_REQUIRED',
+          });
+        }
+        // If no sender IDs configured, allow campaign to proceed with default
+      }
+    }
 
     // Validate recipient source
     if (recipientSource === 'LIST' && !recipientListId) {
@@ -848,6 +2422,7 @@ router.post(
       phoneNumbers,
       scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
       variables,
+      senderId, // Pass sender ID for tracking
     });
 
     if (!result.success) {

@@ -226,7 +226,7 @@ export default function CreditsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-slate-200 rounded w-48"></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -242,7 +242,7 @@ export default function CreditsPage() {
 
   if (error) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700">{error}</p>
           <button onClick={fetchData} className="mt-2 text-sm text-red-600 hover:text-red-800 underline">
@@ -254,7 +254,7 @@ export default function CreditsPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Message Credits</h1>

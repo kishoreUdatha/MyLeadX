@@ -160,9 +160,14 @@ const CampaignsPage = () => {
                     <div className="ml-4">
                       <div className="flex items-center">
                         <h3 className="text-sm font-semibold text-gray-900">
-                          {campaign.channel.toUpperCase()} Campaign
+                          {campaign.name || `${campaign.channel.toUpperCase()} Campaign`}
                         </h3>
                         <span className="ml-2">{getStatusBadge(campaign.status)}</span>
+                        {campaign.senderId && (
+                          <span className="ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-mono rounded">
+                            {campaign.senderId}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-500 mt-1">
                         Created {new Date(campaign.createdAt).toLocaleDateString()} at{' '}

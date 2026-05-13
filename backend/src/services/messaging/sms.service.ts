@@ -8,15 +8,20 @@ import { config } from '../../config';
 import { prisma } from '../../config/database';
 import { TemplateType, MessageStatus } from '@prisma/client';
 
+export type SmsType = 'TRANSACTIONAL' | 'PROMOTIONAL';
+
 export interface SendSmsParams {
   phone: string;
   message: string;
   templateId?: string;
   dltTemplateId?: string;
+  msg91TemplateId?: string; // MSG91 Flow API template ID
+  smsType?: SmsType; // TRANSACTIONAL (route 4) or PROMOTIONAL (route 1)
   variables?: Record<string, string>;
   organizationId: string;
   userId: string;
   leadId?: string;
+  senderId?: string; // Custom sender ID (6-letter DLT registered header)
 }
 
 export interface SmsResult {
@@ -94,19 +99,88 @@ class SmsService {
   }
 
   /**
-   * Send SMS via MSG91
+   * Send SMS via MSG91 Flow API (preferred method)
    */
-  private async sendViaMSG91(params: SendSmsParams & { senderId?: string; peId?: string }): Promise<SmsResult> {
-    const { phone, message, dltTemplateId, variables, senderId, peId } = params;
+  private async sendViaMSG91FlowAPI(params: SendSmsParams & { senderId?: string; peId?: string }): Promise<SmsResult> {
+    const { phone, msg91TemplateId, smsType, variables } = params;
+
+    const formattedPhone = this.formatPhone(phone);
+
+    // Check promotional timing restrictions (9 AM - 9 PM IST)
+    if (smsType === 'PROMOTIONAL') {
+      const now = new Date();
+      const istHour = (now.getUTCHours() + 5.5) % 24; // Convert to IST
+      if (istHour < 9 || istHour >= 21) {
+        return {
+          success: false,
+          error: 'Promotional SMS can only be sent between 9 AM and 9 PM IST',
+        };
+      }
+    }
+
+    try {
+      // Build recipient object with variables
+      const recipient: Record<string, string> = {
+        mobiles: formattedPhone,
+      };
+
+      // Add variables for template substitution
+      if (variables) {
+        Object.entries(variables).forEach(([key, value]) => {
+          recipient[key] = value;
+        });
+      }
+
+      const flowPayload = {
+        template_id: msg91TemplateId,
+        short_url: '0', // Disable short URL tracking
+        recipients: [recipient],
+      };
+
+      console.log('[SMS] MSG91 Flow API request:', JSON.stringify(flowPayload, null, 2));
+
+      const response = await this.msg91Client.post('/api/v5/flow/', flowPayload);
+
+      console.log('[SMS] MSG91 Flow API response:', JSON.stringify(response.data));
+
+      if (response.data?.type === 'success' || response.data?.message?.includes('success')) {
+        return {
+          success: true,
+          messageId: response.data.request_id || response.data?.data?.request_id,
+        };
+      }
+
+      return {
+        success: false,
+        error: response.data?.message || response.data?.description || 'Failed to send SMS via Flow API',
+      };
+    } catch (error: any) {
+      console.error('[SMS] MSG91 Flow API error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.response?.data?.description || error.message,
+      };
+    }
+  }
+
+  /**
+   * Send SMS via MSG91 SendSMS API (fallback for direct DLT)
+   */
+  private async sendViaMSG91SendSMS(params: SendSmsParams & { senderId?: string; peId?: string }): Promise<SmsResult> {
+    const { phone, message, dltTemplateId, smsType, variables, senderId, peId } = params;
 
     const formattedPhone = this.formatPhone(phone);
     const finalMessage = this.replaceVariables(message, variables);
 
     // Use organization's sender ID if provided, otherwise fall back to config default
     const effectiveSenderId = senderId || config.msg91?.senderId || 'MYLEADX';
-    // Use organization's PE_ID if provided (for custom DLT), otherwise use MyLeadex's PE_ID
+    // Use organization's PE_ID if provided (for custom DLT), otherwise use MyLeadX's PE_ID
     const effectivePeId = peId || config.msg91?.dltEntityId;
     const effectiveDltTemplateId = dltTemplateId || config.msg91?.defaultTemplateId;
+
+    // Determine route based on SMS type
+    // Route 4 = Transactional (default), Route 1 = Promotional
+    const route = smsType === 'PROMOTIONAL' ? '1' : (config.msg91?.route || '4');
 
     // Check if DLT template ID is available
     if (!effectiveDltTemplateId) {
@@ -117,18 +191,30 @@ class SmsService {
       };
     }
 
+    // Check promotional timing restrictions (9 AM - 9 PM IST)
+    if (smsType === 'PROMOTIONAL') {
+      const now = new Date();
+      const istHour = (now.getUTCHours() + 5.5) % 24; // Convert to IST
+      if (istHour < 9 || istHour >= 21) {
+        return {
+          success: false,
+          error: 'Promotional SMS can only be sent between 9 AM and 9 PM IST',
+        };
+      }
+    }
+
     try {
       // Use MSG91 Send SMS API for direct SMS with DLT compliance
       const response = await this.msg91Client.post('/api/v5/sendSMS', {
         sender: effectiveSenderId,
-        route: config.msg91?.route || '4',
+        route,
         mobiles: formattedPhone,
         message: finalMessage,
         DLT_TE_ID: effectiveDltTemplateId, // DLT Template ID
         PE_ID: effectivePeId, // Principal Entity ID
       });
 
-      console.log('[SMS] MSG91 response:', JSON.stringify(response.data));
+      console.log('[SMS] MSG91 SendSMS response:', JSON.stringify(response.data));
 
       if (response.data?.type === 'success' || response.data?.message === 'success') {
         return {
@@ -142,12 +228,27 @@ class SmsService {
         error: response.data?.message || response.data?.description || 'Failed to send SMS',
       };
     } catch (error: any) {
-      console.error('[SMS] MSG91 error:', error.response?.data || error.message);
+      console.error('[SMS] MSG91 SendSMS error:', error.response?.data || error.message);
       return {
         success: false,
         error: error.response?.data?.message || error.response?.data?.description || error.message,
       };
     }
+  }
+
+  /**
+   * Send SMS via MSG91 - Uses Flow API if msg91TemplateId available, otherwise SendSMS API
+   */
+  private async sendViaMSG91(params: SendSmsParams & { senderId?: string; peId?: string }): Promise<SmsResult> {
+    // Prefer Flow API if MSG91 template ID is available
+    if (params.msg91TemplateId) {
+      console.log('[SMS] Using MSG91 Flow API with template:', params.msg91TemplateId);
+      return this.sendViaMSG91FlowAPI(params);
+    }
+
+    // Fallback to SendSMS API with direct DLT_TE_ID
+    console.log('[SMS] Using MSG91 SendSMS API with DLT_TE_ID:', params.dltTemplateId);
+    return this.sendViaMSG91SendSMS(params);
   }
 
   /**
@@ -218,19 +319,25 @@ class SmsService {
       return { success: false, error: 'SMS service not configured' };
     }
 
-    // Get template if templateId provided
+    // Get template IDs if templateId provided
     let dltTemplateId = params.dltTemplateId;
-    if (params.templateId && !dltTemplateId) {
+    let msg91TemplateId = params.msg91TemplateId;
+
+    if (params.templateId && (!dltTemplateId || !msg91TemplateId)) {
+      // First check MessageTemplate
       const template = await prisma.messageTemplate.findFirst({
         where: { id: params.templateId, type: TemplateType.SMS },
+        select: { dltTemplateId: true, msg91TemplateId: true },
       });
       if (template) {
-        dltTemplateId = template.dltTemplateId || undefined;
+        dltTemplateId = dltTemplateId || template.dltTemplateId || undefined;
+        msg91TemplateId = msg91TemplateId || template.msg91TemplateId || undefined;
       }
     }
 
     // Fetch organization to get DLT configuration
-    let senderId: string | undefined;
+    // Use custom senderId if provided in params
+    let senderId: string | undefined = params.senderId;
     let peId: string | undefined; // Principal Entity ID for DLT
     let useCustomDlt = false;
 
@@ -257,16 +364,38 @@ class SmsService {
         // Customer has their own DLT registration
         useCustomDlt = true;
         peId = organization.customDltEntityId;
-        senderId = organization.customDltSenderId || organization.smsSenderId;
+        // Use custom senderId if provided, otherwise fall back to org default
+        senderId = senderId || organization.customDltSenderId || organization.smsSenderId;
         console.log(`[SMS] Using customer's DLT - PE_ID: ${peId}, Sender: ${senderId}`);
+
+        // For custom DLT, check organization's SMS templates for msg91TemplateId
+        if (dltTemplateId && !msg91TemplateId) {
+          const orgTemplate = await prisma.organizationSmsTemplate.findFirst({
+            where: {
+              organizationId: params.organizationId,
+              dltTemplateId: dltTemplateId,
+              isActive: true,
+            },
+            select: { msg91TemplateId: true },
+          });
+          if (orgTemplate?.msg91TemplateId) {
+            msg91TemplateId = orgTemplate.msg91TemplateId;
+          }
+        }
       } else {
-        // Use MyLeadex's DLT (white-label or default)
-        senderId = organization?.smsSenderId;
-        peId = config.msg91?.dltEntityId; // MyLeadex's PE ID
+        // Use MyLeadX's DLT (white-label or default)
+        // Use custom senderId if provided, otherwise fall back to org default
+        senderId = senderId || organization?.smsSenderId;
+        peId = config.msg91?.dltEntityId; // MyLeadX's PE ID
       }
     }
 
-    const sendParams = { ...params, dltTemplateId, senderId, peId };
+    // Use default MSG91 template ID from config if not provided
+    if (!msg91TemplateId && config.msg91?.defaultFlowTemplateId) {
+      msg91TemplateId = config.msg91.defaultFlowTemplateId;
+    }
+
+    const sendParams = { ...params, dltTemplateId, msg91TemplateId, senderId, peId };
 
     // Send via configured provider
     let result: SmsResult;

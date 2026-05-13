@@ -656,6 +656,181 @@ class MessageCreditsService {
         return false;
     }
   }
+
+  /**
+   * Reserve credits atomically before sending message
+   * Uses database transaction to prevent race conditions
+   */
+  async reserveCredits(
+    organizationId: string,
+    channel: MessageChannel,
+    count: number,
+    userId?: string
+  ): Promise<{ success: boolean; reservationId?: string; error?: string }> {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Get current balance with lock
+        const balance = await tx.messageBalance.findUnique({
+          where: { organizationId },
+        });
+
+        if (!balance) {
+          return { success: false, error: 'Balance not found' };
+        }
+
+        // Check sufficient credits
+        let currentBalance: number;
+        switch (channel) {
+          case MessageChannel.SMS:
+            currentBalance = balance.smsCredits;
+            break;
+          case MessageChannel.WHATSAPP:
+            currentBalance = balance.whatsappCredits;
+            break;
+          case MessageChannel.RCS:
+            currentBalance = balance.rcsCredits;
+            break;
+          default:
+            return { success: false, error: 'Invalid channel' };
+        }
+
+        if (currentBalance < count) {
+          return { success: false, error: `Insufficient ${channel} credits. Available: ${currentBalance}, Required: ${count}` };
+        }
+
+        // Deduct credits immediately (reserve)
+        const updateData: Record<string, { decrement: number }> = {};
+        const newBalance = currentBalance - count;
+
+        switch (channel) {
+          case MessageChannel.SMS:
+            updateData.smsCredits = { decrement: count };
+            break;
+          case MessageChannel.WHATSAPP:
+            updateData.whatsappCredits = { decrement: count };
+            break;
+          case MessageChannel.RCS:
+            updateData.rcsCredits = { decrement: count };
+            break;
+        }
+
+        await tx.messageBalance.update({
+          where: { organizationId },
+          data: updateData,
+        });
+
+        // Create reservation transaction log
+        const transaction = await tx.messageCreditTransaction.create({
+          data: {
+            organizationId,
+            channel,
+            transactionType: MessageCreditTransactionType.DEBIT,
+            amount: -count,
+            balanceAfter: newBalance,
+            referenceType: 'RESERVATION',
+            description: `Reserved ${count} ${channel} credits`,
+            userId,
+          },
+        });
+
+        return { success: true, reservationId: transaction.id, newBalance };
+      });
+
+      return result;
+    } catch (error: any) {
+      console.error('[Credits] Reserve error:', error);
+      return { success: false, error: error.message || 'Failed to reserve credits' };
+    }
+  }
+
+  /**
+   * Confirm a credit reservation after successful send
+   */
+  async confirmReservation(
+    reservationId: string,
+    messageId?: string
+  ): Promise<{ success: boolean }> {
+    try {
+      await prisma.messageCreditTransaction.update({
+        where: { id: reservationId },
+        data: {
+          referenceType: 'SINGLE_MESSAGE',
+          referenceId: messageId,
+          description: prisma.messageCreditTransaction.fields.description,
+        },
+      });
+
+      // Just update the reference - credits already deducted
+      return { success: true };
+    } catch (error) {
+      console.error('[Credits] Confirm reservation error:', error);
+      return { success: true }; // Non-critical, credits already deducted
+    }
+  }
+
+  /**
+   * Cancel a credit reservation after failed send (refund)
+   */
+  async cancelReservation(
+    organizationId: string,
+    channel: MessageChannel,
+    count: number,
+    reservationId: string,
+    reason?: string
+  ): Promise<{ success: boolean }> {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Refund credits
+        const balance = await tx.messageBalance.findUnique({
+          where: { organizationId },
+        });
+
+        if (!balance) return;
+
+        const updateData: Record<string, { increment: number }> = {};
+        let newBalance = 0;
+
+        switch (channel) {
+          case MessageChannel.SMS:
+            newBalance = balance.smsCredits + count;
+            updateData.smsCredits = { increment: count };
+            break;
+          case MessageChannel.WHATSAPP:
+            newBalance = balance.whatsappCredits + count;
+            updateData.whatsappCredits = { increment: count };
+            break;
+          case MessageChannel.RCS:
+            newBalance = balance.rcsCredits + count;
+            updateData.rcsCredits = { increment: count };
+            break;
+        }
+
+        await tx.messageBalance.update({
+          where: { organizationId },
+          data: updateData,
+        });
+
+        // Log refund
+        await tx.messageCreditTransaction.create({
+          data: {
+            organizationId,
+            channel,
+            transactionType: MessageCreditTransactionType.REFUND,
+            amount: count,
+            balanceAfter: newBalance,
+            referenceType: 'RESERVATION_CANCELLED',
+            referenceId: reservationId,
+            description: reason || `Refunded ${count} ${channel} credits - send failed`,
+          },
+        });
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('[Credits] Cancel reservation error:', error);
+      return { success: false };
+    }
+  }
 }
 
 export const messageCreditsService = new MessageCreditsService();

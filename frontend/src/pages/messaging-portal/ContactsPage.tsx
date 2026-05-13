@@ -7,8 +7,11 @@ import {
   TrashIcon,
   XMarkIcon,
   DocumentArrowDownIcon,
+  CircleStackIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
-import { contactsApi, MessagingContact } from '../../services/messaging.service';
+import { contactsApi, messagingPortalApi, MessagingContact, MessagingContactGroup } from '../../services/messaging.service';
 
 interface ContactFormData {
   phone: string;
@@ -21,6 +24,30 @@ interface UploadMapping {
   phone: string;
   name: string;
   email: string;
+}
+
+interface CrmImportSources {
+  pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }>;
+  campaigns: Array<{ id: string; name: string; leadCount: number }>;
+  tags: Array<{ id: string; name: string; color?: string }>;
+  leadSources: Array<{ id: string; name: string }>;
+  totalLeads: number;
+}
+
+interface CrmImportFilters {
+  pipelineId: string;
+  stageIds: string[];
+  campaignId: string;
+  tagIds: string[];
+  sourceId: string;
+  dateFrom: string;
+  dateTo: string;
+}
+
+interface CrmImportPreview {
+  total: number;
+  preview: Array<{ id: string; name: string; phone: string; email?: string; isDuplicate: boolean }>;
+  estimatedDuplicates: number;
 }
 
 const ContactsPage = () => {
@@ -43,6 +70,26 @@ const ContactsPage = () => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0 });
+
+  // CRM Import state
+  const [showCrmImportModal, setShowCrmImportModal] = useState(false);
+  const [crmSources, setCrmSources] = useState<CrmImportSources | null>(null);
+  const [crmFilters, setCrmFilters] = useState<CrmImportFilters>({
+    pipelineId: '',
+    stageIds: [],
+    campaignId: '',
+    tagIds: [],
+    sourceId: '',
+    dateFrom: '',
+    dateTo: '',
+  });
+  const [crmPreview, setCrmPreview] = useState<CrmImportPreview | null>(null);
+  const [crmGroups, setCrmGroups] = useState<MessagingContactGroup[]>([]);
+  const [crmTargetGroupId, setCrmTargetGroupId] = useState('');
+  const [crmSkipDuplicates, setCrmSkipDuplicates] = useState(true);
+  const [crmImporting, setCrmImporting] = useState(false);
+  const [crmLoadingPreview, setCrmLoadingPreview] = useState(false);
+  const [crmLoadingSources, setCrmLoadingSources] = useState(false);
 
   useEffect(() => {
     loadContacts();
@@ -215,6 +262,98 @@ const ContactsPage = () => {
     URL.revokeObjectURL(url);
   };
 
+  // CRM Import functions
+  const openCrmImportModal = async () => {
+    setShowCrmImportModal(true);
+    setCrmLoadingSources(true);
+    try {
+      const [sources, groups] = await Promise.all([
+        messagingPortalApi.getCrmImportSources(),
+        contactsApi.listGroups(),
+      ]);
+      setCrmSources(sources);
+      setCrmGroups(groups);
+    } catch (error) {
+      console.error('Failed to load CRM sources:', error);
+      alert('Failed to load CRM data. Make sure you have leads in the CRM.');
+    } finally {
+      setCrmLoadingSources(false);
+    }
+  };
+
+  const loadCrmPreview = async () => {
+    setCrmLoadingPreview(true);
+    try {
+      const preview = await messagingPortalApi.previewCrmImport({
+        pipelineId: crmFilters.pipelineId || undefined,
+        stageIds: crmFilters.stageIds.length > 0 ? crmFilters.stageIds : undefined,
+        campaignId: crmFilters.campaignId || undefined,
+        tagIds: crmFilters.tagIds.length > 0 ? crmFilters.tagIds : undefined,
+        sourceId: crmFilters.sourceId || undefined,
+        dateFrom: crmFilters.dateFrom || undefined,
+        dateTo: crmFilters.dateTo || undefined,
+      });
+      setCrmPreview(preview);
+    } catch (error) {
+      console.error('Failed to load preview:', error);
+    } finally {
+      setCrmLoadingPreview(false);
+    }
+  };
+
+  const handleCrmImport = async () => {
+    setCrmImporting(true);
+    try {
+      const result = await messagingPortalApi.importFromCrm({
+        pipelineId: crmFilters.pipelineId || undefined,
+        stageIds: crmFilters.stageIds.length > 0 ? crmFilters.stageIds : undefined,
+        campaignId: crmFilters.campaignId || undefined,
+        tagIds: crmFilters.tagIds.length > 0 ? crmFilters.tagIds : undefined,
+        sourceId: crmFilters.sourceId || undefined,
+        dateFrom: crmFilters.dateFrom || undefined,
+        dateTo: crmFilters.dateTo || undefined,
+        skipDuplicates: crmSkipDuplicates,
+        targetGroupId: crmTargetGroupId || undefined,
+      });
+      alert(`Import complete!\n\nImported: ${result.imported}\nUpdated: ${result.updated}\nSkipped: ${result.skipped}`);
+      setShowCrmImportModal(false);
+      setCrmPreview(null);
+      setCrmFilters({
+        pipelineId: '',
+        stageIds: [],
+        campaignId: '',
+        tagIds: [],
+        sourceId: '',
+        dateFrom: '',
+        dateTo: '',
+      });
+      loadContacts();
+    } catch (error) {
+      console.error('Failed to import from CRM:', error);
+      alert('Failed to import contacts from CRM');
+    } finally {
+      setCrmImporting(false);
+    }
+  };
+
+  const toggleStageId = (stageId: string) => {
+    setCrmFilters((prev) => ({
+      ...prev,
+      stageIds: prev.stageIds.includes(stageId)
+        ? prev.stageIds.filter((id) => id !== stageId)
+        : [...prev.stageIds, stageId],
+    }));
+  };
+
+  const toggleTagId = (tagId: string) => {
+    setCrmFilters((prev) => ({
+      ...prev,
+      tagIds: prev.tagIds.includes(tagId)
+        ? prev.tagIds.filter((id) => id !== tagId)
+        : [...prev.tagIds, tagId],
+    }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -238,6 +377,13 @@ const ContactsPage = () => {
             accept=".csv"
             className="hidden"
           />
+          <button
+            onClick={openCrmImportModal}
+            className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <CircleStackIcon className="h-5 w-5 mr-2" />
+            Import from CRM
+          </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -570,6 +716,310 @@ const ContactsPage = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CRM Import Modal */}
+      {showCrmImportModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowCrmImportModal(false)} />
+            <div className="relative bg-white rounded-xl shadow-xl max-w-3xl w-full p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Import Contacts from CRM</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Import your CRM leads as messaging contacts
+                  </p>
+                </div>
+                <button onClick={() => setShowCrmImportModal(false)}>
+                  <XMarkIcon className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              {crmLoadingSources ? (
+                <div className="py-12 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                  <p className="mt-2 text-gray-500">Loading CRM data...</p>
+                </div>
+              ) : crmSources ? (
+                <div className="space-y-6">
+                  {/* Stats */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <CircleStackIcon className="h-5 w-5 text-blue-600 mr-2" />
+                      <span className="text-sm text-blue-800">
+                        You have <strong>{crmSources.totalLeads.toLocaleString()}</strong> leads in your CRM
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Filters */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Pipeline */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Pipeline</label>
+                      <select
+                        value={crmFilters.pipelineId}
+                        onChange={(e) => {
+                          setCrmFilters({ ...crmFilters, pipelineId: e.target.value, stageIds: [] });
+                          setCrmPreview(null);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">All Pipelines</option>
+                        {crmSources.pipelines.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Campaign */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Campaign</label>
+                      <select
+                        value={crmFilters.campaignId}
+                        onChange={(e) => {
+                          setCrmFilters({ ...crmFilters, campaignId: e.target.value });
+                          setCrmPreview(null);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">All Campaigns</option>
+                        {crmSources.campaigns.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name} ({c.leadCount} leads)</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Lead Source */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Lead Source</label>
+                      <select
+                        value={crmFilters.sourceId}
+                        onChange={(e) => {
+                          setCrmFilters({ ...crmFilters, sourceId: e.target.value });
+                          setCrmPreview(null);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">All Sources</option>
+                        {crmSources.leadSources.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Target Group */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Add to Group (optional)</label>
+                      <select
+                        value={crmTargetGroupId}
+                        onChange={(e) => setCrmTargetGroupId(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Don't add to group</option>
+                        {crmGroups.map((g) => (
+                          <option key={g.id} value={g.id}>{g.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Date From */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Created From</label>
+                      <input
+                        type="date"
+                        value={crmFilters.dateFrom}
+                        onChange={(e) => {
+                          setCrmFilters({ ...crmFilters, dateFrom: e.target.value });
+                          setCrmPreview(null);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+
+                    {/* Date To */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Created To</label>
+                      <input
+                        type="date"
+                        value={crmFilters.dateTo}
+                        onChange={(e) => {
+                          setCrmFilters({ ...crmFilters, dateTo: e.target.value });
+                          setCrmPreview(null);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Pipeline Stages */}
+                  {crmFilters.pipelineId && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Pipeline Stages</label>
+                      <div className="flex flex-wrap gap-2">
+                        {crmSources.pipelines
+                          .find((p) => p.id === crmFilters.pipelineId)
+                          ?.stages.map((stage) => (
+                            <button
+                              key={stage.id}
+                              onClick={() => {
+                                toggleStageId(stage.id);
+                                setCrmPreview(null);
+                              }}
+                              className={`px-3 py-1 rounded-full text-sm font-medium border ${
+                                crmFilters.stageIds.includes(stage.id)
+                                  ? 'bg-primary-100 border-primary-500 text-primary-700'
+                                  : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+                              }`}
+                            >
+                              {stage.name}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {crmSources.tags.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                      <div className="flex flex-wrap gap-2">
+                        {crmSources.tags.map((tag) => (
+                          <button
+                            key={tag.id}
+                            onClick={() => {
+                              toggleTagId(tag.id);
+                              setCrmPreview(null);
+                            }}
+                            className={`px-3 py-1 rounded-full text-sm font-medium border ${
+                              crmFilters.tagIds.includes(tag.id)
+                                ? 'bg-primary-100 border-primary-500 text-primary-700'
+                                : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+                            }`}
+                            style={tag.color ? { borderColor: tag.color } : {}}
+                          >
+                            {tag.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview Button */}
+                  <div className="flex justify-center">
+                    <button
+                      onClick={loadCrmPreview}
+                      disabled={crmLoadingPreview}
+                      className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50"
+                    >
+                      {crmLoadingPreview ? 'Loading Preview...' : 'Preview Contacts'}
+                    </button>
+                  </div>
+
+                  {/* Preview Results */}
+                  {crmPreview && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-3 border-b flex items-center justify-between">
+                        <div>
+                          <span className="font-medium text-gray-900">{crmPreview.total.toLocaleString()}</span>
+                          <span className="text-gray-500 ml-1">contacts to import</span>
+                        </div>
+                        {crmPreview.estimatedDuplicates > 0 && (
+                          <div className="flex items-center text-yellow-600 text-sm">
+                            <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
+                            ~{crmPreview.estimatedDuplicates} duplicates
+                          </div>
+                        )}
+                      </div>
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Name</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Phone</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Email</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {crmPreview.preview.map((lead) => (
+                            <tr key={lead.id}>
+                              <td className="px-4 py-2 text-gray-900">{lead.name}</td>
+                              <td className="px-4 py-2 text-gray-500">{lead.phone}</td>
+                              <td className="px-4 py-2 text-gray-500">{lead.email || '-'}</td>
+                              <td className="px-4 py-2 text-center">
+                                {lead.isDuplicate ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    Duplicate
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                    <CheckCircleIcon className="h-3 w-3 mr-1" />
+                                    New
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {crmPreview.total > 10 && (
+                        <div className="px-4 py-2 bg-gray-50 text-sm text-gray-500 text-center">
+                          Showing first 10 of {crmPreview.total} contacts
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Options */}
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="skipDuplicates"
+                      checked={crmSkipDuplicates}
+                      onChange={(e) => setCrmSkipDuplicates(e.target.checked)}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="skipDuplicates" className="ml-2 text-sm text-gray-700">
+                      Skip duplicate phone numbers (recommended)
+                    </label>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex justify-end space-x-3 pt-4 border-t">
+                    <button
+                      onClick={() => setShowCrmImportModal(false)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCrmImport}
+                      disabled={crmImporting || !crmPreview || crmPreview.total === 0}
+                      className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50 flex items-center"
+                    >
+                      {crmImporting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Importing...
+                        </>
+                      ) : (
+                        <>
+                          <CircleStackIcon className="h-4 w-4 mr-2" />
+                          Import {crmPreview?.total || 0} Contacts
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center text-gray-500">
+                  No CRM data available. Make sure you have leads in your CRM.
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -8,8 +8,12 @@ import {
   CheckCircleIcon,
   DocumentTextIcon,
   ArrowDownTrayIcon,
+  BellIcon,
+  BellAlertIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { messagingCreditsApi, MessageBalance, MessagePurchase, MessagePricing } from '../../services/messaging.service';
+import api from '../../services/api';
 
 // WhatsApp Icon
 const WhatsAppIcon = ({ className }: { className?: string }) => (
@@ -32,6 +36,24 @@ const CREDIT_PACKAGES = [
   { value: 1000000, label: '10 Lakh', discount: 25 },
 ];
 
+interface CreditAlertSettings {
+  enabled: boolean;
+  smsThreshold: number;
+  whatsappThreshold: number;
+  rcsThreshold: number;
+  emailRecipients: string[];
+}
+
+interface CreditAlertStatus {
+  enabled: boolean;
+  channels: {
+    sms: { balance: number; threshold: number; isBelowThreshold: boolean };
+    whatsapp: { balance: number; threshold: number; isBelowThreshold: boolean };
+    rcs: { balance: number; threshold: number; isBelowThreshold: boolean };
+  };
+  lastAlertSentAt: string | null;
+}
+
 const BillingPage = () => {
   const [balance, setBalance] = useState<MessageBalance | null>(null);
   const [pricing, setPricing] = useState<MessagePricing | null>(null);
@@ -42,8 +64,22 @@ const BillingPage = () => {
   const [selectedQuantity, setSelectedQuantity] = useState(1000);
   const [purchasing, setPurchasing] = useState(false);
 
+  // Credit Alert states
+  const [alertSettings, setAlertSettings] = useState<CreditAlertSettings>({
+    enabled: false,
+    smsThreshold: 100,
+    whatsappThreshold: 100,
+    rcsThreshold: 100,
+    emailRecipients: [],
+  });
+  const [alertStatus, setAlertStatus] = useState<CreditAlertStatus | null>(null);
+  const [savingAlerts, setSavingAlerts] = useState(false);
+  const [testingAlert, setTestingAlert] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+
   useEffect(() => {
     loadData();
+    loadCreditAlerts();
   }, []);
 
   const loadData = async () => {
@@ -61,6 +97,63 @@ const BillingPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadCreditAlerts = async () => {
+    try {
+      const [settingsRes, statusRes] = await Promise.all([
+        api.get('/messaging-portal/settings/credit-alerts'),
+        api.get('/messaging-portal/settings/credit-alerts/status'),
+      ]);
+      setAlertSettings(settingsRes.data);
+      setAlertStatus(statusRes.data);
+    } catch (error) {
+      console.error('Failed to load credit alerts:', error);
+    }
+  };
+
+  const handleSaveAlertSettings = async () => {
+    setSavingAlerts(true);
+    try {
+      await api.put('/messaging-portal/settings/credit-alerts', alertSettings);
+      await loadCreditAlerts();
+      alert('Credit alert settings saved successfully!');
+    } catch (error) {
+      console.error('Failed to save alert settings:', error);
+      alert('Failed to save settings. Please try again.');
+    } finally {
+      setSavingAlerts(false);
+    }
+  };
+
+  const handleTestAlert = async () => {
+    setTestingAlert(true);
+    try {
+      await api.post('/messaging-portal/settings/credit-alerts/test');
+      alert('Test alert sent successfully! Check your email.');
+    } catch (error) {
+      console.error('Failed to send test alert:', error);
+      alert('Failed to send test alert. Please check your email configuration.');
+    } finally {
+      setTestingAlert(false);
+    }
+  };
+
+  const addEmailRecipient = () => {
+    if (newEmail && !alertSettings.emailRecipients.includes(newEmail)) {
+      setAlertSettings({
+        ...alertSettings,
+        emailRecipients: [...alertSettings.emailRecipients, newEmail],
+      });
+      setNewEmail('');
+    }
+  };
+
+  const removeEmailRecipient = (email: string) => {
+    setAlertSettings({
+      ...alertSettings,
+      emailRecipients: alertSettings.emailRecipients.filter((e) => e !== email),
+    });
   };
 
   const getChannelPrice = (channel: Channel) => {
@@ -372,6 +465,188 @@ const BillingPage = () => {
           </div>
         </div>
       )}
+
+      {/* Credit Alerts */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <BellIcon className="h-6 w-6 text-primary-600 mr-2" />
+            <h2 className="text-lg font-semibold text-gray-900">Low Credit Alerts</h2>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={alertSettings.enabled}
+              onChange={(e) => setAlertSettings({ ...alertSettings, enabled: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+            <span className="ml-2 text-sm font-medium text-gray-700">
+              {alertSettings.enabled ? 'Enabled' : 'Disabled'}
+            </span>
+          </label>
+        </div>
+
+        {alertSettings.enabled && (
+          <div className="space-y-6">
+            {/* Current Status */}
+            {alertStatus && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Current Status</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className={`p-3 rounded-lg ${alertStatus.channels.sms.isBelowThreshold ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">SMS</span>
+                      {alertStatus.channels.sms.isBelowThreshold ? (
+                        <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                      ) : (
+                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                      )}
+                    </div>
+                    <p className={`text-lg font-semibold ${alertStatus.channels.sms.isBelowThreshold ? 'text-red-700' : 'text-green-700'}`}>
+                      {alertStatus.channels.sms.balance.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500">Threshold: {alertStatus.channels.sms.threshold.toLocaleString()}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${alertStatus.channels.whatsapp.isBelowThreshold ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">WhatsApp</span>
+                      {alertStatus.channels.whatsapp.isBelowThreshold ? (
+                        <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                      ) : (
+                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                      )}
+                    </div>
+                    <p className={`text-lg font-semibold ${alertStatus.channels.whatsapp.isBelowThreshold ? 'text-red-700' : 'text-green-700'}`}>
+                      {alertStatus.channels.whatsapp.balance.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500">Threshold: {alertStatus.channels.whatsapp.threshold.toLocaleString()}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${alertStatus.channels.rcs.isBelowThreshold ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">RCS</span>
+                      {alertStatus.channels.rcs.isBelowThreshold ? (
+                        <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                      ) : (
+                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                      )}
+                    </div>
+                    <p className={`text-lg font-semibold ${alertStatus.channels.rcs.isBelowThreshold ? 'text-red-700' : 'text-green-700'}`}>
+                      {alertStatus.channels.rcs.balance.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500">Threshold: {alertStatus.channels.rcs.threshold.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Threshold Settings */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Alert Thresholds</h3>
+              <p className="text-xs text-gray-500 mb-4">You'll receive an alert when credits fall below these values</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">SMS Threshold</label>
+                  <input
+                    type="number"
+                    value={alertSettings.smsThreshold}
+                    onChange={(e) => setAlertSettings({ ...alertSettings, smsThreshold: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">WhatsApp Threshold</label>
+                  <input
+                    type="number"
+                    value={alertSettings.whatsappThreshold}
+                    onChange={(e) => setAlertSettings({ ...alertSettings, whatsappThreshold: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">RCS Threshold</label>
+                  <input
+                    type="number"
+                    value={alertSettings.rcsThreshold}
+                    onChange={(e) => setAlertSettings({ ...alertSettings, rcsThreshold: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500"
+                    min="0"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Email Recipients */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Email Recipients</h3>
+              <p className="text-xs text-gray-500 mb-4">Alert emails will be sent to these addresses</p>
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="Enter email address"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500"
+                  onKeyPress={(e) => e.key === 'Enter' && addEmailRecipient()}
+                />
+                <button
+                  onClick={addEmailRecipient}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700"
+                >
+                  Add
+                </button>
+              </div>
+              {alertSettings.emailRecipients.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {alertSettings.emailRecipients.map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+                    >
+                      {email}
+                      <button
+                        onClick={() => removeEmailRecipient(email)}
+                        className="ml-2 text-gray-400 hover:text-gray-600"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">No email recipients added</p>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <button
+                onClick={handleSaveAlertSettings}
+                disabled={savingAlerts}
+                className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+              >
+                {savingAlerts ? 'Saving...' : 'Save Settings'}
+              </button>
+              <button
+                onClick={handleTestAlert}
+                disabled={testingAlert || alertSettings.emailRecipients.length === 0}
+                className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                <BellAlertIcon className="h-4 w-4 mr-2" />
+                {testingAlert ? 'Sending...' : 'Send Test Alert'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!alertSettings.enabled && (
+          <p className="text-sm text-gray-500">
+            Enable low credit alerts to receive email notifications when your message credits fall below a specified threshold.
+          </p>
+        )}
+      </div>
 
       {/* Transaction History */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

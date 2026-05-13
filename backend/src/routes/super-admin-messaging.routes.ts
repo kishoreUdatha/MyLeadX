@@ -8,6 +8,7 @@ import { body, param, query } from 'express-validator';
 import { prisma } from '../config/database';
 import { validate } from '../middlewares/validate';
 import { MessageChannel, MessageCreditTransactionType } from '@prisma/client';
+import { senderIdNotificationService } from '../services/sender-id-notification.service';
 
 const router = Router();
 
@@ -686,6 +687,7 @@ router.post(
     param('id').isUUID(),
     body('name').isString().trim().notEmpty(),
     body('dltTemplateId').isString().trim().notEmpty(),
+    body('msg91TemplateId').optional().isString().trim(),
     body('content').isString().trim().notEmpty(),
     body('dltContentType').optional().isIn(['TRANSACTIONAL', 'PROMOTIONAL']),
     body('variables').optional().isArray(),
@@ -694,7 +696,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name, dltTemplateId, content, dltContentType, variables, description } = req.body;
+      const { name, dltTemplateId, msg91TemplateId, content, dltContentType, variables, description } = req.body;
 
       // Verify organization exists and has custom DLT
       const organization = await prisma.organization.findUnique({
@@ -731,6 +733,7 @@ router.post(
           organizationId: id,
           name,
           dltTemplateId,
+          msg91TemplateId: msg91TemplateId || null, // MSG91 Flow API template ID
           content,
           dltContentType: dltContentType || 'TRANSACTIONAL',
           variables: variables || [],
@@ -813,6 +816,7 @@ router.put(
   validate([
     body('name').optional().isString().trim(),
     body('content').optional().isString().trim(),
+    body('msg91TemplateId').optional().isString().trim(),
     body('variables').optional().isArray(),
     body('isActive').optional().isBoolean(),
     body('description').optional().isString().trim(),
@@ -820,7 +824,7 @@ router.put(
   async (req: Request, res: Response) => {
     try {
       const { id, templateId } = req.params;
-      const { name, content, variables, isActive, description } = req.body;
+      const { name, content, msg91TemplateId, variables, isActive, description } = req.body;
 
       const template = await prisma.organizationSmsTemplate.findFirst({
         where: { id: templateId, organizationId: id },
@@ -835,6 +839,7 @@ router.put(
         data: {
           ...(name && { name }),
           ...(content && { content }),
+          ...(msg91TemplateId !== undefined && { msg91TemplateId }),
           ...(variables && { variables }),
           ...(isActive !== undefined && { isActive }),
           ...(description !== undefined && { description }),
@@ -852,6 +857,255 @@ router.put(
     }
   }
 );
+
+// ==================== DLT VALIDATION ====================
+
+/**
+ * POST /organizations/:id/dlt-validate - Validate DLT credentials by sending a test SMS
+ * This verifies that the PE ID, Sender ID, and Template ID are correctly configured
+ */
+router.post(
+  '/organizations/:id/dlt-validate',
+  validate([
+    body('testPhone').isMobilePhone('any').withMessage('Valid phone number is required'),
+    body('templateId').optional().isString().trim(),
+  ]),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { testPhone, templateId } = req.body;
+
+      // Get organization's DLT configuration
+      const org = await prisma.organization.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          smsProviderType: true,
+          smsSenderId: true,
+          customDltEntityId: true,
+          customDltSenderId: true,
+          customDltTeleMarketerId: true,
+          smsEnabled: true,
+        },
+      });
+
+      if (!org) {
+        return res.status(404).json({ success: false, message: 'Organization not found' });
+      }
+
+      const validationResults: {
+        peIdValid: boolean;
+        senderIdValid: boolean;
+        templateIdValid: boolean;
+        telemarketerIdValid: boolean;
+        testSmsSent: boolean;
+        errors: string[];
+        warnings: string[];
+      } = {
+        peIdValid: false,
+        senderIdValid: false,
+        templateIdValid: false,
+        telemarketerIdValid: true, // Optional field
+        testSmsSent: false,
+        errors: [],
+        warnings: [],
+      };
+
+      // Validate based on provider type
+      if (org.smsProviderType === 'CUSTOM') {
+        // Validate PE ID format (19 digits for India DLT)
+        if (org.customDltEntityId) {
+          const peIdRegex = /^\d{19}$/;
+          if (peIdRegex.test(org.customDltEntityId)) {
+            validationResults.peIdValid = true;
+          } else {
+            validationResults.errors.push('PE ID (Entity ID) must be exactly 19 digits');
+          }
+        } else {
+          validationResults.errors.push('PE ID (Entity ID) is required for custom DLT');
+        }
+
+        // Validate Sender ID format (6 uppercase letters)
+        if (org.customDltSenderId) {
+          const senderIdRegex = /^[A-Z]{6}$/;
+          if (senderIdRegex.test(org.customDltSenderId)) {
+            validationResults.senderIdValid = true;
+          } else {
+            validationResults.errors.push('Sender ID must be exactly 6 uppercase letters');
+          }
+        } else {
+          validationResults.errors.push('Sender ID is required for custom DLT');
+        }
+
+        // Validate Telemarketer ID if provided (optional, 19 digits)
+        if (org.customDltTeleMarketerId) {
+          const tmIdRegex = /^\d{19}$/;
+          if (!tmIdRegex.test(org.customDltTeleMarketerId)) {
+            validationResults.telemarketerIdValid = false;
+            validationResults.warnings.push('Telemarketer ID should be 19 digits if provided');
+          }
+        }
+      } else {
+        // Platform DLT - validate assigned sender ID
+        if (org.smsSenderId) {
+          const senderIdRegex = /^[A-Z]{6}$/;
+          if (senderIdRegex.test(org.smsSenderId)) {
+            validationResults.senderIdValid = true;
+            validationResults.peIdValid = true; // Platform PE ID is managed by MyLeadX
+          } else {
+            validationResults.errors.push('Assigned Sender ID format is invalid');
+          }
+        } else {
+          validationResults.warnings.push('No Sender ID assigned yet. Please request one.');
+        }
+      }
+
+      // Validate template if provided
+      let testTemplate = null;
+      if (templateId) {
+        testTemplate = await prisma.organizationSmsTemplate.findFirst({
+          where: {
+            organizationId: id,
+            dltTemplateId: templateId,
+            isActive: true,
+          },
+        });
+
+        if (testTemplate) {
+          validationResults.templateIdValid = true;
+        } else {
+          // Check if it's in the general templates
+          const generalTemplate = await prisma.messageTemplate.findFirst({
+            where: {
+              dltTemplateId: templateId,
+              isActive: true,
+            },
+          });
+          if (generalTemplate) {
+            validationResults.templateIdValid = true;
+            testTemplate = generalTemplate;
+          } else {
+            validationResults.errors.push('Template ID not found in registered templates');
+          }
+        }
+      }
+
+      // Send test SMS if validation passes
+      if (validationResults.peIdValid && validationResults.senderIdValid && !validationResults.errors.length) {
+        try {
+          // Import SMS service
+          const { smsService } = await import('../services/messaging');
+
+          // Normalize phone
+          let normalizedPhone = testPhone.replace(/\D/g, '');
+          if (normalizedPhone.length === 10) {
+            normalizedPhone = '91' + normalizedPhone;
+          }
+
+          // Use test template or a simple validation message
+          const testMessage = testTemplate?.content || 'This is a test message to validate your DLT configuration. - MyLeadX';
+          const dltTemplateId = templateId || testTemplate?.dltTemplateId;
+
+          if (!dltTemplateId) {
+            validationResults.warnings.push('No DLT Template ID provided. Test SMS may fail without a valid template.');
+          }
+
+          const result = await smsService.send({
+            phone: normalizedPhone,
+            message: testMessage,
+            dltTemplateId,
+            organizationId: id,
+            userId: 'system-validation',
+          });
+
+          if (result.success) {
+            validationResults.testSmsSent = true;
+          } else {
+            validationResults.errors.push(`Test SMS failed: ${result.error}`);
+          }
+        } catch (smsError: any) {
+          validationResults.errors.push(`SMS service error: ${smsError.message}`);
+        }
+      }
+
+      // Determine overall status
+      const isValid = validationResults.peIdValid &&
+                      validationResults.senderIdValid &&
+                      validationResults.errors.length === 0;
+
+      res.json({
+        success: true,
+        data: {
+          organizationId: id,
+          organizationName: org.name,
+          providerType: org.smsProviderType,
+          isValid,
+          validation: validationResults,
+          configuration: {
+            peId: org.smsProviderType === 'CUSTOM' ? org.customDltEntityId : '(Platform Managed)',
+            senderId: org.smsProviderType === 'CUSTOM' ? org.customDltSenderId : org.smsSenderId,
+            teleMarketerId: org.customDltTeleMarketerId || null,
+          },
+          recommendations: isValid ? [] : [
+            !validationResults.peIdValid && 'Ensure PE ID is 19 digits from your DLT portal',
+            !validationResults.senderIdValid && 'Ensure Sender ID is 6 uppercase letters registered on DLT',
+            !validationResults.testSmsSent && 'Send a test SMS to verify end-to-end connectivity',
+          ].filter(Boolean),
+        },
+      });
+    } catch (error) {
+      console.error('[SuperAdmin Messaging] DLT validation error:', error);
+      res.status(500).json({ success: false, message: 'Failed to validate DLT configuration' });
+    }
+  }
+);
+
+/**
+ * GET /dlt-platforms - Get list of DLT platforms in India
+ */
+router.get('/dlt-platforms', async (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      platforms: [
+        { code: 'JIO', name: 'Jio DLT', url: 'https://trueconnect.jio.com' },
+        { code: 'AIRTEL', name: 'Airtel DLT', url: 'https://dlt.airtel.in' },
+        { code: 'VI', name: 'Vi (Vodafone-Idea) DLT', url: 'https://www.vilpower.in' },
+        { code: 'BSNL', name: 'BSNL DLT', url: 'https://www.ucc-bsnl.co.in' },
+      ],
+      requirements: {
+        peId: {
+          description: 'Principal Entity ID - 19 digit unique identifier',
+          format: '19 digits',
+          example: '1234567890123456789',
+        },
+        senderId: {
+          description: 'Sender ID - 6 character alphanumeric header',
+          format: '6 uppercase letters',
+          example: 'MLXCRM',
+        },
+        templateId: {
+          description: 'DLT Template ID - Unique ID for registered message template',
+          format: 'Alphanumeric string',
+          example: '1234567890123456789',
+        },
+        teleMarketerId: {
+          description: 'Telemarketer ID - Required if using a telemarketer/aggregator',
+          format: '19 digits (optional)',
+          example: '1234567890123456789',
+          required: false,
+        },
+      },
+      notes: [
+        'All SMS messages in India require DLT registration',
+        'Templates must be pre-registered on the DLT portal',
+        'Sender ID must match exactly with DLT registration',
+        'Telemarketer ID is required if you are using an aggregator',
+      ],
+    },
+  });
+});
 
 // ==================== SENDER ID REQUESTS MANAGEMENT ====================
 
@@ -967,6 +1221,11 @@ router.put('/sender-id-requests/:id/review', async (req: Request, res: Response)
 
     const request = await prisma.senderIdRequest.findUnique({
       where: { id },
+      include: {
+        organization: {
+          select: { id: true, name: true },
+        },
+      },
     });
 
     if (!request) {
@@ -988,6 +1247,28 @@ router.put('/sender-id-requests/:id/review', async (req: Request, res: Response)
         // We store the super admin info in statusReason instead
         statusReason: `Being reviewed by Super Admin: ${superAdmin?.email || 'Unknown'}`,
       },
+    });
+
+    // Send review notification to customer
+    senderIdNotificationService.notifyCustomerOnReview(
+      {
+        id: request.id,
+        requestedSenderId: request.requestedSenderId,
+        businessName: request.businessName,
+        businessType: request.businessType,
+        purpose: request.purpose,
+        contactName: request.contactName,
+        contactEmail: request.contactEmail,
+        contactPhone: request.contactPhone,
+        hasOwnDlt: request.hasOwnDlt,
+        dltEntityId: request.dltEntityId,
+        dltPlatform: request.dltPlatform,
+        organizationId: request.organizationId,
+        status: 'REVIEWING',
+      },
+      { id: request.organization.id, name: request.organization.name }
+    ).catch(err => {
+      console.error('[SuperAdmin Messaging] Failed to send review notification:', err);
     });
 
     res.json({
@@ -1083,6 +1364,29 @@ router.put(
         }),
       ]);
 
+      // Send approval notification to customer
+      senderIdNotificationService.notifyCustomerOnApproval(
+        {
+          id: request.id,
+          requestedSenderId: request.requestedSenderId,
+          businessName: request.businessName,
+          businessType: request.businessType,
+          purpose: request.purpose,
+          contactName: request.contactName,
+          contactEmail: request.contactEmail,
+          contactPhone: request.contactPhone,
+          hasOwnDlt: request.hasOwnDlt,
+          dltEntityId: request.dltEntityId,
+          dltPlatform: request.dltPlatform,
+          organizationId: request.organizationId,
+          status: 'APPROVED',
+          assignedSenderId: assignedSenderId.toUpperCase(),
+        },
+        { id: request.organization.id, name: request.organization.name }
+      ).catch(err => {
+        console.error('[SuperAdmin Messaging] Failed to send approval notification:', err);
+      });
+
       res.json({
         success: true,
         message: `Request approved. Sender ID "${assignedSenderId.toUpperCase()}" assigned to ${request.organization.name}`,
@@ -1109,6 +1413,11 @@ router.put(
 
       const request = await prisma.senderIdRequest.findUnique({
         where: { id },
+        include: {
+          organization: {
+            select: { id: true, name: true },
+          },
+        },
       });
 
       if (!request) {
@@ -1130,6 +1439,30 @@ router.put(
           processedAt: new Date(),
           // Note: processedById links to User table, Super Admins are separate - leave null
         },
+      });
+
+      // Send rejection notification to customer
+      senderIdNotificationService.notifyCustomerOnRejection(
+        {
+          id: request.id,
+          requestedSenderId: request.requestedSenderId,
+          businessName: request.businessName,
+          businessType: request.businessType,
+          purpose: request.purpose,
+          contactName: request.contactName,
+          contactEmail: request.contactEmail,
+          contactPhone: request.contactPhone,
+          hasOwnDlt: request.hasOwnDlt,
+          dltEntityId: request.dltEntityId,
+          dltPlatform: request.dltPlatform,
+          organizationId: request.organizationId,
+          status: 'REJECTED',
+          statusReason: reason,
+        },
+        { id: request.organization.id, name: request.organization.name },
+        reason
+      ).catch(err => {
+        console.error('[SuperAdmin Messaging] Failed to send rejection notification:', err);
       });
 
       res.json({

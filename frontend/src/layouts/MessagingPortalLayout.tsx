@@ -16,6 +16,11 @@ import {
   Bars3Icon,
   XMarkIcon,
   UserCircleIcon,
+  PaperAirplaneIcon,
+  NoSymbolIcon,
+  ClockIcon,
+  InboxIcon,
+  RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -26,11 +31,21 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/messaging-portal/dashboard', icon: HomeIcon },
+  // Sending Options
+  { name: 'Quick Send', href: '/messaging-portal/quick-send', icon: PaperAirplaneIcon },
+  { name: 'Bulk Send', href: '/messaging-portal/campaigns/create', icon: RocketLaunchIcon },
+  { name: 'Scheduled', href: '/messaging-portal/scheduled', icon: ClockIcon },
+  // Contacts & Groups
   { name: 'Contacts', href: '/messaging-portal/contacts', icon: UsersIcon },
   { name: 'Groups', href: '/messaging-portal/groups', icon: FolderIcon },
-  { name: 'Campaigns', href: '/messaging-portal/campaigns', icon: MegaphoneIcon },
+  // Campaigns & Templates
+  { name: 'My Campaigns', href: '/messaging-portal/campaigns', icon: MegaphoneIcon },
   { name: 'Templates', href: '/messaging-portal/templates', icon: DocumentTextIcon },
+  // History & Reports
+  { name: 'Message History', href: '/messaging-portal/message-history', icon: InboxIcon },
   { name: 'Reports', href: '/messaging-portal/reports', icon: ChartBarIcon },
+  { name: 'Opt-Outs', href: '/messaging-portal/opt-outs', icon: NoSymbolIcon },
+  // Account
   { name: 'Billing', href: '/messaging-portal/billing', icon: CreditCardIcon },
   { name: 'Settings', href: '/messaging-portal/settings', icon: Cog6ToothIcon },
 ];
