@@ -356,6 +356,9 @@ model Organization {
   // Messaging Platform
   messageBalance MessageBalance?
 
+  // Platform-level sales — when a PlatformProspect converts, it links to this Organization
+  platformProspects PlatformProspect[] @relation("PlatformProspectOrg")
+
   @@index([industrySlug])
   @@map("organizations")
 }
@@ -519,6 +522,11 @@ model User {
   // Messaging Portal Settings
   senderIdRequestsProcessed SenderIdRequest[] @relation("SenderIdRequestProcessor")
   messagingApiKeysCreated   MessagingApiKey[] @relation("ApiKeyCreator")
+
+  // Platform-level sales (SaaS sales of MyLeadX)
+  platformProspectsAssigned PlatformProspect[] @relation("PlatformProspectAssignee")
+  demosHosted               Demo[]             @relation("DemoHost")
+  prospectActivities        ProspectActivity[] @relation("ProspectActivityUser")
 
   @@unique([organizationId, email])
   @@map("users")
@@ -15451,4 +15459,229 @@ model MessagingApiKey {
   @@index([keyPrefix])
   @@index([isActive])
   @@map("messaging_api_keys")
+}
+
+// =====================================================
+// PLATFORM-LEVEL SALES (SaaS sales for MyLeadX itself)
+// =====================================================
+// Tracks prospects/leads for SMARTGROW INFOTECH selling MyLeadX subscriptions
+// to new businesses. SEPARATE from tenant-level Lead model which tracks each
+// tenant's own customers. Visible only to super-admins.
+
+model PlatformProspect {
+  id String @id @default(uuid())
+
+  fullName    String
+  email       String
+  phone       String
+  companyName String?
+  designation String?
+  teamSize    String?
+  industry    String?
+  currentCrm  String?
+
+  source        ProspectSource
+  campaign      String?
+  medium        String?
+  utmContent    String?
+  utmTerm       String?
+  adId          String?
+  adName        String?
+  landingPageId String?
+  referrerUrl   String? @db.Text
+
+  // Offline/referral specifics
+  referrerName       String?
+  referrerProspectId String?
+  eventName          String?
+
+  // Pipeline
+  stage        ProspectStage @default(NEW)
+  stageHistory Json          @default("[]")
+  score        Int           @default(0)
+  lostReason   String?
+
+  assignedToId String?
+  assignedAt   DateTime?
+
+  firstResponseAt DateTime?
+  demoScheduledAt DateTime?
+  trialStartedAt  DateTime?
+  convertedAt     DateTime?
+  lostAt          DateTime?
+
+  // Link to tenant org once converted
+  organizationId String?
+
+  ipAddress String?
+  userAgent String? @db.Text
+  rawData   Json    @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedTo   User?                 @relation("PlatformProspectAssignee", fields: [assignedToId], references: [id])
+  organization Organization?         @relation("PlatformProspectOrg", fields: [organizationId], references: [id])
+  demos        Demo[]
+  activities   ProspectActivity[]
+  attributions ProspectAttribution[]
+
+  @@index([source])
+  @@index([stage])
+  @@index([assignedToId])
+  @@index([email])
+  @@index([phone])
+  @@index([createdAt])
+  @@index([organizationId])
+  @@map("platform_prospects")
+}
+
+model Demo {
+  id              String       @id @default(uuid())
+  prospectId      String
+  scheduledAt     DateTime
+  durationMinutes Int          @default(30)
+  meetingUrl      String?      @db.Text
+  attendeeEmails  String[]     @default([])
+  hostId          String
+  status          DemoStatus   @default(SCHEDULED)
+  recordingUrl    String?      @db.Text
+  notes           String?      @db.Text
+  outcome         DemoOutcome?
+  followUpDate    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prospect PlatformProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  host     User             @relation("DemoHost", fields: [hostId], references: [id])
+
+  @@index([prospectId])
+  @@index([hostId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("demos")
+}
+
+model ProspectActivity {
+  id         String               @id @default(uuid())
+  prospectId String
+  userId     String
+  type       ProspectActivityType
+
+  callDurationSeconds Int?
+  callRecordingUrl    String? @db.Text
+  callOutcome         String?
+
+  emailSubject   String?
+  emailBody      String? @db.Text
+  emailDirection String?
+
+  noteContent String? @db.Text
+
+  taskTitle     String?
+  taskDueDate   DateTime?
+  taskCompleted Boolean   @default(false)
+
+  fromStage String?
+  toStage   String?
+
+  metadata Json @default("{}")
+
+  createdAt DateTime @default(now())
+
+  prospect PlatformProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  user     User             @relation("ProspectActivityUser", fields: [userId], references: [id])
+
+  @@index([prospectId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("prospect_activities")
+}
+
+model ProspectAttribution {
+  id             String   @id @default(uuid())
+  prospectId     String
+  touchpointType String
+  source         String
+  campaign       String?
+  medium         String?
+  timestamp      DateTime @default(now())
+
+  prospect PlatformProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId])
+  @@index([source])
+  @@map("prospect_attributions")
+}
+
+enum ProspectSource {
+  META_LEAD_AD
+  META_LANDING_PAGE
+  GOOGLE_LEAD_FORM
+  GOOGLE_ADS_LANDING
+  LINKEDIN_LEAD_GEN
+  TIKTOK_LEAD_GEN
+  TWITTER_LEAD_GEN
+  YOUTUBE_LEAD_GEN
+  ORGANIC
+  DIRECT
+  REFERRAL
+  MANUAL
+  EMAIL_CAMPAIGN
+  WEBINAR
+  EVENT
+  PARTNER
+  COLD_OUTREACH
+  OTHER
+}
+
+enum ProspectStage {
+  NEW
+  MQL
+  SQL
+  DEMO_SCHEDULED
+  DEMO_DONE
+  PROPOSAL_SENT
+  NEGOTIATING
+  TRIAL_STARTED
+  CONVERTED
+  LOST
+  UNRESPONSIVE
+}
+
+enum ProspectActivityType {
+  CALL
+  EMAIL
+  SMS
+  WHATSAPP
+  NOTE
+  DEMO_SCHEDULED
+  DEMO_COMPLETED
+  TASK
+  STAGE_CHANGE
+  ASSIGNMENT_CHANGE
+  EMAIL_OPENED
+  EMAIL_CLICKED
+  FORM_SUBMITTED
+}
+
+enum DemoStatus {
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  RESCHEDULED
+}
+
+enum DemoOutcome {
+  HIGHLY_INTERESTED
+  INTERESTED
+  NEEDS_FOLLOWUP
+  NEEDS_MORE_INFO
+  NOT_FIT
+  READY_TO_BUY
+  COMPETITOR_CHOSEN
+  PRICING_ISSUE
+  TIMING_ISSUE
 }
