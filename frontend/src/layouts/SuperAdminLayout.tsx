@@ -139,6 +139,19 @@ export default function SuperAdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  const toggleSection = (title: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  };
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch<AppDispatch>();
@@ -292,21 +305,33 @@ export default function SuperAdminLayout() {
           <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto scroll-smooth scrollbar-hide overscroll-contain">
             {(() => {
               let itemIndex = 0;
-              return navigationSections.map((section) => (
-                <div key={section.title}>
-                  <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    {section.title}
-                  </p>
-                  <div className="space-y-1">
-                    {section.items.map((item) => {
-                      const currentItemIndex = itemIndex++;
-                      return (
-                        <NavItemComponent key={item.name} item={item} index={currentItemIndex} onClick={() => setSidebarOpen(false)} />
-                      );
-                    })}
+              return navigationSections.map((section) => {
+                const isCollapsed = collapsedSections.has(section.title);
+                return (
+                  <div key={section.title}>
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(section.title)}
+                      className="w-full flex items-center justify-between px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
+                    >
+                      <span>{section.title}</span>
+                      <ChevronDownIcon
+                        className={`h-4 w-4 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+                      />
+                    </button>
+                    {!isCollapsed && (
+                      <div className="space-y-1">
+                        {section.items.map((item) => {
+                          const currentItemIndex = itemIndex++;
+                          return (
+                            <NavItemComponent key={item.name} item={item} index={currentItemIndex} onClick={() => setSidebarOpen(false)} />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ));
+                );
+              });
             })()}
           </nav>
 
@@ -344,21 +369,33 @@ export default function SuperAdminLayout() {
           <nav ref={navRef} tabIndex={0} className="flex-1 px-3 py-4 space-y-4 outline-none overflow-y-auto scroll-smooth scrollbar-hide overscroll-contain">
             {(() => {
               let itemIndex = 0;
-              return navigationSections.map((section) => (
-                <div key={section.title}>
-                  <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    {section.title}
-                  </p>
-                  <div className="space-y-1">
-                    {section.items.map((item) => {
-                      const currentItemIndex = itemIndex++;
-                      return (
-                        <NavItemComponent key={item.name} item={item} index={currentItemIndex} />
-                      );
-                    })}
+              return navigationSections.map((section) => {
+                const isCollapsed = collapsedSections.has(section.title);
+                return (
+                  <div key={section.title}>
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(section.title)}
+                      className="w-full flex items-center justify-between px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
+                    >
+                      <span>{section.title}</span>
+                      <ChevronDownIcon
+                        className={`h-4 w-4 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+                      />
+                    </button>
+                    {!isCollapsed && (
+                      <div className="space-y-1">
+                        {section.items.map((item) => {
+                          const currentItemIndex = itemIndex++;
+                          return (
+                            <NavItemComponent key={item.name} item={item} index={currentItemIndex} />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ));
+                );
+              });
             })()}
           </nav>
 
