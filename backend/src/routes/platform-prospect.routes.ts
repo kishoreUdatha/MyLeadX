@@ -7,15 +7,13 @@
 
 import { Router } from 'express';
 import { platformProspectController } from '../controllers/platform-prospect.controller';
-import { authenticate } from '../middlewares/auth';
-import { requireSuperAdmin } from '../middlewares/tenant-isolation';
+import { verifySuperAdmin } from '../middlewares/super-admin-auth';
 
 const router = Router();
 
 router.post('/public/submit', platformProspectController.createPublic.bind(platformProspectController));
 
-router.use(authenticate);
-router.use(requireSuperAdmin);
+router.use(verifySuperAdmin);
 
 router.get('/', platformProspectController.list.bind(platformProspectController));
 router.get('/pipeline-summary', platformProspectController.pipelineSummary.bind(platformProspectController));

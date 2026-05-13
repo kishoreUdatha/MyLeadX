@@ -1,12 +1,10 @@
 import { Router } from 'express';
 import { platformAnalyticsController } from '../controllers/platform-analytics.controller';
-import { authenticate } from '../middlewares/auth';
-import { requireSuperAdmin } from '../middlewares/tenant-isolation';
+import { verifySuperAdmin } from '../middlewares/super-admin-auth';
 
 const router = Router();
 
-router.use(authenticate);
-router.use(requireSuperAdmin);
+router.use(verifySuperAdmin);
 
 router.get('/channel-breakdown', platformAnalyticsController.channelBreakdown.bind(platformAnalyticsController));
 router.get('/conversion-funnel', platformAnalyticsController.conversionFunnel.bind(platformAnalyticsController));
