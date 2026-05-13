@@ -32,6 +32,53 @@ interface LandingPage {
   seoSettings?: { metaTitle?: string; metaDescription?: string };
 }
 
+// Meta Pixel — initialised once per page load when VITE_META_PIXEL_ID is set.
+// fbq is the global function injected by Meta's Pixel script.
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+    _fbq?: unknown;
+  }
+}
+
+function installMetaPixel(pixelId: string) {
+  if (typeof window === 'undefined') return;
+  if (window.fbq) {
+    window.fbq('init', pixelId);
+    window.fbq('track', 'PageView');
+    return;
+  }
+
+  // Standard Meta Pixel snippet (https://developers.facebook.com/docs/meta-pixel/get-started)
+  /* eslint-disable */
+  (function (f: any, b: Document, e: string, v: string) {
+    if (f.fbq) return;
+    const n: any = (f.fbq = function (...args: unknown[]) {
+      n.callMethod ? n.callMethod.apply(n, args) : n.queue.push(args);
+    });
+    if (!f._fbq) f._fbq = n;
+    n.push = n;
+    n.loaded = true;
+    n.version = '2.0';
+    n.queue = [];
+    const t = b.createElement(e) as HTMLScriptElement;
+    t.async = true;
+    t.src = v;
+    const s = b.getElementsByTagName(e)[0];
+    s.parentNode?.insertBefore(t, s);
+  })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+  /* eslint-enable */
+
+  window.fbq?.('init', pixelId);
+  window.fbq?.('track', 'PageView');
+}
+
+function fireMetaLeadEvent() {
+  if (typeof window !== 'undefined' && window.fbq) {
+    window.fbq('track', 'Lead');
+  }
+}
+
 function extractOrgSlugFromHost(): string | null {
   if (typeof window === 'undefined') return null;
   const host = window.location.hostname;
@@ -64,6 +111,13 @@ export default function PublicLandingPage() {
   const [page, setPage] = useState<LandingPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const pixelId = import.meta.env.VITE_META_PIXEL_ID;
+    if (pixelId) {
+      installMetaPixel(pixelId);
+    }
+  }, []);
 
   useEffect(() => {
     const orgSlug = extractOrgSlugFromHost() || import.meta.env.VITE_DEFAULT_ORG_SLUG || 'smartgrow-info-tech';
@@ -350,6 +404,7 @@ function ProspectFormSection({
       });
       setSubmitted(true);
       toast.success("Thanks! We'll be in touch shortly.");
+      fireMetaLeadEvent();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
       toast.error(e.response?.data?.message || 'Failed to submit. Please try again.');

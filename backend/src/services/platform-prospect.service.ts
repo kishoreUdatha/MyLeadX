@@ -13,6 +13,28 @@ import {
   ProspectActivityType,
   Prisma,
 } from '@prisma/client';
+import { resendService } from './resend.service';
+
+const PROSPECT_SOURCE_LABELS: Record<ProspectSource, string> = {
+  META_LEAD_AD: 'Meta Lead Ad',
+  META_LANDING_PAGE: 'Meta Landing Page',
+  GOOGLE_LEAD_FORM: 'Google Lead Form',
+  GOOGLE_ADS_LANDING: 'Google Ads',
+  LINKEDIN_LEAD_GEN: 'LinkedIn',
+  TIKTOK_LEAD_GEN: 'TikTok',
+  TWITTER_LEAD_GEN: 'Twitter / X',
+  YOUTUBE_LEAD_GEN: 'YouTube',
+  ORGANIC: 'Organic',
+  DIRECT: 'Direct',
+  REFERRAL: 'Referral',
+  MANUAL: 'Manual Entry',
+  EMAIL_CAMPAIGN: 'Email Campaign',
+  WEBINAR: 'Webinar',
+  EVENT: 'Event',
+  PARTNER: 'Partner',
+  COLD_OUTREACH: 'Cold Outreach',
+  OTHER: 'Other',
+};
 
 export interface CreateProspectInput {
   fullName: string;
@@ -134,7 +156,81 @@ export class PlatformProspectService {
       },
     });
 
+    // Fire-and-forget notification — don't block form submission if email fails
+    this.notifyNewProspect(prospect.id).catch((err) => {
+      console.error('[PlatformProspect] notification failed:', err.message);
+    });
+
     return { prospect, isDuplicate: false };
+  }
+
+  /**
+   * Email super admins about a new platform prospect.
+   * Triggered on create() after the prospect is persisted.
+   *
+   * Recipients: env PLATFORM_SALES_NOTIFICATION_EMAILS (comma-separated)
+   * if set, otherwise all active SuperAdmins in the super_admins table.
+   */
+  private async notifyNewProspect(prospectId: string) {
+    const prospect = await prisma.platformProspect.findUnique({
+      where: { id: prospectId },
+    });
+    if (!prospect) return;
+
+    const recipients = await this.notificationRecipients();
+    if (recipients.length === 0) return;
+
+    const sourceLabel = PROSPECT_SOURCE_LABELS[prospect.source] ?? prospect.source;
+    const baseUrl = process.env.FRONTEND_URL ?? process.env.PUBLIC_APP_URL ?? 'http://localhost:5173';
+    const detailUrl = `${baseUrl}/super-admin/prospects/${prospect.id}`;
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937;">
+        <h2 style="color: #06b6d4; margin: 0 0 16px;">🎯 New MyLeadX Prospect</h2>
+        <p style="margin: 0 0 16px;">A new lead just submitted the form. Details below:</p>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+          <tr><td style="padding: 6px 0; color: #6b7280;">Name</td><td style="padding: 6px 0; font-weight: 600;">${escapeHtml(prospect.fullName)}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Email</td><td style="padding: 6px 0;"><a href="mailto:${escapeHtml(prospect.email)}">${escapeHtml(prospect.email)}</a></td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Phone</td><td style="padding: 6px 0;">${escapeHtml(prospect.phone)}</td></tr>
+          ${prospect.companyName ? `<tr><td style="padding: 6px 0; color: #6b7280;">Company</td><td style="padding: 6px 0;">${escapeHtml(prospect.companyName)}</td></tr>` : ''}
+          ${prospect.designation ? `<tr><td style="padding: 6px 0; color: #6b7280;">Role</td><td style="padding: 6px 0;">${escapeHtml(prospect.designation)}</td></tr>` : ''}
+          ${prospect.teamSize ? `<tr><td style="padding: 6px 0; color: #6b7280;">Team Size</td><td style="padding: 6px 0;">${escapeHtml(prospect.teamSize)}</td></tr>` : ''}
+          ${prospect.industry ? `<tr><td style="padding: 6px 0; color: #6b7280;">Industry</td><td style="padding: 6px 0;">${escapeHtml(prospect.industry)}</td></tr>` : ''}
+          <tr><td style="padding: 6px 0; color: #6b7280;">Source</td><td style="padding: 6px 0;">${escapeHtml(sourceLabel)}</td></tr>
+          ${prospect.campaign ? `<tr><td style="padding: 6px 0; color: #6b7280;">Campaign</td><td style="padding: 6px 0;">${escapeHtml(prospect.campaign)}</td></tr>` : ''}
+        </table>
+        <a href="${detailUrl}" style="display: inline-block; padding: 10px 20px; background: #06b6d4; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">Open Prospect →</a>
+        <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">SLA: respond within 5 minutes for highest conversion. MyLeadX Platform Sales.</p>
+      </div>
+    `;
+
+    const body = `New MyLeadX prospect: ${prospect.fullName} (${prospect.email}, ${prospect.phone}) from ${sourceLabel}${prospect.campaign ? ` / ${prospect.campaign}` : ''}.\n\nOpen: ${detailUrl}`;
+
+    await Promise.allSettled(
+      recipients.map((to) =>
+        resendService.sendEmail({
+          to,
+          subject: `🎯 New Prospect: ${prospect.fullName}${prospect.companyName ? ` (${prospect.companyName})` : ''}`,
+          body,
+          html,
+        }),
+      ),
+    );
+  }
+
+  private async notificationRecipients(): Promise<string[]> {
+    const fromEnv = process.env.PLATFORM_SALES_NOTIFICATION_EMAILS;
+    if (fromEnv) {
+      return fromEnv
+        .split(',')
+        .map((e) => e.trim())
+        .filter((e) => e.length > 0 && e.includes('@'));
+    }
+    const admins = await prisma.superAdmin.findMany({
+      where: { isActive: true },
+      select: { email: true },
+    });
+    return admins.map((a) => a.email);
   }
 
   /**
@@ -448,6 +544,15 @@ export class PlatformProspectService {
       _count: { _all: true },
     });
   }
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export const platformProspectService = new PlatformProspectService();
