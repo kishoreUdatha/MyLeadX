@@ -35,7 +35,7 @@ import {
 // Loading Skeleton Component
 export const LoadingSkeleton: React.FC = () => (
   <div className="min-h-screen bg-gray-50">
-    <div className="max-w-6xl mx-auto px-3 py-3">
+    <div className="px-3 py-3">
       <div className="animate-pulse space-y-2">
         <div className="flex justify-between items-center">
           <div className="h-6 bg-gray-200 rounded w-36"></div>

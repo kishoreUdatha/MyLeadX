@@ -213,7 +213,7 @@ export default function LinkedInSetupPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="p-6">
       <div className="mb-8">
         <button onClick={() => navigate('/ad-integrations')} className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4">
           <ArrowLeftIcon className="w-4 h-4" />

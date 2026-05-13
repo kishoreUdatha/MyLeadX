@@ -216,7 +216,7 @@ export const AdmissionPartnerCreateLinkPage: React.FC = () => {
   // Show success state with link
   if (createdLink) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="p-6">
         <div className="bg-white rounded-xl shadow-sm p-8 text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckIcon className="h-8 w-8 text-green-600" />
@@ -297,7 +297,7 @@ export const AdmissionPartnerCreateLinkPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <button

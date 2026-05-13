@@ -90,7 +90,7 @@ export const NewAgentSelectionPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="px-6 py-12">
         {/* Header */}
         <div className="mb-10">
           <h1 className="text-3xl font-semibold text-gray-900 mb-2">New agent</h1>

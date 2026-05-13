@@ -333,7 +333,7 @@ export default function FacebookSetupPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="p-6">
       <div className="mb-8">
         <button
           onClick={() => navigate('/ad-integrations')}

@@ -599,7 +599,7 @@ export default function ApifySetupPage() {
   );
 
   return (
-    <div className="max-w-3xl mx-auto py-6 px-4">
+    <div className="p-6">
       {/* Header */}
       <div className="mb-6">
         <button

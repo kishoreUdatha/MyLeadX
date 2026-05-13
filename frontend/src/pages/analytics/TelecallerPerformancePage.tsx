@@ -69,7 +69,7 @@ const TelecallerPerformancePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-3 py-3">
+      <div className="px-3 py-3">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-4">
           <div>

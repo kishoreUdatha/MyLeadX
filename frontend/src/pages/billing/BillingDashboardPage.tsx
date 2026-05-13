@@ -109,7 +109,7 @@ export default function BillingDashboardPage() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-slate-200 rounded w-48"></div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -125,7 +125,7 @@ export default function BillingDashboardPage() {
 
   if (error) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700">{error}</p>
           <button
@@ -140,7 +140,7 @@ export default function BillingDashboardPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="mb-6">
         <Link

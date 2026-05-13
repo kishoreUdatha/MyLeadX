@@ -36,7 +36,7 @@ const ConversionFunnelPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-3 py-3">
+      <div className="px-3 py-3">
         <ConversionFunnelHeader
           funnelName={funnelName}
           dateRange={dateRange}

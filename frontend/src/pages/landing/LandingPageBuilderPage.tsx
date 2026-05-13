@@ -149,8 +149,20 @@ export default function LandingPageBuilderPage() {
         defaultContent.buttonText = 'Contact Us';
         break;
       case 'form':
-        defaultContent.title = 'Contact Us';
-        defaultContent.fields = ['name', 'email', 'phone', 'message'];
+        defaultContent.title = 'Get Your Free Demo';
+        defaultContent.submitButtonText = 'Book Free Demo';
+        defaultContent.fields = [
+          { id: 'fullName', label: 'Full Name', type: 'text', required: true, placeholder: 'John Doe' },
+          { id: 'phone', label: 'Phone Number', type: 'phone', required: true, placeholder: '+91 98765 43210' },
+          { id: 'email', label: 'Work Email', type: 'email', required: true, placeholder: 'you@company.com' },
+          { id: 'companyName', label: 'Company Name', type: 'text', required: true, placeholder: 'Acme Inc.' },
+          { id: 'teamSize', label: 'Team Size', type: 'select', required: false, options: ['1-10', '11-50', '51-200', '200+'] },
+          { id: 'industry', label: 'Industry', type: 'select', required: false, options: ['Education', 'Real Estate', 'Healthcare', 'Fintech', 'E-commerce', 'Other'] },
+          { id: 'designation', label: 'Designation', type: 'select', required: false, options: ['Owner / Founder', 'Sales Manager', 'Operations', 'Marketing', 'Other'] },
+          { id: 'currentCrm', label: 'Current CRM', type: 'select', required: false, options: ['None / Excel', 'Zoho', 'Salesforce', 'HubSpot', 'Freshsales', 'Other'] },
+          { id: 'preferredDemoTime', label: 'Preferred Demo Time', type: 'text', required: false, placeholder: 'e.g., Weekdays 3-5 PM IST' },
+          { id: 'bestTimeToCall', label: 'Best Time to Call', type: 'select', required: false, options: ['Morning (9 AM - 12 PM)', 'Afternoon (12 PM - 4 PM)', 'Evening (4 PM - 8 PM)', 'Anytime'] },
+        ];
         break;
     }
 
