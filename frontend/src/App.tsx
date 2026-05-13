@@ -337,10 +337,6 @@ import {
   ReportsPage as MessagingPortalReportsPage,
   BillingPage as MessagingPortalBillingPage,
   SettingsPage as MessagingPortalSettingsPage,
-  QuickSendPage as MessagingPortalQuickSendPage,
-  OptOutManagementPage as MessagingPortalOptOutManagementPage,
-  ScheduledMessagesPage as MessagingPortalScheduledMessagesPage,
-  MessageHistoryPage as MessagingPortalMessageHistoryPage,
 } from './pages/messaging-portal';
 
 // Loading spinner for auth initialization
@@ -1011,7 +1007,6 @@ function App() {
       <Route path="/messaging-portal" element={<MessagingPortalLayout />}>
         <Route index element={<Navigate to="/messaging-portal/dashboard" replace />} />
         <Route path="dashboard" element={<MessagingPortalDashboardPage />} />
-        <Route path="quick-send" element={<MessagingPortalQuickSendPage />} />
         <Route path="contacts" element={<MessagingPortalContactsPage />} />
         <Route path="groups" element={<MessagingPortalContactGroupsPage />} />
         <Route path="campaigns" element={<MessagingPortalCampaignsPage />} />
@@ -1021,9 +1016,6 @@ function App() {
         <Route path="reports" element={<MessagingPortalReportsPage />} />
         <Route path="billing" element={<MessagingPortalBillingPage />} />
         <Route path="settings" element={<MessagingPortalSettingsPage />} />
-        <Route path="opt-outs" element={<MessagingPortalOptOutManagementPage />} />
-        <Route path="scheduled" element={<MessagingPortalScheduledMessagesPage />} />
-        <Route path="message-history" element={<MessagingPortalMessageHistoryPage />} />
       </Route>
 
       {/* Catch all */}
