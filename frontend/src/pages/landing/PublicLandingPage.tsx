@@ -73,10 +73,23 @@ function installMetaPixel(pixelId: string) {
   window.fbq?.('track', 'PageView');
 }
 
-function fireMetaLeadEvent() {
+function fireMetaLeadEvent(eventId: string) {
   if (typeof window !== 'undefined' && window.fbq) {
-    window.fbq('track', 'Lead');
+    window.fbq('track', 'Lead', {}, { eventID: eventId });
   }
+}
+
+function readCookie(name: string): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(new RegExp(`(^|; )${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[2]) : undefined;
+}
+
+function generateEventId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function extractOrgSlugFromHost(): string | null {
@@ -381,6 +394,9 @@ function ProspectFormSection({
     }
 
     setSubmitting(true);
+    // Shared event_id so the browser Pixel and the server-side CAPI event
+    // deduplicate to a single Lead in Meta's Events Manager.
+    const eventId = generateEventId();
     try {
       await api.post('/platform-prospects/public/submit', {
         fullName,
@@ -401,10 +417,14 @@ function ProspectFormSection({
         landingPageId,
         referrerUrl: typeof document !== 'undefined' ? document.referrer : undefined,
         rawData: values,
+        metaEventId: eventId,
+        metaFbp: readCookie('_fbp'),
+        metaFbc: readCookie('_fbc'),
+        pageUrl: typeof window !== 'undefined' ? window.location.href : undefined,
       });
       setSubmitted(true);
       toast.success("Thanks! We'll be in touch shortly.");
-      fireMetaLeadEvent();
+      fireMetaLeadEvent(eventId);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
       toast.error(e.response?.data?.message || 'Failed to submit. Please try again.');

@@ -43,6 +43,10 @@ export class PlatformProspectController {
         referrerUrl,
         eventName,
         rawData,
+        metaEventId,
+        metaFbp,
+        metaFbc,
+        pageUrl,
       } = req.body;
 
       if (!fullName || !email || !phone) {
@@ -73,6 +77,10 @@ export class PlatformProspectController {
         ipAddress: req.ip,
         userAgent: req.get('user-agent') ?? undefined,
         rawData,
+        metaEventId,
+        metaFbp,
+        metaFbc,
+        pageUrl,
       });
 
       return ApiResponse.created(res, 'Prospect captured successfully', {

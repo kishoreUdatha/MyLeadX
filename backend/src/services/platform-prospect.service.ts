@@ -14,6 +14,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { resendService } from './resend.service';
+import { metaCapiService } from './meta-capi.service';
 
 const PROSPECT_SOURCE_LABELS: Record<ProspectSource, string> = {
   META_LEAD_AD: 'Meta Lead Ad',
@@ -63,6 +64,12 @@ export interface CreateProspectInput {
   ipAddress?: string;
   userAgent?: string;
   rawData?: Record<string, unknown>;
+
+  // Meta CAPI dedup signals — passed through from the public landing page
+  metaEventId?: string;
+  metaFbp?: string;
+  metaFbc?: string;
+  pageUrl?: string;
 }
 
 export interface UpdateProspectInput {
@@ -160,6 +167,33 @@ export class PlatformProspectService {
     this.notifyNewProspect(prospect.id).catch((err) => {
       console.error('[PlatformProspect] notification failed:', err.message);
     });
+
+    // Fire-and-forget Meta CAPI Lead event — no-op if META_CAPI_ACCESS_TOKEN unset
+    if (input.metaEventId && metaCapiService.isConfigured()) {
+      const [firstName, ...rest] = input.fullName.split(' ');
+      metaCapiService
+        .sendLeadEvent({
+          eventId: input.metaEventId,
+          email: input.email,
+          phone: input.phone,
+          firstName,
+          lastName: rest.join(' '),
+          country: 'IN',
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+          fbp: input.metaFbp,
+          fbc: input.metaFbc,
+          sourceUrl: input.pageUrl,
+          customData: {
+            source: input.source,
+            campaign: input.campaign,
+            company_name: input.companyName,
+          },
+        })
+        .catch((err) => {
+          console.error('[PlatformProspect] CAPI failed:', err.message);
+        });
+    }
 
     return { prospect, isDuplicate: false };
   }
