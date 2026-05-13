@@ -131,6 +131,7 @@ import { PricingPage } from './pages/pricing';
 import { CheckoutPage, SubscriptionManagementPage, SuccessPage } from './pages/subscription';
 import { RealtimeVoiceDemo } from './components/RealtimeVoiceWidget';
 import LandingPage from './pages/LandingPage';
+import PublicLandingPage from './pages/landing/PublicLandingPage';
 import { PrivacyPolicyPage, TermsOfServicePage } from './pages/legal';
 import { FeatureDetailPage } from './pages/features';
 import { IndustryDetailPage } from './pages/industries';
@@ -528,6 +529,9 @@ function App() {
       {/* Legal Pages */}
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
       <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+
+      {/* Public Landing Pages (rendered from CRM-built landing pages) */}
+      <Route path="/p/:slug" element={<PublicLandingPage />} />
 
       {/* Public Feature Pages */}
       <Route path="/features/:slug" element={<FeatureDetailPage />} />
