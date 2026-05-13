@@ -19,7 +19,7 @@ import {
   useDroppable,
 } from '@dnd-kit/core';
 import toast from 'react-hot-toast';
-import { ViewColumnsIcon, FunnelIcon } from '@heroicons/react/24/outline';
+import { ViewColumnsIcon, FunnelIcon, Bars3Icon } from '@heroicons/react/24/outline';
 import {
   platformProspectService,
   PlatformProspect,
@@ -57,7 +57,7 @@ const COLUMN_HEADER_COLORS: Record<ProspectStage, string> = {
   UNRESPONSIVE: 'bg-slate-200 text-slate-900',
 };
 
-type ViewMode = 'kanban' | 'funnel';
+type ViewMode = 'kanban' | 'funnel' | 'list';
 
 export default function PlatformSalesPipelinePage() {
   const [prospects, setProspects] = useState<PlatformProspect[]>([]);
@@ -168,9 +168,9 @@ export default function PlatformSalesPipelinePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sales Pipeline</h1>
           <p className="text-sm text-gray-600 mt-1">
-            {view === 'kanban'
-              ? 'Drag prospects between stages — changes are saved automatically'
-              : 'Stage-by-stage drop-off across all prospects (counts every prospect that reached the stage)'}
+            {view === 'kanban' && 'Drag prospects between stages — changes are saved automatically'}
+            {view === 'funnel' && 'Stage-by-stage drop-off across all prospects (counts every prospect that reached the stage)'}
+            {view === 'list' && 'Compact list grouped by stage — scan many prospects at once'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -200,11 +200,22 @@ export default function PlatformSalesPipelinePage() {
               <FunnelIcon className="w-4 h-4 mr-1.5" />
               Funnel
             </button>
+            <button
+              onClick={() => setView('list')}
+              className={`inline-flex items-center px-3 py-1.5 rounded text-sm font-medium ${
+                view === 'list'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Bars3Icon className="w-4 h-4 mr-1.5" />
+              List
+            </button>
           </div>
         </div>
       </div>
 
-      {view === 'kanban' ? (
+      {view === 'kanban' && (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex gap-3 overflow-x-auto pb-4">
             {PIPELINE_STAGES.map((stage) => (
@@ -219,9 +230,110 @@ export default function PlatformSalesPipelinePage() {
             {activeCard ? <ProspectCard prospect={activeCard} dragging /> : null}
           </DragOverlay>
         </DndContext>
-      ) : (
-        <FunnelView steps={funnelSteps} loading={funnelLoading} />
       )}
+      {view === 'funnel' && <FunnelView steps={funnelSteps} loading={funnelLoading} />}
+      {view === 'list' && <ListView grouped={grouped} />}
+    </div>
+  );
+}
+
+function ListView({ grouped }: { grouped: Record<ProspectStage, PlatformProspect[]> }) {
+  const totalCount = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
+
+  if (totalCount === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-sm text-gray-500">
+        No prospects yet.
+      </div>
+    );
+  }
+
+  const daysSince = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  };
+
+  return (
+    <div className="space-y-4">
+      {PIPELINE_STAGES.filter((stage) => (grouped[stage] || []).length > 0).map((stage) => {
+        const rows = grouped[stage] || [];
+        return (
+          <div key={stage} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div
+              className={`px-4 py-2 flex justify-between items-center ${PROSPECT_STAGE_COLORS[stage]}`}
+            >
+              <h3 className="font-semibold text-sm">{PROSPECT_STAGE_LABELS[stage]}</h3>
+              <span className="text-xs font-medium bg-white/40 rounded-full px-2 py-0.5">
+                {rows.length}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Name</th>
+                    <th className="px-4 py-2 text-left">Company</th>
+                    <th className="px-4 py-2 text-left">Source</th>
+                    <th className="px-4 py-2 text-left">Assigned</th>
+                    <th className="px-4 py-2 text-right">Score</th>
+                    <th className="px-4 py-2 text-right">Age</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.map((p) => (
+                    <tr key={p.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-2">
+                        <Link
+                          to={`/super-admin/prospects/${p.id}`}
+                          className="font-medium text-cyan-600 hover:text-cyan-700"
+                        >
+                          {p.fullName}
+                        </Link>
+                        <div className="text-xs text-gray-500">{p.email}</div>
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="text-gray-900">{p.companyName || '—'}</div>
+                        {p.industry && (
+                          <div className="text-xs text-gray-500">{p.industry}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {PROSPECT_SOURCE_LABELS[p.source]}
+                        {p.campaign && (
+                          <div className="text-xs text-gray-500">{p.campaign}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {p.assignedTo ? (
+                          `${p.assignedTo.firstName} ${p.assignedTo.lastName}`
+                        ) : (
+                          <span className="text-gray-400">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <span
+                          className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                            p.score >= 80
+                              ? 'bg-green-100 text-green-700'
+                              : p.score >= 50
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {p.score}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right text-gray-500">
+                        {daysSince(p.createdAt)}d
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
