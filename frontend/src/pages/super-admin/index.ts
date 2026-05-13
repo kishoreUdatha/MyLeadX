@@ -35,3 +35,4 @@ export { default as MessagingManagementPage } from './MessagingManagementPage';
 // Platform-Level Sales (SaaS sales of MyLeadX)
 export { default as PlatformProspectsPage } from './PlatformProspectsPage';
 export { default as PlatformProspectDetailPage } from './PlatformProspectDetailPage';
+export { default as PlatformSalesPipelinePage } from './PlatformSalesPipelinePage';
