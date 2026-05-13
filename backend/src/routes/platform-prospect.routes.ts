@@ -18,6 +18,7 @@ router.use(verifySuperAdmin);
 router.get('/', platformProspectController.list.bind(platformProspectController));
 router.get('/pipeline-summary', platformProspectController.pipelineSummary.bind(platformProspectController));
 router.get('/source-breakdown', platformProspectController.sourceBreakdown.bind(platformProspectController));
+router.get('/assignable-users', platformProspectController.assignableUsers.bind(platformProspectController));
 router.get('/:id', platformProspectController.getById.bind(platformProspectController));
 
 router.post('/', platformProspectController.create.bind(platformProspectController));

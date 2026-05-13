@@ -208,6 +208,19 @@ export const platformProspectService = {
     return response.data.data;
   },
 
+  async assignableUsers(): Promise<
+    Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      role: { name: string; slug: string };
+    }>
+  > {
+    const response = await api.get('/platform-prospects/assignable-users');
+    return response.data.data;
+  },
+
   async convertToTenant(
     id: string,
     options: { planId?: string; trialDurationDays?: number; billingCycle?: 'monthly' | 'annual' } = {},

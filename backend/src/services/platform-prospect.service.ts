@@ -394,6 +394,28 @@ export class PlatformProspectService {
   }
 
   /**
+   * Users in the platform org who can be assigned prospects.
+   * Used to populate the assignment dropdown on the prospects list.
+   */
+  async assignableUsers() {
+    const org = await prisma.organization.findUnique({
+      where: { slug: 'smartgrow-info-tech' },
+    });
+    if (!org) return [];
+    return prisma.user.findMany({
+      where: { organizationId: org.id, isActive: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: { select: { name: true, slug: true } },
+      },
+      orderBy: { firstName: 'asc' },
+    });
+  }
+
+  /**
    * Pipeline summary — counts of prospects per stage, used by Kanban view.
    */
   async pipelineSummary() {

@@ -227,6 +227,15 @@ export class PlatformProspectController {
     }
   }
 
+  async assignableUsers(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const users = await platformProspectService.assignableUsers();
+      return ApiResponse.success(res, 'Assignable users', users);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async sourceBreakdown(req: Request, res: Response, next: NextFunction) {
     try {
       const { fromDate, toDate } = req.query;

@@ -31,6 +31,13 @@ const STAGE_OPTIONS: ProspectStage[] = [
   'UNRESPONSIVE',
 ];
 
+interface AssignableUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 export default function PlatformProspectsPage() {
   const [prospects, setProspects] = useState<PlatformProspect[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +48,14 @@ export default function PlatformProspectsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+
+  useEffect(() => {
+    platformProspectService
+      .assignableUsers()
+      .then(setAssignableUsers)
+      .catch(() => setAssignableUsers([]));
+  }, []);
 
   const fetchProspects = useCallback(async () => {
     setLoading(true);
@@ -236,13 +251,30 @@ export default function PlatformProspectsPage() {
                       />
                     </td>
                     <td className="px-6 py-4">
-                      {p.assignedTo ? (
-                        <div className="text-sm text-gray-900">
-                          {p.assignedTo.firstName} {p.assignedTo.lastName}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-400">Unassigned</span>
-                      )}
+                      <AssignDropdown
+                        prospect={p}
+                        users={assignableUsers}
+                        onChanged={(user) => {
+                          setProspects((prev) =>
+                            prev.map((row) =>
+                              row.id === p.id
+                                ? {
+                                    ...row,
+                                    assignedToId: user?.id,
+                                    assignedTo: user
+                                      ? {
+                                          id: user.id,
+                                          firstName: user.firstName,
+                                          lastName: user.lastName,
+                                          email: user.email,
+                                        }
+                                      : undefined,
+                                  }
+                                : row,
+                            ),
+                          );
+                        }}
+                      />
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-medium text-gray-900">{p.score}</span>
@@ -481,6 +513,58 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       {children}
     </div>
+  );
+}
+
+function AssignDropdown({
+  prospect,
+  users,
+  onChanged,
+}: {
+  prospect: PlatformProspect;
+  users: AssignableUser[];
+  onChanged: (user: AssignableUser | null) => void;
+}) {
+  const [updating, setUpdating] = useState(false);
+  const currentId = prospect.assignedToId || '';
+
+  const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const userId = e.target.value || null;
+    if (userId === (prospect.assignedToId || null)) return;
+    setUpdating(true);
+    const newUser = userId ? users.find((u) => u.id === userId) || null : null;
+    onChanged(newUser);
+    try {
+      await platformProspectService.assign(prospect.id, userId);
+      toast.success(newUser ? `Assigned to ${newUser.firstName}` : 'Unassigned');
+    } catch {
+      onChanged(prospect.assignedTo ? {
+        id: prospect.assignedToId!,
+        firstName: prospect.assignedTo.firstName,
+        lastName: prospect.assignedTo.lastName,
+        email: prospect.assignedTo.email,
+      } : null);
+      toast.error('Failed to assign');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <select
+      value={currentId}
+      onChange={handleChange}
+      disabled={updating || users.length === 0}
+      onClick={(e) => e.stopPropagation()}
+      className={`text-sm px-2 py-1 rounded border border-gray-200 bg-white cursor-pointer focus:ring-2 focus:ring-cyan-500 ${updating ? 'opacity-50' : ''} ${currentId ? 'text-gray-900' : 'text-gray-400'}`}
+    >
+      <option value="">Unassigned</option>
+      {users.map((u) => (
+        <option key={u.id} value={u.id}>
+          {u.firstName} {u.lastName}
+        </option>
+      ))}
+    </select>
   );
 }
 
