@@ -125,6 +125,9 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     '/notifications/register-device', '/notifications/unregister-device', '/notifications/test',
     // Partner portal auth endpoints
     '/partner-portal/login',
+    // Anonymous public form submissions (landing pages, marketing site)
+    '/platform-prospects/public/submit',
+    '/forms/public/',
   ];
   if (csrfExemptEndpoints.some(endpoint => req.path.endsWith(endpoint) || req.path.includes(endpoint))) {
     return next();
