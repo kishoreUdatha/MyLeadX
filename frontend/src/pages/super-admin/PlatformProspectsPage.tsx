@@ -6,6 +6,7 @@ import {
   FunnelIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import toast from 'react-hot-toast';
 import {
   platformProspectService,
   PlatformProspect,
@@ -15,6 +16,20 @@ import {
   PROSPECT_STAGE_LABELS,
   PROSPECT_STAGE_COLORS,
 } from '../../services/platform-prospect.service';
+
+const STAGE_OPTIONS: ProspectStage[] = [
+  'NEW',
+  'MQL',
+  'SQL',
+  'DEMO_SCHEDULED',
+  'DEMO_DONE',
+  'PROPOSAL_SENT',
+  'NEGOTIATING',
+  'TRIAL_STARTED',
+  'CONVERTED',
+  'LOST',
+  'UNRESPONSIVE',
+];
 
 export default function PlatformProspectsPage() {
   const [prospects, setProspects] = useState<PlatformProspect[]>([]);
@@ -211,11 +226,14 @@ export default function PlatformProspectsPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-xs font-medium ${PROSPECT_STAGE_COLORS[p.stage]}`}
-                      >
-                        {PROSPECT_STAGE_LABELS[p.stage]}
-                      </span>
+                      <StageDropdown
+                        prospect={p}
+                        onChanged={(newStage) => {
+                          setProspects((prev) =>
+                            prev.map((row) => (row.id === p.id ? { ...row, stage: newStage } : row)),
+                          );
+                        }}
+                      />
                     </td>
                     <td className="px-6 py-4">
                       {p.assignedTo ? (
@@ -463,5 +481,47 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       {children}
     </div>
+  );
+}
+
+function StageDropdown({
+  prospect,
+  onChanged,
+}: {
+  prospect: PlatformProspect;
+  onChanged: (newStage: ProspectStage) => void;
+}) {
+  const [updating, setUpdating] = useState(false);
+
+  const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value as ProspectStage;
+    if (next === prospect.stage) return;
+    setUpdating(true);
+    onChanged(next);
+    try {
+      await platformProspectService.changeStage(prospect.id, next);
+      toast.success(`Moved to ${PROSPECT_STAGE_LABELS[next]}`);
+    } catch {
+      onChanged(prospect.stage);
+      toast.error('Failed to change stage');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <select
+      value={prospect.stage}
+      onChange={handleChange}
+      disabled={updating}
+      onClick={(e) => e.stopPropagation()}
+      className={`text-xs font-medium px-2 py-1 rounded border-0 cursor-pointer focus:ring-2 focus:ring-cyan-500 ${PROSPECT_STAGE_COLORS[prospect.stage]} ${updating ? 'opacity-50' : ''}`}
+    >
+      {STAGE_OPTIONS.map((s) => (
+        <option key={s} value={s}>
+          {PROSPECT_STAGE_LABELS[s]}
+        </option>
+      ))}
+    </select>
   );
 }
