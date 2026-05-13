@@ -183,24 +183,48 @@ export class LeadController {
         return;
       }
 
-      // Direct import to Leads table (not Raw Imports)
-      const result = await bulkUploadService.processUpload(
-        req.organizationId!,
-        req.file.buffer,
-        req.file.mimetype,
-        undefined, // counselorIds - will be assigned later
-        req.user!.id // assignedById
-      );
+      // Check if upload should go to Raw Imports instead of Leads
+      const toRawImport = req.body.toRawImport === 'true' || req.body.toRawImport === true;
 
-      ApiResponse.success(res, 'Bulk upload processed successfully', {
-        totalRows: result.totalRows,
-        validRows: result.validRows,
-        duplicateRows: result.duplicateRows,
-        invalidRows: result.invalidRows,
-        insertedLeads: result.insertedLeads,
-        duplicates: result.duplicates,
-        errors: result.errors,
-      });
+      if (toRawImport) {
+        // Import to Raw Import Records table (for raw-imports flow)
+        const result = await bulkUploadService.processUploadToRaw(
+          req.organizationId!,
+          req.user!.id,
+          req.file.buffer,
+          req.file.mimetype,
+          req.file.originalname,
+          req.file.size
+        );
+
+        ApiResponse.success(res, 'Bulk upload processed to raw imports successfully', {
+          bulkImportId: result.bulkImportId,
+          totalRows: result.totalRows,
+          validRows: result.validRows,
+          duplicateRows: result.duplicateRows,
+          invalidRows: result.invalidRows,
+          insertedLeads: result.insertedRecords, // Use insertedRecords but keep field name for frontend compatibility
+        });
+      } else {
+        // Direct import to Leads table (not Raw Imports)
+        const result = await bulkUploadService.processUpload(
+          req.organizationId!,
+          req.file.buffer,
+          req.file.mimetype,
+          undefined, // counselorIds - will be assigned later
+          req.user!.id // assignedById
+        );
+
+        ApiResponse.success(res, 'Bulk upload processed successfully', {
+          totalRows: result.totalRows,
+          validRows: result.validRows,
+          duplicateRows: result.duplicateRows,
+          invalidRows: result.invalidRows,
+          insertedLeads: result.insertedLeads,
+          duplicates: result.duplicates,
+          errors: result.errors,
+        });
+      }
     } catch (error) {
       next(error);
     }

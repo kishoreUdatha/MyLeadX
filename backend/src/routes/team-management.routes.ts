@@ -111,13 +111,14 @@ router.get('/goals', async (req: TenantRequest, res: Response, next: NextFunctio
 
 /**
  * GET /api/team-management/capacity
- * Get capacity planning data for all teams
+ * Get capacity planning data - filtered by user's role
  */
 router.get('/capacity', async (req: TenantRequest, res: Response, next: NextFunction) => {
   try {
+    const userId = req.user!.id;
     const organizationId = req.organizationId!;
 
-    const capacity = await teamManagementService.getCapacityPlanning(organizationId);
+    const capacity = await teamManagementService.getCapacityPlanning(userId, organizationId);
 
     res.json({
       success: true,

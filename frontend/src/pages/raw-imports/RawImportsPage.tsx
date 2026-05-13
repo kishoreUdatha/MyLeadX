@@ -216,7 +216,7 @@ export default function RawImportsPage() {
             Refresh
           </button>
           <button
-            onClick={() => navigate('/leads/bulk-upload')}
+            onClick={() => navigate('/leads/bulk-upload?toRawImport=true')}
             className="btn btn-primary btn-sm flex items-center gap-1 text-xs"
           >
             <DocumentArrowUpIcon className="h-4 w-4" />

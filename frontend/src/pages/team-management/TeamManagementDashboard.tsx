@@ -359,23 +359,27 @@ export default function TeamManagementDashboard() {
         </div>
       )}
 
-      {/* Hierarchy Tab - Microsoft Teams Style */}
+      {/* Hierarchy Tab - Horizontal Org Chart */}
       {activeTab === 'hierarchy' && (
         <div className="bg-white rounded-lg border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-slate-900">Organization Structure</h3>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-primary-600" />
-                Top Level
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700" />
+                Director/Admin
               </span>
-              <span className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-blue-500" />
+              <span className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-500 to-blue-700" />
                 Manager
               </span>
-              <span className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-slate-500" />
-                Team Member
+              <span className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600" />
+                Team Lead
+              </span>
+              <span className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-slate-500 to-slate-600" />
+                Member
               </span>
             </div>
           </div>
@@ -386,11 +390,7 @@ export default function TeamManagementDashboard() {
               <p className="text-xs text-slate-400 mt-1">Set up manager relationships in User Management</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {hierarchy.map(node => (
-                <OrgChartNode key={node.id} node={node} isRoot={true} />
-              ))}
-            </div>
+            <HorizontalOrgChart nodes={hierarchy} />
           )}
         </div>
       )}
@@ -464,149 +464,128 @@ export default function TeamManagementDashboard() {
   );
 }
 
-// Microsoft Teams Style Org Chart Node
-function OrgChartNode({ node, isRoot = false }: { node: TeamHierarchy; isRoot?: boolean }) {
-  const [expanded, setExpanded] = useState(true);
-  const hasChildren = node.teamMembers.length > 0;
-
+// Horizontal Org Chart - CEO at top, children spread horizontally below
+function HorizontalOrgChart({ nodes }: { nodes: TeamHierarchy[] }) {
   return (
-    <div className="org-chart-node">
-      {/* Person Card */}
-      <div
-        className={`
-          relative flex items-center gap-3 p-4 bg-white border-2 rounded-xl shadow-sm
-          hover:shadow-md hover:border-primary-300 transition-all cursor-pointer
-          ${isRoot ? 'border-primary-400 bg-primary-50' : 'border-slate-200'}
-        `}
-        onClick={() => hasChildren && setExpanded(!expanded)}
-      >
-        {/* Avatar */}
-        <div className={`
-          w-12 h-12 rounded-full flex items-center justify-center font-semibold text-white
-          ${isRoot ? 'bg-primary-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600'}
-        `}>
-          {node.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate">{node.name}</p>
-          <p className="text-xs text-slate-500">{node.role}</p>
-        </div>
-
-        {/* Stats */}
-        {node.stats && (
-          <div className="text-right">
-            <p className="text-sm font-semibold text-slate-700">{node.stats.totalLeads} leads</p>
-            <p className="text-xs text-emerald-600">{node.stats.conversionRate}% conv.</p>
-          </div>
-        )}
-
-        {/* Expand/Collapse indicator */}
-        {hasChildren && (
-          <div className="ml-2">
-            <ChevronRightIcon
-              className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
-            />
-          </div>
-        )}
-
-        {/* Team count badge */}
-        {hasChildren && (
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-xs text-slate-600">
-            {node.teamMembers.length} {node.teamMembers.length === 1 ? 'report' : 'reports'}
-          </div>
-        )}
+    <div className="org-chart-container overflow-x-auto py-6">
+      <div className="flex flex-row justify-center gap-6 min-w-max px-4">
+        {nodes.map((node) => (
+          <OrgChartTreeNode key={node.id} node={node} isRoot={true} />
+        ))}
       </div>
-
-      {/* Children Container with Tree Lines */}
-      {hasChildren && expanded && (
-        <div className="mt-6 relative">
-          {/* Vertical line from parent */}
-          <div className="absolute left-6 -top-6 w-0.5 h-6 bg-slate-300" />
-
-          {/* Children */}
-          <div className="pl-8 space-y-3 relative">
-            {/* Horizontal connector line */}
-            <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-slate-200" />
-
-            {node.teamMembers.map((child, index) => (
-              <div key={child.id} className="relative">
-                {/* Horizontal line to child */}
-                <div className="absolute -left-2 top-7 w-4 h-0.5 bg-slate-300" />
-
-                {/* Hide vertical line after last child */}
-                {index === node.teamMembers.length - 1 && (
-                  <div className="absolute -left-2 top-7 bottom-0 w-0.5 bg-white" style={{ marginTop: '1px' }} />
-                )}
-
-                <OrgChartNode node={child} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// Compact Tree View (Alternative)
-function TreeViewNode({ node, level = 0 }: { node: TeamHierarchy; level?: number }) {
-  const [expanded, setExpanded] = useState(level < 3);
+// Single node in the org chart tree
+function OrgChartTreeNode({ node, isRoot = false }: { node: TeamHierarchy; isRoot?: boolean }) {
+  const [expanded, setExpanded] = useState(true);
   const hasChildren = node.teamMembers.length > 0;
 
+  // Get color based on role
+  const getRoleStyle = (role: string) => {
+    const r = role.toLowerCase();
+    if (r.includes('admin') || r.includes('director') || r.includes('ceo') || r.includes('owner')) {
+      return { bg: 'bg-purple-600', border: 'border-purple-200', shadow: 'shadow-purple-100' };
+    }
+    if (r.includes('manager')) {
+      return { bg: 'bg-blue-600', border: 'border-blue-200', shadow: 'shadow-blue-100' };
+    }
+    if (r.includes('lead')) {
+      return { bg: 'bg-emerald-600', border: 'border-emerald-200', shadow: 'shadow-emerald-100' };
+    }
+    return { bg: 'bg-slate-500', border: 'border-slate-200', shadow: 'shadow-slate-100' };
+  };
+
+  const roleStyle = getRoleStyle(node.role);
+
   return (
-    <div className="tree-view-node">
+    <div className="flex flex-col items-center">
+      {/* Person Card */}
       <div
         className={`
-          flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-50 cursor-pointer
-          ${level === 0 ? 'bg-slate-50' : ''}
+          relative bg-white rounded-xl border ${roleStyle.border} shadow-sm ${roleStyle.shadow}
+          hover:shadow-lg transition-all duration-200 cursor-pointer
+          ${isRoot ? 'ring-2 ring-purple-100' : ''}
         `}
+        style={{ width: '140px' }}
         onClick={() => hasChildren && setExpanded(!expanded)}
       >
-        {/* Expand/Collapse */}
-        <div className="w-5 flex-shrink-0">
-          {hasChildren ? (
+        <div className="p-3">
+          {/* Avatar */}
+          <div className="flex justify-center">
+            <div className={`
+              w-11 h-11 rounded-full flex items-center justify-center font-bold text-white text-sm
+              ${roleStyle.bg} shadow-md
+            `}>
+              {node.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="mt-2.5 text-center">
+            <p className="text-sm font-semibold text-slate-800 truncate" title={node.name}>
+              {node.name}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">{node.role}</p>
+          </div>
+
+          {/* Stats */}
+          {node.stats && (
+            <div className="mt-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-center gap-2 text-xs">
+                <span className="text-slate-600">{node.stats.totalLeads} leads</span>
+                <span className="text-slate-300">|</span>
+                <span className="text-emerald-600 font-semibold">{node.stats.conversionRate}%</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Expand/Collapse button */}
+        {hasChildren && (
+          <button
+            className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full
+              bg-white border-2 border-slate-200 flex items-center justify-center
+              hover:border-blue-400 hover:bg-blue-50 transition-colors z-10 shadow-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+          >
             <ChevronRightIcon
-              className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+              className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200
+                ${expanded ? 'rotate-90' : ''}`}
             />
-          ) : (
-            <div className="w-4 h-4" />
-          )}
-        </div>
-
-        {/* Avatar */}
-        <div className={`
-          w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0
-          ${level === 0 ? 'bg-primary-600' : level === 1 ? 'bg-blue-500' : 'bg-slate-500'}
-        `}>
-          {node.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-        </div>
-
-        {/* Name & Role */}
-        <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium text-slate-900">{node.name}</span>
-          <span className="text-xs text-slate-400 ml-2">• {node.role}</span>
-        </div>
-
-        {/* Stats */}
-        <div className="flex items-center gap-4 text-xs text-slate-500">
-          <span>{node.stats?.totalLeads || 0} leads</span>
-          <span className="text-emerald-600">{node.stats?.conversionRate || 0}%</span>
-          {hasChildren && (
-            <span className="bg-slate-100 px-2 py-0.5 rounded-full">
-              {node.teamMembers.length}
-            </span>
-          )}
-        </div>
+          </button>
+        )}
       </div>
 
       {/* Children */}
       {hasChildren && expanded && (
-        <div className="ml-5 pl-4 border-l-2 border-slate-200">
-          {node.teamMembers.map(child => (
-            <TreeViewNode key={child.id} node={child} level={level + 1} />
-          ))}
+        <div className="flex flex-col items-center mt-5">
+          {/* Vertical connector from parent */}
+          <div className="w-px h-5 bg-gradient-to-b from-slate-300 to-slate-200" />
+
+          {/* Horizontal connector line */}
+          <div className="relative">
+            {node.teamMembers.length > 1 && (
+              <div
+                className="absolute top-0 left-1/2 -translate-x-1/2 h-px bg-slate-200"
+                style={{ width: `${(node.teamMembers.length - 1) * 156}px` }}
+              />
+            )}
+
+            {/* Children nodes */}
+            <div className="flex flex-row gap-4">
+              {node.teamMembers.map((child) => (
+                <div key={child.id} className="flex flex-col items-center">
+                  <div className="w-px h-5 bg-gradient-to-b from-slate-200 to-slate-300" />
+                  <OrgChartTreeNode node={child} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

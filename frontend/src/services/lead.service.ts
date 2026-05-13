@@ -194,11 +194,14 @@ export const leadService = {
     return response.data.data;
   },
 
-  async bulkUpload(file: File, counselorIds?: string[]): Promise<BulkUploadResult> {
+  async bulkUpload(file: File, counselorIds?: string[], toRawImport?: boolean): Promise<BulkUploadResult> {
     const formData = new FormData();
     formData.append('file', file);
     if (counselorIds) {
       formData.append('counselorIds', JSON.stringify(counselorIds));
+    }
+    if (toRawImport) {
+      formData.append('toRawImport', 'true');
     }
 
     const response = await api.post('/leads/bulk-upload', formData, {

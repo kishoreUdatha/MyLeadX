@@ -61,6 +61,22 @@ const getRelativeTime = (date: string | Date) => {
 // Filter panel tab type
 type FilterTab = 'saved' | 'leadDetails' | 'campaign' | 'users' | 'source' | 'status' | 'stages' | 'tags' | 'date' | 'priority' | 'customFields';
 
+// Column definitions for table
+const AVAILABLE_COLUMNS = [
+  { id: 'lead', label: 'Lead', required: true },
+  { id: 'phone', label: 'Phone', required: true },
+  { id: 'email', label: 'Email', required: false },
+  { id: 'status', label: 'Status', required: false },
+  { id: 'priority', label: 'Priority', required: false },
+  { id: 'assignedTo', label: 'Assigned To', required: false },
+  { id: 'notes', label: 'Notes', required: false },
+  { id: 'created', label: 'Created', required: false },
+] as const;
+
+type ColumnId = typeof AVAILABLE_COLUMNS[number]['id'];
+
+const DEFAULT_VISIBLE_COLUMNS: ColumnId[] = ['lead', 'phone', 'email', 'status', 'priority', 'assignedTo', 'created'];
+
 // Date filter preset type
 type DatePreset = '' | 'today' | 'yesterday' | 'last7days' | 'last30days' | 'thisMonth' | 'lastMonth' | 'custom';
 
@@ -152,6 +168,28 @@ export default function LeadsListPage() {
     const saved = localStorage.getItem('leadsPageSize');
     return saved ? parseInt(saved, 10) : 20;
   });
+
+  // Column visibility state - persist in localStorage
+  const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(() => {
+    const saved = localStorage.getItem('leadsVisibleColumns');
+    return saved ? JSON.parse(saved) : DEFAULT_VISIBLE_COLUMNS;
+  });
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
+
+  const toggleColumn = (columnId: ColumnId) => {
+    const column = AVAILABLE_COLUMNS.find(c => c.id === columnId);
+    if (column?.required) return; // Can't toggle required columns
+
+    setVisibleColumns(prev => {
+      const newColumns = prev.includes(columnId)
+        ? prev.filter(id => id !== columnId)
+        : [...prev, columnId];
+      localStorage.setItem('leadsVisibleColumns', JSON.stringify(newColumns));
+      return newColumns;
+    });
+  };
+
+  const isColumnVisible = (columnId: ColumnId) => visibleColumns.includes(columnId);
   const [stages, setStages] = useState<LeadStage[]>([]);
   const [tags, setTags] = useState<LeadTag[]>([]);
   const [tagFilter, setTagFilter] = useState(searchParams.get('tag') || '');
@@ -862,6 +900,46 @@ export default function LeadsListPage() {
             )}
           </button>
 
+          {/* Column Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setShowColumnSelector(!showColumnSelector)}
+              className="px-3 py-1.5 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1.5"
+              title="Select columns"
+            >
+              <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
+              Columns
+            </button>
+            {showColumnSelector && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowColumnSelector(false)} />
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
+                  <div className="px-3 py-1.5 border-b border-slate-100">
+                    <p className="text-xs font-semibold text-slate-500 uppercase">Show Columns</p>
+                  </div>
+                  {AVAILABLE_COLUMNS.map((column) => (
+                    <label
+                      key={column.id}
+                      className={`flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50 cursor-pointer ${
+                        column.required ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isColumnVisible(column.id)}
+                        onChange={() => toggleColumn(column.id)}
+                        disabled={column.required}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-slate-700">{column.label}</span>
+                      {column.required && <span className="text-[10px] text-slate-400">(required)</span>}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Clear Filters Button - Shows when filters are active */}
           {activeFilterCount > 0 && (
             <button
@@ -908,21 +986,21 @@ export default function LeadsListPage() {
                   />
                 </th>
                 <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-8">#</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.lead')}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Phone</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Email</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">Priority</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.status')}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.assignedTo')}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">{t('leads:table.created')}</th>
+                {isColumnVisible('lead') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.lead')}</th>}
+                {isColumnVisible('phone') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Phone</th>}
+                {isColumnVisible('email') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Email</th>}
+                {isColumnVisible('status') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.status')}</th>}
+                {isColumnVisible('priority') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">Priority</th>}
+                {isColumnVisible('assignedTo') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{t('leads:table.assignedTo')}</th>}
+                {isColumnVisible('notes') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</th>}
+                {isColumnVisible('created') && <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">{t('leads:table.created')}</th>}
                 <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">{t('leads:table.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12">
+                  <td colSpan={visibleColumns.length + 3} className="text-center py-12">
                     <div className="flex flex-col items-center gap-3">
                       <span className="spinner spinner-lg"></span>
                       <p className="text-slate-500">{t('leads:loading')}</p>
@@ -931,7 +1009,7 @@ export default function LeadsListPage() {
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12">
+                  <td colSpan={visibleColumns.length + 3} className="text-center py-12">
                     <div className="empty-state">
                       <UserGroupIcon className="empty-state-icon" />
                       <p className="empty-state-title">{t('leads:empty.title')}</p>
@@ -972,33 +1050,36 @@ export default function LeadsListPage() {
                       <td className="px-2 py-2">
                         <span className="text-xs font-medium text-slate-500">{serialNumber}</span>
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-medium text-slate-900">
-                            {getDisplayName(lead.firstName, lead.lastName)}
-                          </p>
-                          {lead.isConverted && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">
-                              <CheckBadgeSolidIcon className="w-2.5 h-2.5" />
-                              Converted
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(lead.phone || '');
-                                  showToast.success('Phone copied!');
-                                }}
-                                className="text-xs text-slate-900 hover:text-primary-600 hover:underline cursor-pointer"
-                                title="Click to copy"
-                              >
-                                {lead.phone}
-                              </button>
+                      {isColumnVisible('lead') && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-medium text-slate-900">
+                              {getDisplayName(lead.firstName, lead.lastName)}
+                            </p>
+                            {lead.isConverted && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">
+                                <CheckBadgeSolidIcon className="w-2.5 h-2.5" />
+                                Converted
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                      {isColumnVisible('phone') && (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(lead.phone || '');
+                                    showToast.success('Phone copied!');
+                                  }}
+                                  className="text-xs text-slate-900 hover:text-primary-600 hover:underline cursor-pointer"
+                                  title="Click to copy"
+                                >
+                                  {lead.phone}
+                                </button>
                               {/* Quick Action Buttons */}
                               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {lead.phone && (
@@ -1028,6 +1109,8 @@ export default function LeadsListPage() {
                           </div>
                         </div>
                       </td>
+                      )}
+                      {isColumnVisible('email') && (
                       <td className="px-3 py-2">
                         {lead.email ? (
                           <button
@@ -1044,6 +1127,51 @@ export default function LeadsListPage() {
                           <span className="text-[10px] text-slate-400">—</span>
                         )}
                       </td>
+                      )}
+                      {isColumnVisible('status') && (
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
+                        >
+                          <span className={`w-1 h-1 rounded-full ${statusStyle.dot}`}></span>
+                          {stageName}
+                        </span>
+                      </td>
+                      )}
+                      {isColumnVisible('priority') && (
+                      <td className="px-3 py-2">
+                        {lead.priority === 'HIGH' || lead.priority === 'hot' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                            Hot
+                          </span>
+                        ) : lead.priority === 'MEDIUM' || lead.priority === 'warm' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            Warm
+                          </span>
+                        ) : lead.priority === 'LOW' || lead.priority === 'cold' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            Cold
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">—</span>
+                        )}
+                      </td>
+                      )}
+                      {isColumnVisible('assignedTo') && (
+                      <td className="px-3 py-2">
+                        {lead.assignments?.[0]?.assignedTo ? (
+                          <span className="text-xs text-slate-700">
+                            {lead.assignments[0].assignedTo.firstName}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-500 font-medium">Unassigned</span>
+                        )}
+                      </td>
+                      )}
+                      {isColumnVisible('notes') && (
                       <td className="px-3 py-2">
                         {(() => {
                           // Get latest note from notes array or imported notes from customFields
@@ -1077,43 +1205,8 @@ export default function LeadsListPage() {
                           return <span className="text-[10px] text-slate-400">—</span>;
                         })()}
                       </td>
-                      <td className="px-3 py-2">
-                        {lead.priority === 'HIGH' || lead.priority === 'hot' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
-                            Hot
-                          </span>
-                        ) : lead.priority === 'MEDIUM' || lead.priority === 'warm' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                            Warm
-                          </span>
-                        ) : lead.priority === 'LOW' || lead.priority === 'cold' ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                            Cold
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                        >
-                          <span className={`w-1 h-1 rounded-full ${statusStyle.dot}`}></span>
-                          {stageName}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        {lead.assignments?.[0]?.assignedTo ? (
-                          <span className="text-xs text-slate-700">
-                            {lead.assignments[0].assignedTo.firstName}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-amber-500 font-medium">Unassigned</span>
-                        )}
-                      </td>
+                      )}
+                      {isColumnVisible('created') && (
                       <td className="px-3 py-2">
                         <span
                           className="text-xs text-slate-500 cursor-help"
@@ -1122,6 +1215,7 @@ export default function LeadsListPage() {
                           {getRelativeTime(lead.createdAt)}
                         </span>
                       </td>
+                      )}
                       <td className="px-3 py-2">
                         <div className="relative flex justify-center">
                           <div className="group/dropdown">

@@ -9,7 +9,7 @@ const initialState: LeadsState = {
   error: null,
   pagination: {
     page: 1,
-    limit: 20,
+    limit: 50,
     total: 0,
     hasMore: true,
   },
@@ -31,7 +31,7 @@ export const fetchLeads = createAsyncThunk(
       const state = getState() as { leads: LeadsState };
       const { filters } = state.leads;
 
-      const response = await leadsApi.getAssignedLeads(page, 20, { ...filters, showTeam });
+      const response = await leadsApi.getAssignedLeads(page, 50, { ...filters, showTeam });
       console.log('[LeadsSlice] Got leads:', response.data?.length, 'pagination:', response.pagination);
 
       return {

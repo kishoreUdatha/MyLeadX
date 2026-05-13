@@ -90,6 +90,7 @@ const LeadsScreen: React.FC = () => {
     leads,
     isLoading,
     hasMore,
+    pagination,
     filters,
     loadLeads,
     search,
@@ -249,27 +250,33 @@ const LeadsScreen: React.FC = () => {
 
   const handleLoadMore = useCallback(() => {
     const now = Date.now();
-    // Debounce: prevent calls within 1 second of each other
-    if (now - lastLoadTimeRef.current < 1000) {
+    // Debounce: prevent calls within 500ms of each other
+    if (now - lastLoadTimeRef.current < 500) {
       return;
     }
     // Prevent multiple concurrent calls
-    if (isLoadingRef.current || isLoading || !hasMore) {
+    if (isLoadingRef.current || isLoading) {
+      return;
+    }
+    // Check if there are more leads to load
+    if (!hasMore) {
+      console.log('[LeadsScreen] No more leads to load');
       return;
     }
     // Prevent loading if we have no data yet (initial load in progress)
-    if (displayLeads.length === 0) {
+    if (leads.length === 0) {
       return;
     }
+    console.log('[LeadsScreen] Loading more leads, current:', leads.length, 'hasMore:', hasMore);
     lastLoadTimeRef.current = now;
     isLoadingRef.current = true;
     loadLeads(false, showTeamLeads).finally(() => {
       // Reset after a delay to prevent rapid re-triggering
       setTimeout(() => {
         isLoadingRef.current = false;
-      }, 500);
+      }, 300);
     });
-  }, [isLoading, hasMore, loadLeads, displayLeads.length, showTeamLeads]);
+  }, [isLoading, hasMore, loadLeads, leads.length, showTeamLeads]);
 
   const handleSearch = useCallback(
     (text: string) => {
@@ -355,7 +362,7 @@ const LeadsScreen: React.FC = () => {
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Leads</Text>
           <View style={styles.totalBadge}>
-            <Text style={styles.totalBadgeText}>{conversionCounts.all}</Text>
+            <Text style={styles.totalBadgeText}>{pagination.total || leads.length}</Text>
           </View>
         </View>
         <TouchableOpacity
@@ -378,7 +385,7 @@ const LeadsScreen: React.FC = () => {
           </Text>
           <View style={[styles.conversionBadge, conversionTab === 'all' && styles.conversionBadgeActive]}>
             <Text style={[styles.conversionBadgeText, conversionTab === 'all' && styles.conversionBadgeTextActive]}>
-              {conversionCounts.all}
+              {pagination.total || conversionCounts.all}
             </Text>
           </View>
         </TouchableOpacity>
@@ -618,10 +625,10 @@ const LeadsScreen: React.FC = () => {
           />
         }
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={5}
+        onEndReachedThreshold={0.5}
+        initialNumToRender={20}
+        maxToRenderPerBatch={20}
+        windowSize={10}
         removeClippedSubviews={true}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}

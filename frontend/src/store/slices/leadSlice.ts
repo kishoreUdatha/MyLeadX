@@ -122,9 +122,9 @@ export const fetchLeadStats = createAsyncThunk(
 
 export const bulkUploadLeads = createAsyncThunk(
   'leads/bulkUpload',
-  async ({ file, counselorIds }: { file: File; counselorIds?: string[] }, { rejectWithValue }) => {
+  async ({ file, counselorIds, toRawImport }: { file: File; counselorIds?: string[]; toRawImport?: boolean }, { rejectWithValue }) => {
     try {
-      const response = await leadService.bulkUpload(file, counselorIds);
+      const response = await leadService.bulkUpload(file, counselorIds, toRawImport);
       return response;
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
