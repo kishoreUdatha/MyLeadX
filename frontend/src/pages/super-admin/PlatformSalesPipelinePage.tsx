@@ -238,9 +238,18 @@ export default function PlatformSalesPipelinePage() {
 }
 
 function ListView({ grouped }: { grouped: Record<ProspectStage, PlatformProspect[]> }) {
-  const totalCount = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
+  // Flatten + sort by pipeline stage order (NEW first, CONVERTED/LOST last)
+  const stageOrder = new Map(PIPELINE_STAGES.map((s, i) => [s, i]));
+  const allProspects = Object.values(grouped)
+    .flat()
+    .sort((a, b) => {
+      const aIdx = stageOrder.get(a.stage) ?? 999;
+      const bIdx = stageOrder.get(b.stage) ?? 999;
+      if (aIdx !== bIdx) return aIdx - bIdx;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
-  if (totalCount === 0) {
+  if (allProspects.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-sm text-gray-500">
         No prospects yet.
@@ -254,86 +263,79 @@ function ListView({ grouped }: { grouped: Record<ProspectStage, PlatformProspect
   };
 
   return (
-    <div className="space-y-4">
-      {PIPELINE_STAGES.filter((stage) => (grouped[stage] || []).length > 0).map((stage) => {
-        const rows = grouped[stage] || [];
-        return (
-          <div key={stage} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div
-              className={`px-4 py-2 flex justify-between items-center ${PROSPECT_STAGE_COLORS[stage]}`}
-            >
-              <h3 className="font-semibold text-sm">{PROSPECT_STAGE_LABELS[stage]}</h3>
-              <span className="text-xs font-medium bg-white/40 rounded-full px-2 py-0.5">
-                {rows.length}
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Name</th>
-                    <th className="px-4 py-2 text-left">Company</th>
-                    <th className="px-4 py-2 text-left">Source</th>
-                    <th className="px-4 py-2 text-left">Assigned</th>
-                    <th className="px-4 py-2 text-right">Score</th>
-                    <th className="px-4 py-2 text-right">Age</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {rows.map((p) => (
-                    <tr key={p.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2">
-                        <Link
-                          to={`/super-admin/prospects/${p.id}`}
-                          className="font-medium text-cyan-600 hover:text-cyan-700"
-                        >
-                          {p.fullName}
-                        </Link>
-                        <div className="text-xs text-gray-500">{p.email}</div>
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="text-gray-900">{p.companyName || '—'}</div>
-                        {p.industry && (
-                          <div className="text-xs text-gray-500">{p.industry}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-gray-700">
-                        {PROSPECT_SOURCE_LABELS[p.source]}
-                        {p.campaign && (
-                          <div className="text-xs text-gray-500">{p.campaign}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-gray-700">
-                        {p.assignedTo ? (
-                          `${p.assignedTo.firstName} ${p.assignedTo.lastName}`
-                        ) : (
-                          <span className="text-gray-400">Unassigned</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <span
-                          className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                            p.score >= 80
-                              ? 'bg-green-100 text-green-700'
-                              : p.score >= 50
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-gray-100 text-gray-600'
-                          }`}
-                        >
-                          {p.score}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-right text-gray-500">
-                        {daysSince(p.createdAt)}d
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      })}
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-200">
+            <tr>
+              <th className="px-4 py-3 text-left">Name</th>
+              <th className="px-4 py-3 text-left">Company</th>
+              <th className="px-4 py-3 text-left">Stage</th>
+              <th className="px-4 py-3 text-left">Source</th>
+              <th className="px-4 py-3 text-left">Assigned</th>
+              <th className="px-4 py-3 text-right">Score</th>
+              <th className="px-4 py-3 text-right">Age</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {allProspects.map((p) => (
+              <tr key={p.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3">
+                  <Link
+                    to={`/super-admin/prospects/${p.id}`}
+                    className="font-medium text-cyan-600 hover:text-cyan-700"
+                  >
+                    {p.fullName}
+                  </Link>
+                  <div className="text-xs text-gray-500">{p.email}</div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="text-gray-900">{p.companyName || '—'}</div>
+                  {p.industry && (
+                    <div className="text-xs text-gray-500">{p.industry}</div>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`inline-flex px-2 py-1 rounded text-xs font-medium ${PROSPECT_STAGE_COLORS[p.stage]}`}
+                  >
+                    {PROSPECT_STAGE_LABELS[p.stage]}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  {PROSPECT_SOURCE_LABELS[p.source]}
+                  {p.campaign && (
+                    <div className="text-xs text-gray-500">{p.campaign}</div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  {p.assignedTo ? (
+                    `${p.assignedTo.firstName} ${p.assignedTo.lastName}`
+                  ) : (
+                    <span className="text-gray-400">Unassigned</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <span
+                    className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                      p.score >= 80
+                        ? 'bg-green-100 text-green-700'
+                        : p.score >= 50
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {p.score}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right text-gray-500">
+                  {daysSince(p.createdAt)}d
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
