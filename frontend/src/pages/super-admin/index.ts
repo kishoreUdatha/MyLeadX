@@ -31,3 +31,6 @@ export { default as TrialManagementPage } from './TrialManagementPage';
 
 // Messaging Platform
 export { default as MessagingManagementPage } from './MessagingManagementPage';
+
+// Platform-Level Sales (SaaS sales of MyLeadX)
+export { default as PlatformProspectsPage } from './PlatformProspectsPage';
