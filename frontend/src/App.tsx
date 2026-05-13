@@ -316,6 +316,7 @@ import {
   TrialManagementPage as SuperAdminTrialManagementPage,
   MessagingManagementPage as SuperAdminMessagingManagementPage,
   PlatformProspectsPage as SuperAdminPlatformProspectsPage,
+  PlatformProspectDetailPage as SuperAdminPlatformProspectDetailPage,
 } from './pages/super-admin';
 import { superAdminService } from './services/super-admin.service';
 
@@ -997,6 +998,7 @@ function App() {
         <Route path="/super-admin/trials" element={<SuperAdminTrialManagementPage />} />
         <Route path="/super-admin/messaging" element={<SuperAdminMessagingManagementPage />} />
         <Route path="/super-admin/prospects" element={<SuperAdminPlatformProspectsPage />} />
+        <Route path="/super-admin/prospects/:id" element={<SuperAdminPlatformProspectDetailPage />} />
       </Route>
 
       {/* Messaging Portal (Standalone) */}
