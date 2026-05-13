@@ -1434,6 +1434,9 @@ export const Footer: React.FC = () => (
             <span className="bg-gradient-to-r from-orange-400 to-orange-500 bg-clip-text text-transparent font-medium">Made in India</span>
             <span>🇮🇳</span>
           </div>
+          <p className="text-xs text-gray-600 mt-3">
+            Operated by SMARTGROW INFOTECH PRIVATE LIMITED
+          </p>
         </div>
 
         {/* Product */}
@@ -1469,8 +1472,13 @@ export const Footer: React.FC = () => (
         </div>
       </div>
 
-      <div className="border-t border-cyan-500/10 mt-12 pt-8 text-center text-sm text-gray-600">
+      <div className="border-t border-cyan-500/10 mt-12 pt-8 text-center text-sm text-gray-600 space-y-2">
         <p>&copy; {new Date().getFullYear()} MyLeadX. All rights reserved. Powered by AI.</p>
+        <p>
+          MyLeadX is a product of{' '}
+          <span className="text-gray-400 font-medium">SMARTGROW INFOTECH PRIVATE LIMITED</span>
+          {' '}— registered DLT Principal Entity (PE ID: 1201177674885746257)
+        </p>
       </div>
     </div>
   </footer>

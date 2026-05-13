@@ -43,6 +43,26 @@ export default function PrivacyPolicyPage() {
         {/* Policy Content */}
         <div className="prose prose-gray prose-lg max-w-none">
 
+          {/* Company Information */}
+          <section className="mb-12">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-3">Company Information</h2>
+              <p className="text-gray-600 leading-relaxed mb-2">
+                MyLeadX is owned and operated by:
+              </p>
+              <ul className="list-none pl-0 text-gray-600 space-y-1">
+                <li><strong className="text-gray-900">SMARTGROW INFOTECH PRIVATE LIMITED</strong></li>
+                <li>CIN: [Insert CIN]</li>
+                <li>Registered Office: [Insert Registered Office Address]</li>
+                <li>DLT Principal Entity ID: 1201177674885746257</li>
+                <li>Email: <a href="mailto:support@myleadx.ai" className="text-cyan-600 hover:underline">support@myleadx.ai</a></li>
+              </ul>
+              <p className="text-gray-500 text-sm mt-4">
+                References to "MyLeadX," "we," "our," or "us" in this policy refer to SMARTGROW INFOTECH PRIVATE LIMITED.
+              </p>
+            </div>
+          </section>
+
           {/* Introduction */}
           <section className="mb-12">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">1. Introduction</h2>
