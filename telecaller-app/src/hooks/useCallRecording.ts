@@ -30,17 +30,14 @@ interface CallRecordingModuleType {
 // Get native module (fallback to mock for development)
 const NativeCallRecording = NativeModules.CallRecording;
 
-// Debug: Log all available native modules
-console.log('============================================');
-console.log('[CallRecording] DEBUG: All NativeModules:', Object.keys(NativeModules));
-console.log('[CallRecording] Native module available:', !!NativeCallRecording);
-console.log('[CallRecording] Native module object:', NativeCallRecording);
-if (NativeCallRecording) {
-  console.log('[CallRecording] Available methods:', Object.keys(NativeCallRecording));
-  console.log('[CallRecording] startRecording type:', typeof NativeCallRecording.startRecording);
-  console.log('[CallRecording] stopRecording type:', typeof NativeCallRecording.stopRecording);
+// Debug: Log all available native modules (dev only — runs once at module load)
+if (__DEV__) {
+  console.log('[CallRecording] DEBUG: All NativeModules:', Object.keys(NativeModules));
+  console.log('[CallRecording] Native module available:', !!NativeCallRecording);
+  if (NativeCallRecording) {
+    console.log('[CallRecording] Available methods:', Object.keys(NativeCallRecording));
+  }
 }
-console.log('============================================');
 
 const CallRecordingModule: CallRecordingModuleType = NativeCallRecording || {
   startRecording: async (callId: string) => {
@@ -415,11 +412,11 @@ export const useCallRecording = (): UseCallRecordingReturn => {
 
         // Try direct API call first
         try {
-          console.log('[useCallRecording] Updating call with payload:', JSON.stringify(payload));
+          if (__DEV__) console.log('[useCallRecording] Updating call with payload:', payload);
           await dispatch(updateCall({ callId: currentCall.id, payload })).unwrap();
-          console.log('[useCallRecording] Call updated successfully (online)');
+          if (__DEV__) console.log('[useCallRecording] Call updated successfully (online)');
         } catch (updateError: any) {
-          console.warn('[useCallRecording] Direct update failed, queuing for later:', updateError?.message);
+          if (__DEV__) console.warn('[useCallRecording] Direct update failed, queuing for later:', updateError?.message);
 
           // Queue outcome submission for offline sync
           await offlineQueue.addOutcomeSubmit(

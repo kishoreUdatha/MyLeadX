@@ -29,6 +29,37 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 type FilterTab = 'ALL' | 'OVERDUE' | 'TODAY' | 'UPCOMING';
 
+// Pure helpers — hoisted out of the component so renderFollowUp's identity
+// can stay stable across renders (FlatList's renderItem prop).
+const isOverdue = (followUp: FollowUp): boolean =>
+  new Date(followUp.scheduledAt) < new Date() && followUp.status === 'UPCOMING';
+
+const isToday = (followUp: FollowUp): boolean => {
+  const today = new Date();
+  const scheduled = new Date(followUp.scheduledAt);
+  return (
+    scheduled.getDate() === today.getDate() &&
+    scheduled.getMonth() === today.getMonth() &&
+    scheduled.getFullYear() === today.getFullYear()
+  );
+};
+
+const getStatusColor = (followUp: FollowUp): string => {
+  if (followUp.status === 'COMPLETED') return '#10B981';
+  if (followUp.status === 'CANCELLED') return '#6B7280';
+  if (isOverdue(followUp)) return '#EF4444';
+  if (isToday(followUp)) return '#F59E0B';
+  return '#3B82F6';
+};
+
+const getStatusLabel = (followUp: FollowUp): string => {
+  if (followUp.status === 'COMPLETED') return 'Completed';
+  if (followUp.status === 'CANCELLED') return 'Cancelled';
+  if (isOverdue(followUp)) return 'Overdue';
+  if (isToday(followUp)) return 'Today';
+  return 'Upcoming';
+};
+
 const FollowUpsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
 
@@ -175,39 +206,9 @@ const FollowUpsScreen: React.FC = () => {
     }
   };
 
-  // Check if follow-up is overdue
-  const isOverdue = (followUp: FollowUp): boolean => {
-    return new Date(followUp.scheduledAt) < new Date() && followUp.status === 'UPCOMING';
-  };
-
-  // Check if follow-up is today
-  const isToday = (followUp: FollowUp): boolean => {
-    const today = new Date();
-    const scheduled = new Date(followUp.scheduledAt);
-    return (
-      scheduled.getDate() === today.getDate() &&
-      scheduled.getMonth() === today.getMonth() &&
-      scheduled.getFullYear() === today.getFullYear()
-    );
-  };
-
-  // Get status color
-  const getStatusColor = (followUp: FollowUp): string => {
-    if (followUp.status === 'COMPLETED') return '#10B981';
-    if (followUp.status === 'CANCELLED') return '#6B7280';
-    if (isOverdue(followUp)) return '#EF4444';
-    if (isToday(followUp)) return '#F59E0B';
-    return '#3B82F6';
-  };
-
-  // Get status label
-  const getStatusLabel = (followUp: FollowUp): string => {
-    if (followUp.status === 'COMPLETED') return 'Completed';
-    if (followUp.status === 'CANCELLED') return 'Cancelled';
-    if (isOverdue(followUp)) return 'Overdue';
-    if (isToday(followUp)) return 'Today';
-    return 'Upcoming';
-  };
+  // (Helpers isOverdue / isToday / getStatusColor / getStatusLabel hoisted
+  // to module scope below the component so renderFollowUp's useCallback can
+  // stay stable.)
 
   // Render stats card
   const renderStats = () => {
@@ -256,8 +257,13 @@ const FollowUpsScreen: React.FC = () => {
     </View>
   );
 
-  // Render follow-up item
-  const renderFollowUp = ({ item }: { item: FollowUp }) => {
+  // Render follow-up item. Wrapped in useCallback with empty deps so FlatList's
+  // renderItem prop stays stable across renders (no row-thrash on parent state
+  // changes). The handlers it closes over (handleCall / handleComplete /
+  // openRescheduleModal) only call stable setters, navigation, and
+  // module-level APIs — stale closures are functionally equivalent.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const renderFollowUp = useCallback(({ item }: { item: FollowUp }) => {
     const statusColor = getStatusColor(item);
     const statusLabel = getStatusLabel(item);
     const isActionable = item.status === 'UPCOMING';
@@ -345,7 +351,7 @@ const FollowUpsScreen: React.FC = () => {
         )}
       </View>
     );
-  };
+  }, []);
 
   // Render empty state
   const renderEmpty = () => (

@@ -174,7 +174,8 @@ const CallSummaryScreen: React.FC = () => {
   }, [a?.recordingUrl]);
 
   // Poll the native player's actual position so transcript highlighting stays
-  // in sync even if audio drifts from a JS-side timer.
+  // in sync even if audio drifts from a JS-side timer. 500ms is sufficient
+  // for visual highlighting and halves the screen re-render rate.
   const startPositionPolling = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(async () => {
@@ -184,7 +185,7 @@ const CallSummaryScreen: React.FC = () => {
           setPlayTime(pos);
         }
       } catch {}
-    }, 250);
+    }, 500);
   }, []);
 
   const stopPositionPolling = useCallback(() => {

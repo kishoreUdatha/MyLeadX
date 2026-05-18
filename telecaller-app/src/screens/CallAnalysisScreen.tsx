@@ -45,7 +45,11 @@ const CallAnalysisScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
-  const [pollCount, setPollCount] = useState(0);
+  // Progress is shown as 3 checkmark thresholds (>2, >5, >8). Tracking the
+  // stage instead of the raw count means we re-render 3 times across a 2-min
+  // poll instead of 30. Stage values mirror the old thresholds: 1=>>2, 2=>>5,
+  // 3=>>8.
+  const [pollStage, setPollStage] = useState(0);
 
   // Fetch analysis results. Keeps the most recent result in state and stops loading
   // once aiAnalyzed=true is observed.
@@ -72,7 +76,8 @@ const CallAnalysisScreen: React.FC = () => {
     const tick = async () => {
       if (cancelled) return;
       attempts += 1;
-      setPollCount(attempts);
+      const nextStage = attempts > 8 ? 3 : attempts > 5 ? 2 : attempts > 2 ? 1 : 0;
+      setPollStage(prev => (prev === nextStage ? prev : nextStage));
       const result = await fetchAnalysis();
       const done = result?.aiAnalyzed || (result?.transcript && result.transcript.length > 0);
       if (!done && attempts < maxAttempts && !cancelled) {
@@ -140,25 +145,25 @@ const CallAnalysisScreen: React.FC = () => {
             <View style={styles.loadingSteps}>
               <View style={styles.loadingStep}>
                 <Icon
-                  name={pollCount > 2 ? 'check-circle' : 'loading'}
+                  name={pollStage >= 1 ? 'check-circle' : 'loading'}
                   size={20}
-                  color={pollCount > 2 ? '#10B981' : '#9CA3AF'}
+                  color={pollStage >= 1 ? '#10B981' : '#9CA3AF'}
                 />
                 <Text style={styles.loadingStepText}>Transcribing audio</Text>
               </View>
               <View style={styles.loadingStep}>
                 <Icon
-                  name={pollCount > 5 ? 'check-circle' : pollCount > 2 ? 'loading' : 'circle-outline'}
+                  name={pollStage >= 2 ? 'check-circle' : pollStage >= 1 ? 'loading' : 'circle-outline'}
                   size={20}
-                  color={pollCount > 5 ? '#10B981' : '#9CA3AF'}
+                  color={pollStage >= 2 ? '#10B981' : '#9CA3AF'}
                 />
                 <Text style={styles.loadingStepText}>Analyzing sentiment</Text>
               </View>
               <View style={styles.loadingStep}>
                 <Icon
-                  name={pollCount > 8 ? 'check-circle' : pollCount > 5 ? 'loading' : 'circle-outline'}
+                  name={pollStage >= 3 ? 'check-circle' : pollStage >= 2 ? 'loading' : 'circle-outline'}
                   size={20}
-                  color={pollCount > 8 ? '#10B981' : '#9CA3AF'}
+                  color={pollStage >= 3 ? '#10B981' : '#9CA3AF'}
                 />
                 <Text style={styles.loadingStepText}>Determining outcome</Text>
               </View>

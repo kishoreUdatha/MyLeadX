@@ -139,7 +139,26 @@ export interface RecordFilter {
   assignedDateTo?: string;
 }
 
+export interface UploadRawImportResult {
+  bulkImportId: string;
+  totalRows: number;
+  validRows: number;
+  duplicateRows: number;
+  invalidRows: number;
+  insertedRecords: number;
+}
+
 export const rawImportService = {
+  // Upload (writes to raw_import_records, NOT leads)
+  async uploadBulkImport(file: File): Promise<UploadRawImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/raw-imports/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
+
   // Bulk Imports
   async getBulkImports(page: number = 1, limit: number = 20) {
     const response = await api.get(`/raw-imports?page=${page}&limit=${limit}`);

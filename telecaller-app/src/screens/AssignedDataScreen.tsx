@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,20 @@ import { telecallerApi } from '../api/telecaller';
 import { AssignedData, AssignedDataStats, RootStackParamList, STORAGE_KEYS, isTeamLeadOrAbove } from '../types';
 import DateRangeFilter, { DateRangeType } from '../components/DateRangeFilter';
 import { getDisplayName, getNameInitials } from '../utils/formatters';
+
+const PAGE_SIZE = 50;
+
+const TAB_DEFS: { key: string; label: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'NEW', label: 'New' },
+  { key: 'INTERESTED', label: 'Interested' },
+  { key: 'CALLBACK', label: 'Callback' },
+  { key: 'NO_ANSWER', label: 'No Ans' },
+  { key: 'NOT_INTERESTED', label: 'Not Int' },
+  { key: 'CONVERTED', label: 'Done' },
+];
+
+const tabKeys = TAB_DEFS.map(t => t.key);
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -66,9 +80,9 @@ const getDateRange = (rangeType: DateRangeType, customDates?: { startDate: Date 
 
 const AssignedDataScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
-  const [stats, setStats] = useState<AssignedDataStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [dateRange, setDateRange] = useState<DateRangeType>('all');
   const [customDates, setCustomDates] = useState<{ startDate: Date | null; endDate: Date | null }>({
@@ -78,6 +92,7 @@ const AssignedDataScreen: React.FC = () => {
   const [userRole, setUserRole] = useState<string>('telecaller');
   const [userId, setUserId] = useState<string>('');
   const [showTeamTasks, setShowTeamTasks] = useState(false);
+  const [stats, setStats] = useState<AssignedDataStats | null>(null);
 
   const isTeamLead = isTeamLeadOrAbove(userRole);
 
@@ -92,172 +107,165 @@ const AssignedDataScreen: React.FC = () => {
           setUserId(user.id || '');
         }
       } catch (e) {
-        console.log('[AssignedDataScreen] Error loading user data:', e);
+        if (__DEV__) console.log('[AssignedDataScreen] Error loading user data:', e);
       }
     };
     loadUserData();
   }, []);
 
-  // Store all records, filter locally for instant tab switching
+  // Paginated records — server filters by status/date, we append on scroll.
   const [allRecords, setAllRecords] = useState<AssignedData[]>([]);
+  const pageRef = useRef(1);
+  const hasMoreRef = useRef(true);
+  const isLoadingRef = useRef(false);
 
-  const fetchData = useCallback(async () => {
-    try {
-      // Fetch ALL records
-      const data = await telecallerApi.getAssignedData();
-      setAllRecords(data.records);
-    } catch (error: any) {
-      console.error('Failed to fetch:', error);
-      setAllRecords([]);
-      Alert.alert('Failed to load tasks', error?.message || 'Please check your connection and try again.');
-    }
-  }, []);
+  // Map UI tab key to backend status param (backend understands 'NEW' specially,
+  // but uses CALLBACK_REQUESTED rather than CALLBACK).
+  const tabKeyToStatus = (key: string): string | undefined => {
+    if (!key || key === 'ALL') return undefined;
+    if (key === 'CALLBACK') return 'CALLBACK_REQUESTED';
+    return key;
+  };
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const data = await telecallerApi.getAssignedDataStats();
-      setStats(data);
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    }
-  }, []);
-
-  // Filter by My Tasks vs Team Tasks for team leads
-  const teamFilteredRecords = useMemo(() => {
-    // Only apply team filtering for team leads
-    if (!isTeamLead || !userId) {
-      return allRecords;
-    }
-
-    if (showTeamTasks) {
-      // Team Tasks: Records assigned to team members (not the current user)
-      return allRecords.filter(r => r.assignedTo?.id && r.assignedTo.id !== userId);
-    } else {
-      // My Tasks: Records assigned directly to the current user
-      return allRecords.filter(r => r.assignedTo?.id === userId);
-    }
-  }, [allRecords, isTeamLead, userId, showTeamTasks]);
-
-  // Compute tab counts from filtered data (for accurate counts with team filtering)
-  const computedCounts = useMemo(() => {
-    const records = teamFilteredRecords;
-    const newRecords = records.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
-    const callbackRecords = records.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
-
-    return {
-      total: records.length,
-      new: newRecords.length,
-      interested: records.filter(r => r.status === 'INTERESTED').length,
-      callback: callbackRecords.length,
-      noAnswer: records.filter(r => r.status === 'NO_ANSWER').length,
-      notInterested: records.filter(r => r.status === 'NOT_INTERESTED').length,
-      converted: records.filter(r => r.status === 'CONVERTED').length,
-    };
-  }, [teamFilteredRecords]);
-
-  const tabs = [
-    { key: 'ALL', label: 'All', count: computedCounts.total },
-    { key: 'NEW', label: 'New', count: computedCounts.new },
-    { key: 'INTERESTED', label: 'Interested', count: computedCounts.interested },
-    { key: 'CALLBACK', label: 'Callback', count: computedCounts.callback },
-    { key: 'NO_ANSWER', label: 'No Ans', count: computedCounts.noAnswer },
-    { key: 'NOT_INTERESTED', label: 'Not Int', count: computedCounts.notInterested },
-    { key: 'CONVERTED', label: 'Done', count: computedCounts.converted },
-  ];
-
-  // Records filtered by active status tab only (date range applied separately).
-  // Splitting these lets us compute date counts that respect the active status tab.
-  const statusFilteredRecords = useMemo(() => {
-    const tabKey = tabs[activeTab]?.key;
-    if (tabKey === 'NEW') {
-      return teamFilteredRecords.filter(r => ['PENDING', 'ASSIGNED', 'CALLING'].includes(r.status));
-    } else if (tabKey === 'CALLBACK') {
-      return teamFilteredRecords.filter(r => r.status === 'CALLBACK' || r.status === 'CALLBACK_REQUESTED');
-    } else if (tabKey !== 'ALL') {
-      return teamFilteredRecords.filter(r => r.status === tabKey);
-    }
-    return teamFilteredRecords;
-  }, [teamFilteredRecords, activeTab]);
-
-  // Filter records locally based on active tab and date range (instant, no refresh)
-  const filteredRecords = useMemo(() => {
-    // Filter by date range. Include a record if EITHER its last-call activity OR
-    // its assignment date falls in range, so "Today" correctly shows records the
-    // telecaller called today even when the record was assigned earlier.
+  // Build the shared scope filters (date + team toggle) for both list + stats.
+  const buildScopeParams = useCallback(() => {
     const dates = getDateRange(dateRange, customDates);
-    if (!dates) return statusFilteredRecords;
+    const dateFrom = dates?.startDate?.toISOString().split('T')[0];
+    const dateTo = dates?.endDate?.toISOString().split('T')[0];
 
-    const inRange = (value?: string | null) => {
-      if (!value) return false;
-      const d = new Date(value);
-      return d >= dates.startDate && d <= dates.endDate;
-    };
-    return statusFilteredRecords.filter(r => {
-      if (!r.assignedAt && !r.lastCallAt) return true; // Keep records with no dates (shouldn't happen)
-      return inRange(r.lastCallAt) || inRange(r.assignedAt);
-    });
-  }, [statusFilteredRecords, dateRange, customDates]);
-
-  // Per-date-range counts for the DateRangeFilter badges. Computed from status-filtered
-  // records so badge counts match what each tab will show after switching date range.
-  const dateCounts = useMemo(() => {
-    const ranges: DateRangeType[] = ['all', 'today', 'yesterday', 'thisWeek', 'thisMonth'];
-    const result: Partial<Record<DateRangeType, number>> = {};
-    for (const range of ranges) {
-      if (range === 'all') {
-        result[range] = statusFilteredRecords.length;
-        continue;
+    // Team toggle (team leads only): server-side filter so the list, the
+    // pagination counter, and the badge counts all stay consistent.
+    let assignedToId: string | undefined;
+    let excludeAssignedToId: string | undefined;
+    if (isTeamLead && userId) {
+      if (showTeamTasks) {
+        excludeAssignedToId = userId;
+      } else {
+        assignedToId = userId;
       }
-      const dates = getDateRange(range);
-      if (!dates) continue;
-      const inRange = (value?: string | null) => {
-        if (!value) return false;
-        const d = new Date(value);
-        return d >= dates.startDate && d <= dates.endDate;
-      };
-      result[range] = statusFilteredRecords.filter(r => {
-        if (!r.assignedAt && !r.lastCallAt) return true;
-        return inRange(r.lastCallAt) || inRange(r.assignedAt);
-      }).length;
     }
-    return result;
-  }, [statusFilteredRecords]);
 
+    return { dateFrom, dateTo, assignedToId, excludeAssignedToId };
+  }, [dateRange, customDates, isTeamLead, userId, showTeamTasks]);
+
+  // Stand-alone stats refresh — used by the 30s in-screen poll so badge counts
+  // stay live without disturbing the user's scroll position or wiping
+  // already-loaded pages.
+  const refreshStats = useCallback(async () => {
+    try {
+      const data = await telecallerApi.getAssignedDataStats(buildScopeParams());
+      setStats(data);
+    } catch {
+      // Stats are non-critical; swallow errors silently.
+    }
+  }, [buildScopeParams]);
+
+  const fetchPage = useCallback(async (reset: boolean) => {
+    if (isLoadingRef.current) return;
+    if (!reset && !hasMoreRef.current) return;
+    isLoadingRef.current = true;
+    if (!reset) setLoadingMore(true);
+
+    const nextPage = reset ? 1 : pageRef.current + 1;
+    const scope = buildScopeParams();
+    const tabKey = tabKeys[activeTab];
+
+    try {
+      // Refresh stats in parallel with the page fetch; cheaper than two awaits.
+      const [data, statsData] = await Promise.all([
+        telecallerApi.getAssignedData({
+          page: nextPage,
+          limit: PAGE_SIZE,
+          status: tabKeyToStatus(tabKey),
+          ...scope,
+        }),
+        // Stats only need a refresh when we're resetting (filters changed or focus).
+        reset ? telecallerApi.getAssignedDataStats(scope).catch(() => null) : Promise.resolve(null),
+      ]);
+
+      pageRef.current = nextPage;
+      hasMoreRef.current = data.records.length === PAGE_SIZE;
+      setAllRecords(prev => reset ? data.records : [...prev, ...data.records]);
+      if (statsData) setStats(statsData);
+    } catch (error: any) {
+      if (reset) {
+        setAllRecords([]);
+        Alert.alert('Failed to load tasks', error?.message || 'Please check your connection and try again.');
+      }
+    } finally {
+      isLoadingRef.current = false;
+      if (!reset) setLoadingMore(false);
+    }
+  }, [activeTab, buildScopeParams]);
+
+  // All filtering — status, date, team toggle — happens server-side now, so
+  // the loaded records are exactly what we show.
+  const displayedRecords = allRecords;
+
+  // Server-driven counts: stats endpoint mirrors the same scope (date + team
+  // toggle), so badge counts always match the underlying list.
+  const tabs = TAB_DEFS.map(t => {
+    let count = 0;
+    if (stats) {
+      switch (t.key) {
+        case 'ALL': count = stats.total; break;
+        case 'NEW': count = stats.new; break;
+        case 'INTERESTED': count = stats.interested; break;
+        case 'CALLBACK': count = stats.callback; break;
+        case 'NO_ANSWER': count = stats.noAnswer; break;
+        case 'NOT_INTERESTED': count = stats.notInterested; break;
+        case 'CONVERTED': count = stats.converted; break;
+      }
+    }
+    return { ...t, count };
+  });
+
+  // Stable doFetch/doRefreshStats refs so the focus effect + filter effect can
+  // share latest-state closures without being torn down on every render's
+  // callback identity churn (the previous deps reset the list on each filter
+  // tap, including the 30s poll interval).
+  const doFetchRef = useRef<(reset: boolean) => Promise<void>>(async () => {});
+  doFetchRef.current = fetchPage;
+  const refreshStatsRef = useRef<() => void>(() => {});
+  refreshStatsRef.current = refreshStats;
+
+  // Re-fetch whenever a server-side filter actually changes. Encoded as a
+  // primitive signature so the effect doesn't re-run on every render.
+  const filterSig =
+    `${activeTab}|${dateRange}` +
+    `|${customDates.startDate?.toISOString() ?? ''}` +
+    `|${customDates.endDate?.toISOString() ?? ''}` +
+    `|${showTeamTasks}|${userId}`;
+
+  const hasLoadedOnceRef = useRef(false);
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      await Promise.all([fetchData(), fetchStats()]);
+    if (!hasLoadedOnceRef.current) setLoading(true);
+    doFetchRef.current(true).finally(() => {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
-    };
-    load();
-  }, []);
+    });
+  }, [filterSig]);
 
-  // Refresh data when screen comes into focus + auto-poll every 30 seconds
+  // 30s background stats refresh — set up once, paused while unfocused.
   useFocusEffect(
     useCallback(() => {
-      // Fetch immediately when screen gains focus
-      fetchData();
-      fetchStats();
-
-      // Set up auto-polling every 30 seconds to get newly assigned data
-      const pollInterval = setInterval(() => {
-        console.log('[AssignedDataScreen] Auto-polling for new assigned data...');
-        fetchData();
-        fetchStats();
-      }, 30000); // 30 seconds
-
-      // Cleanup on unfocus
-      return () => {
-        clearInterval(pollInterval);
-      };
-    }, [fetchData, fetchStats])
+      // Refresh stats immediately on (re)focus so badge counts reflect any
+      // server-side changes that happened off-screen.
+      if (hasLoadedOnceRef.current) refreshStatsRef.current();
+      const pollInterval = setInterval(() => refreshStatsRef.current(), 30000);
+      return () => clearInterval(pollInterval);
+    }, [])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchData(), fetchStats()]);
+    await fetchPage(true);
     setRefreshing(false);
   };
+
+  const handleEndReached = useCallback(() => {
+    fetchPage(false);
+  }, [fetchPage]);
 
   const handleDateRangeChange = useCallback(
     (range: DateRangeType, dates?: { startDate: Date | null; endDate: Date | null }) => {
@@ -269,13 +277,13 @@ const AssignedDataScreen: React.FC = () => {
     []
   );
 
-  const handleCall = (record: AssignedData) => {
+  const handleCall = useCallback((record: AssignedData) => {
     // Navigate to CallAssignedDataScreen for proper call handling with recording
     // This ensures calls are tracked in history and recordings work on all Android devices
     navigation.navigate('CallAssignedData', { data: record });
-  };
+  }, [navigation]);
 
-  const renderItem = ({ item }: { item: AssignedData }) => {
+  const renderItem = useCallback(({ item }: { item: AssignedData }) => {
     const config = STATUS_CONFIG[item.status] || STATUS_CONFIG.ASSIGNED;
     const name = getDisplayName(item.firstName, item.lastName);
 
@@ -310,7 +318,7 @@ const AssignedDataScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [handleCall]);
 
   if (loading) {
     return (
@@ -353,7 +361,6 @@ const AssignedDataScreen: React.FC = () => {
         selectedRange={dateRange}
         onRangeChange={handleDateRangeChange}
         customDates={customDates}
-        counts={dateCounts}
       />
 
       {/* Filter Tabs */}
@@ -407,12 +414,25 @@ const AssignedDataScreen: React.FC = () => {
 
       {/* List */}
       <FlatList
-        data={filteredRecords}
+        data={displayedRecords}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366F1']} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        initialNumToRender={15}
+        maxToRenderPerBatch={15}
+        windowSize={7}
+        removeClippedSubviews
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ paddingVertical: 16 }}>
+              <ActivityIndicator size="small" color="#6366F1" />
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconBg}>

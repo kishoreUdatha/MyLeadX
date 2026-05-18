@@ -19,14 +19,17 @@ export const useLeads = () => {
     (state) => state.leads
   );
 
-  // Fetch leads (paginated)
+  // Fetch leads (paginated). The thunk reads the live pagination page from
+  // Redux state, so this callback can stay stable (deps: [dispatch]) without
+  // capturing a stale page via closure.
   const loadLeads = useCallback(
-    async (refresh: boolean = false, showTeam: boolean = false) => {
-      // Use ref to get current page to avoid dependency on pagination.page
-      const currentPage = refresh ? 1 : pagination.page + 1;
-      await dispatch(fetchLeads({ page: currentPage, refresh, showTeam }));
+    async (
+      refresh: boolean = false,
+      showTeam: boolean = false,
+      filters?: { status?: LeadStatus | 'ALL'; dateFrom?: string; dateTo?: string; search?: string },
+    ) => {
+      await dispatch(fetchLeads({ refresh, showTeam, ...filters }));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [dispatch]
   );
 

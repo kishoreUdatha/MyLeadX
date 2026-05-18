@@ -43,7 +43,7 @@ export default function InstagramLeadSetupPage() {
   } = useInstagramLeadSetup();
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <button

@@ -40,7 +40,7 @@ const SyncStatus: React.FC<SyncStatusProps> = ({
   const [failedItems, setFailedItems] = useState<QueueItem[]>([]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const lastFailedSigRef = useRef('');
 
   useEffect(() => {
     // Subscribe to queue status changes
@@ -49,9 +49,16 @@ const SyncStatus: React.FC<SyncStatusProps> = ({
       setIsOnline(newStatus.isOnline);
     });
 
-    // Subscribe to queue changes for failed items
+    // Subscribe to queue changes for failed items. The subscribe callback
+    // fires on every queue mutation; .filter() returns a new array each time,
+    // which would force a re-render even when the failed set is unchanged.
+    // Compare a primitive signature and only setState when it actually moved.
     const unsubscribeQueue = offlineQueue.subscribe(queue => {
-      setFailedItems(queue.filter(item => item.status === 'failed'));
+      const failed = queue.filter(item => item.status === 'failed');
+      const sig = failed.map(i => `${i.id}:${i.retries}:${i.lastError ?? ''}`).join('|');
+      if (sig === lastFailedSigRef.current) return;
+      lastFailedSigRef.current = sig;
+      setFailedItems(failed);
     });
 
     // Subscribe to network changes
@@ -93,14 +100,9 @@ const SyncStatus: React.FC<SyncStatusProps> = ({
     }
   }, [status.processing, pulseAnim]);
 
-  // Expand animation
-  useEffect(() => {
-    Animated.timing(slideAnim, {
-      toValue: expanded ? 1 : 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-  }, [expanded, slideAnim]);
+  // (Removed dead slideAnim animation — its value was animated but never read
+  // by any style prop. LayoutAnimation in toggleExpanded already handles the
+  // expand transition.)
 
   const toggleExpanded = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

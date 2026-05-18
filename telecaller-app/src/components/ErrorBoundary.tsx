@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Props {
   children: ReactNode;
@@ -17,6 +18,55 @@ interface State {
   error: Error | null;
   errorInfo: ErrorInfo | null;
 }
+
+// Storage key for persisted crash log. Kept small (last 5 entries) so it's
+// cheap to read on the Settings screen and won't bloat AsyncStorage.
+export const CRASH_LOG_STORAGE_KEY = '@telecaller/crash_log';
+const MAX_CRASH_ENTRIES = 5;
+
+export interface CrashLogEntry {
+  message: string;
+  stack: string;
+  componentStack: string;
+  timestamp: string;
+}
+
+/** Read the persisted crash log. Returns [] if nothing stored or on parse error. */
+export const getCrashLog = async (): Promise<CrashLogEntry[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(CRASH_LOG_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Clear the persisted crash log. */
+export const clearCrashLog = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(CRASH_LOG_STORAGE_KEY);
+  } catch {
+    // best-effort
+  }
+};
+
+const persistCrash = async (error: Error, errorInfo: ErrorInfo): Promise<void> => {
+  try {
+    const existing = await getCrashLog();
+    const entry: CrashLogEntry = {
+      message: error.message || String(error),
+      stack: (error.stack || '').slice(0, 4000), // cap to avoid bloating storage
+      componentStack: (errorInfo.componentStack || '').slice(0, 4000),
+      timestamp: new Date().toISOString(),
+    };
+    const next = [entry, ...existing].slice(0, MAX_CRASH_ENTRIES);
+    await AsyncStorage.setItem(CRASH_LOG_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // If we can't even persist the crash, there's nothing more to do here.
+  }
+};
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -33,8 +83,13 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[ErrorBoundary] Caught error:', error);
-    console.error('[ErrorBoundary] Error info:', errorInfo);
+    if (__DEV__) {
+      console.error('[ErrorBoundary] Caught error:', error);
+      console.error('[ErrorBoundary] Error info:', errorInfo);
+    }
+    // Persist to AsyncStorage so the next user / dev session can read the
+    // crash even without Logcat access. Fire-and-forget; render fallback now.
+    persistCrash(error, errorInfo);
     this.setState({ errorInfo });
   }
 

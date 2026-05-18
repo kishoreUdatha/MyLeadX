@@ -327,4 +327,8 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LeadCard;
+// React.memo skips re-render when props are shallow-equal. Combined with the
+// stable renderItem in LeadsScreen (useCallback), this means rows only
+// re-render when their own lead object actually changes — not when the parent
+// re-renders for filter/search/state-tick reasons.
+export default React.memo(LeadCard);

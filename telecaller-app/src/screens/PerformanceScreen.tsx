@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -55,6 +55,10 @@ const PerformanceScreen: React.FC = () => {
     }
   }, [selectedPeriod, customStartDate, customEndDate]);
 
+  // Auto-fetch on preset period change. Custom date changes intentionally
+  // require an explicit "Search" tap (handleCustomDateSearch) so we don't
+  // refetch while the user is mid-pick — that's why customStartDate /
+  // customEndDate aren't in the dep array.
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -62,6 +66,7 @@ const PerformanceScreen: React.FC = () => {
       setLoading(false);
     };
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriod]);
 
   const onRefresh = async () => {
@@ -88,10 +93,12 @@ const PerformanceScreen: React.FC = () => {
     return `${mins}m ${secs}s`;
   };
 
-  const getMaxCalls = () => {
-    if (!stats?.dailyBreakdown.length) return 10;
+  // Compute the chart's max-Y once per stats change instead of inside every
+  // .map iteration in the Daily Activity render (N+1 Math.max otherwise).
+  const maxCalls = useMemo(() => {
+    if (!stats?.dailyBreakdown?.length) return 10;
     return Math.max(...stats.dailyBreakdown.map(d => d.calls), 10);
-  };
+  }, [stats?.dailyBreakdown]);
 
   if (loading) {
     return (
@@ -292,7 +299,7 @@ const PerformanceScreen: React.FC = () => {
                     <View
                       style={[
                         styles.bar,
-                        { height: `${(day.calls / getMaxCalls()) * 100}%` },
+                        { height: `${(day.calls / maxCalls) * 100}%` },
                       ]}
                     />
                   </View>

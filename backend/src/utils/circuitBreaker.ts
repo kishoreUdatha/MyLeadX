@@ -20,6 +20,11 @@ export interface CircuitBreakerOptions {
   successThreshold: number;      // Number of successes in half-open to close circuit
   timeout: number;               // Time in ms before trying half-open
   resetTimeout?: number;         // Time in ms to reset failure count (optional)
+  // Decide whether a thrown error counts as a breaker failure. Default: count
+  // every error. Override to ignore client-side errors (4xx, validation) so a
+  // single bad input doesn't lock out the whole tenant. Only true service-down
+  // signals (5xx, timeout, network) should trip the breaker.
+  isFailure?: (error: Error) => boolean;
   onStateChange?: (name: string, from: CircuitState, to: CircuitState) => void;
   onFailure?: (name: string, error: Error) => void;
   onSuccess?: (name: string) => void;
@@ -73,7 +78,13 @@ export class CircuitBreaker {
       this.onSuccess();
       return result;
     } catch (error: any) {
-      this.onFailure(error);
+      // Only count as a breaker failure if the error is a real upstream signal
+      // (timeout, network, 5xx). Client errors (4xx) mean the caller passed bad
+      // input — they should propagate up but not trip the breaker for everyone.
+      const counts = this.options.isFailure ? this.options.isFailure(error) : true;
+      if (counts) {
+        this.onFailure(error);
+      }
       throw error;
     }
   }
@@ -280,6 +291,30 @@ class CircuitBreakerRegistry {
 // Singleton registry
 export const circuitBreakerRegistry = new CircuitBreakerRegistry();
 
+/**
+ * Default isFailure filter for HTTP-based integrations (axios).
+ * Counts as a real upstream failure:
+ *  - No HTTP response (network error, DNS failure, ECONNREFUSED)
+ *  - Timeout (ETIMEDOUT, ECONNABORTED with code timeout)
+ *  - 5xx response (upstream server fault)
+ *  - 429 (rate limited — counts because we should back off)
+ * Does NOT count:
+ *  - Other 4xx (400/401/403/404) — caller's fault (bad token, missing perm,
+ *    wrong endpoint). Throwing these without counting lets the caller see the
+ *    error but doesn't penalize other tenants on the same instance.
+ */
+export function isUpstreamFailure(error: any): boolean {
+  // No response at all = network/DNS/timeout — definitely upstream
+  if (!error?.response) return true;
+  const status = error.response.status;
+  // 5xx = upstream broken
+  if (status >= 500 && status < 600) return true;
+  // 429 = upstream telling us to slow down
+  if (status === 429) return true;
+  // Other 4xx = client error, don't trip breaker
+  return false;
+}
+
 // Pre-configured circuit breakers for common services
 export const circuitBreakers = {
   openai: circuitBreakerRegistry.getOrCreate({
@@ -350,6 +385,10 @@ export const circuitBreakers = {
     failureThreshold: 5,
     successThreshold: 2,
     timeout: 30000,
+    // Bad tokens, missing permissions, validation errors from Meta come back
+    // as 4xx — those are caller problems, not "Meta is down". Don't let a
+    // single tenant with a bad token open the breaker for every other tenant.
+    isFailure: isUpstreamFailure,
     onStateChange: (name, from, to) => {
       console.warn(`[CircuitBreaker] ${name} state changed: ${from} -> ${to}`);
     },

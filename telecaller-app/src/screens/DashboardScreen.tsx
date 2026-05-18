@@ -192,7 +192,7 @@ const DashboardScreen: React.FC = () => {
         setTeamStats(teamStatsRes.data.data);
       }
     } catch (err) {
-      console.log('[Dashboard] Failed to fetch stats:', err);
+      if (__DEV__) console.log('[Dashboard] Failed to fetch stats:', err);
     } finally {
       setLoading(false);
     }
@@ -223,15 +223,11 @@ const DashboardScreen: React.FC = () => {
     [navigation]
   );
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
   useFocusEffect(
     useCallback(() => {
       fetchData();
+      const interval = setInterval(fetchData, 30000);
+      return () => clearInterval(interval);
     }, [fetchData])
   );
 

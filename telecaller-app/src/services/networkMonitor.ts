@@ -23,25 +23,27 @@ class NetworkMonitor {
    * Start monitoring network state
    */
   start(): void {
-    console.log('[NetworkMonitor] Starting network monitoring...');
+    if (__DEV__) console.log('[NetworkMonitor] Starting network monitoring...');
 
     // Monitor network changes
     this.unsubscribeNetInfo = NetInfo.addEventListener((state: NetInfoState) => {
       const wasConnected = this.isConnected;
       this.isConnected = state.isConnected ?? false;
 
-      console.log('[NetworkMonitor] Network state changed:', {
-        wasConnected,
-        isConnected: this.isConnected,
-        type: state.type,
-      });
+      if (__DEV__) {
+        console.log('[NetworkMonitor] Network state changed:', {
+          wasConnected,
+          isConnected: this.isConnected,
+          type: state.type,
+        });
+      }
 
       // Emit network change event
       this.networkChangeListeners.forEach(listener => listener(this.isConnected));
 
       // If network was restored, emit event
       if (!wasConnected && this.isConnected) {
-        console.log('[NetworkMonitor] Network restored! Triggering sync...');
+        if (__DEV__) console.log('[NetworkMonitor] Network restored! Triggering sync...');
         this.networkRestoredListeners.forEach(listener => listener());
       }
     });
@@ -51,8 +53,6 @@ class NetworkMonitor {
       'change',
       this.handleAppStateChange
     );
-
-    console.log('[NetworkMonitor] Network monitoring started');
   }
 
   /**
@@ -60,12 +60,10 @@ class NetworkMonitor {
    */
   private handleAppStateChange = (nextAppState: AppStateStatus): void => {
     if (nextAppState === 'active') {
-      console.log('[NetworkMonitor] App came to foreground');
-
       // Check network and trigger sync if online
       NetInfo.fetch().then(state => {
         if (state.isConnected) {
-          console.log('[NetworkMonitor] App foreground + online, triggering sync...');
+          if (__DEV__) console.log('[NetworkMonitor] App foreground + online, triggering sync');
           this.appForegroundListeners.forEach(listener => listener());
         }
       });
@@ -85,8 +83,6 @@ class NetworkMonitor {
       this.appStateSubscription.remove();
       this.appStateSubscription = null;
     }
-
-    console.log('[NetworkMonitor] Network monitoring stopped');
   }
 
   /**
@@ -97,7 +93,7 @@ class NetworkMonitor {
       const state = await NetInfo.fetch();
       return state.isConnected ?? false;
     } catch (error) {
-      console.error('[NetworkMonitor] Error checking network state:', error);
+      if (__DEV__) console.error('[NetworkMonitor] Error checking network state:', error);
       return false;
     }
   }

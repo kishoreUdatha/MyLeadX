@@ -147,6 +147,195 @@ const upload = multer({
 router.use(authenticate);
 router.use(tenantMiddleware);
 
+// ============================================================================
+// ASSIGNEE SCOPE HELPERS (shared by /assigned-data list + stats endpoints)
+// ============================================================================
+// Returns the set of user IDs whose assigned records the caller is allowed to
+// see. `null` means "all users in the org" (admin). Used by both the list and
+// stats endpoints so they stay consistent.
+async function getAccessibleAssigneeIds(
+  userId: string,
+  userRole: string | null | undefined,
+  organizationId: string
+): Promise<string[] | null> {
+  const normalizedRole = (userRole || '').toLowerCase().replace(/[_-]/g, '');
+
+  if (normalizedRole === 'admin') return null;
+
+  if (normalizedRole === 'manager') {
+    const teamLeads = await prisma.user.findMany({
+      where: { organizationId, managerId: userId, isActive: true },
+      select: { id: true },
+    });
+    const teamLeadIds = teamLeads.map(tl => tl.id);
+    const telecallers = await prisma.user.findMany({
+      where: { organizationId, managerId: { in: teamLeadIds }, isActive: true },
+      select: { id: true },
+    });
+    return [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
+  }
+
+  if (normalizedRole === 'teamlead') {
+    const teamMembers = await prisma.user.findMany({
+      where: { organizationId, managerId: userId, isActive: true },
+      select: { id: true },
+    });
+    return [userId, ...teamMembers.map(m => m.id)];
+  }
+
+  // Telecaller (or any unrecognized role): only their own
+  return [userId];
+}
+
+// Mutates `whereClause.assignedToId` according to the caller's allowed scope
+// and the optional `assignedToId`/`excludeAssignedToId` query filters.
+function applyAssigneeScope(
+  whereClause: any,
+  allowedIds: string[] | null,
+  assignedToId: unknown,
+  excludeAssignedToId: unknown,
+) {
+  const wanted = typeof assignedToId === 'string' && assignedToId ? assignedToId : undefined;
+  const excluded = typeof excludeAssignedToId === 'string' && excludeAssignedToId ? excludeAssignedToId : undefined;
+
+  if (wanted) {
+    // Caller asked to narrow to one user. Only honor it if that user is in their scope.
+    if (allowedIds === null || allowedIds.includes(wanted)) {
+      whereClause.assignedToId = wanted;
+    } else {
+      // Out-of-scope request -> match nothing rather than leaking the org-wide set
+      whereClause.assignedToId = '__no_match__';
+    }
+    return;
+  }
+
+  const scopeIds = allowedIds === null
+    ? undefined  // admin: no restriction
+    : excluded
+      ? allowedIds.filter(id => id !== excluded)
+      : allowedIds;
+
+  if (scopeIds !== undefined) {
+    whereClause.assignedToId = { in: scopeIds };
+  }
+}
+
+// ============================================================================
+// LEAD LIFECYCLE FILTER (shared by /leads list + stats endpoints)
+// ============================================================================
+// Maps the mobile app's lifecycle bucket name to a Prisma where condition.
+// Mirrors the client-side `deriveStatus` heuristic in telecaller-app/src/api/leads.ts
+// — keep the two in sync if either side changes.
+//
+// Returns `null` for ALL / undefined so callers can short-circuit.
+function buildLeadLifecycleWhere(lifecycle?: string): any | null {
+  if (!lifecycle || lifecycle === 'ALL') return null;
+
+  const advancedStageSlug = {
+    OR: [
+      { stage: { slug: { contains: 'qualif', mode: 'insensitive' } } },
+      { stage: { slug: { contains: 'negotiat', mode: 'insensitive' } } },
+      { stage: { slug: { contains: 'proposal', mode: 'insensitive' } } },
+      { stage: { slug: { contains: 'convert', mode: 'insensitive' } } },
+      { stage: { slug: { contains: 'won', mode: 'insensitive' } } },
+      { stage: { slug: { contains: 'lost', mode: 'insensitive' } } },
+      { stage: { slug: { contains: 'not_interested', mode: 'insensitive' } } },
+    ],
+  };
+
+  switch (lifecycle) {
+    case 'NEW':
+      return { lastContactedAt: null, totalCalls: 0 };
+    case 'CONTACTED':
+      // Has been called at least once AND has not yet reached an advanced stage.
+      return {
+        AND: [
+          { OR: [
+            { lastContactedAt: { not: null } },
+            { totalCalls: { gt: 0 } },
+          ]},
+          { NOT: advancedStageSlug },
+        ],
+      };
+    case 'QUALIFIED':
+      return { stage: { slug: { contains: 'qualif', mode: 'insensitive' } } };
+    case 'NEGOTIATION':
+      return {
+        OR: [
+          { stage: { slug: { contains: 'negotiat', mode: 'insensitive' } } },
+          { stage: { slug: { contains: 'proposal', mode: 'insensitive' } } },
+        ],
+      };
+    case 'CONVERTED':
+      return {
+        OR: [
+          { stage: { slug: { contains: 'convert', mode: 'insensitive' } } },
+          { stage: { slug: { contains: 'won', mode: 'insensitive' } } },
+          { isConverted: true },
+        ],
+      };
+    case 'LOST':
+      return {
+        OR: [
+          { stage: { slug: { contains: 'lost', mode: 'insensitive' } } },
+          { stage: { slug: { contains: 'not_interested', mode: 'insensitive' } } },
+        ],
+      };
+    case 'ACTIVE':
+      // Anything that hasn't ended in CONVERTED or LOST yet.
+      return {
+        NOT: {
+          OR: [
+            { stage: { slug: { contains: 'convert', mode: 'insensitive' } } },
+            { stage: { slug: { contains: 'won', mode: 'insensitive' } } },
+            { isConverted: true },
+            { stage: { slug: { contains: 'lost', mode: 'insensitive' } } },
+            { stage: { slug: { contains: 'not_interested', mode: 'insensitive' } } },
+          ],
+        },
+      };
+  }
+  return null;
+}
+
+// Returns the lead `assignments.some` filter the caller is allowed to see.
+// `null` means "no restriction" (admin).
+async function getLeadsAssignmentFilter(
+  userId: string,
+  userRole: string | null | undefined,
+  organizationId: string,
+  showTeam: boolean,
+): Promise<{ some: any } | null> {
+  const normalizedRole = (userRole || '').toLowerCase().replace(/[_-]/g, '');
+
+  if (normalizedRole === 'admin') return null;
+
+  if (normalizedRole === 'manager') {
+    const teamLeads = await prisma.user.findMany({
+      where: { organizationId, managerId: userId, isActive: true },
+      select: { id: true },
+    });
+    const teamLeadIds = teamLeads.map(tl => tl.id);
+    const telecallers = await prisma.user.findMany({
+      where: { organizationId, managerId: { in: teamLeadIds }, isActive: true },
+      select: { id: true },
+    });
+    const allTeamIds = [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
+    return { some: { assignedToId: showTeam ? { in: allTeamIds } : userId, isActive: true } };
+  }
+
+  if (normalizedRole === 'teamlead') {
+    const teamMembers = await prisma.user.findMany({
+      where: { organizationId, managerId: userId, isActive: true },
+      select: { id: true },
+    });
+    const teamMemberIds = [userId, ...teamMembers.map(m => m.id)];
+    return { some: { assignedToId: showTeam ? { in: teamMemberIds } : userId, isActive: true } };
+  }
+
+  return { some: { assignedToId: userId, isActive: true } };
+}
+
 // ==================== QUALIFIED LEADS TRACKING ====================
 // Shows telecaller the status of leads they qualified (for tracking conversions)
 
@@ -267,7 +456,7 @@ router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const userRole = req.user!.role || req.user!.roleSlug;
-    const { status, search, limit = '50', offset, page, dateFrom, dateTo, assignedToId } = req.query;
+    const { status, search, limit = '50', offset, page, dateFrom, dateTo, assignedToId, excludeAssignedToId } = req.query;
 
     // Support both page and offset - prefer page if provided
     const limitNum = parseInt(limit as string) || 50;
@@ -279,69 +468,13 @@ router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
       skipNum = parseInt(offset as string) || 0;
     }
 
-    // Role-based filtering
-    const normalizedRole = (userRole || '').toLowerCase().replace(/[_-]/g, '');
-    const isAdmin = normalizedRole === 'admin';
-    const isManager = normalizedRole === 'manager';
-    const isTeamLead = normalizedRole === 'teamlead';
-
     const whereClause: any = {
       organizationId: req.organization!.id,
       convertedLeadId: null, // Not yet converted
     };
 
-    // Role-based access control:
-    // Admin: sees all data in organization
-    // Manager: sees only their team's data (team leads under them + telecallers under those team leads)
-    // Team Lead: sees only their team's data (telecallers under them + their own)
-    // Telecaller: sees only their own assigned data
-    if (isAdmin) {
-      // Admin can see all or filter by specific assignee
-      if (assignedToId) {
-        whereClause.assignedToId = assignedToId as string;
-      }
-      // No filter = see all
-    } else if (isManager) {
-      // Manager: Get team leads under them + telecallers under those team leads
-      const teamLeads = await prisma.user.findMany({
-        where: {
-          organizationId: req.organization!.id,
-          managerId: userId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      const teamLeadIds = teamLeads.map(tl => tl.id);
-
-      // Get telecallers under those team leads
-      const telecallers = await prisma.user.findMany({
-        where: {
-          organizationId: req.organization!.id,
-          managerId: { in: teamLeadIds },
-          isActive: true,
-        },
-        select: { id: true },
-      });
-
-      // Include manager + team leads + telecallers
-      const allTeamIds = [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
-      whereClause.assignedToId = { in: allTeamIds };
-    } else if (isTeamLead) {
-      // Team lead: Get telecallers under them
-      const teamMembers = await prisma.user.findMany({
-        where: {
-          organizationId: req.organization!.id,
-          managerId: userId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      const teamMemberIds = [userId, ...teamMembers.map(m => m.id)];
-      whereClause.assignedToId = { in: teamMemberIds };
-    } else {
-      // Telecaller - only their own assigned data
-      whereClause.assignedToId = userId;
-    }
+    const allowedIds = await getAccessibleAssigneeIds(userId, userRole, req.organization!.id);
+    applyAssigneeScope(whereClause, allowedIds, assignedToId, excludeAssignedToId);
 
     // Filter by status - 'ALL' means show all records without status filter
     if (status && status !== 'ALL') {
@@ -404,33 +537,61 @@ router.get('/assigned-data', async (req: TenantRequest, res: Response) => {
   }
 });
 
-// Get assigned data stats
+// Get assigned data stats.
+// Honors the same scoping + filter params as /assigned-data so the badge
+// counts always match what the list would return:
+//   - assignedToId / excludeAssignedToId (within the caller's role scope)
+//   - dateFrom / dateTo (filters by assignedAt)
+// Default (no params): scope = caller's own records — preserves prior behavior.
 router.get('/assigned-data/stats', async (req: TenantRequest, res: Response) => {
   try {
     const userId = req.user!.id;
+    const userRole = req.user!.role || req.user!.roleSlug;
     const organizationId = req.organization!.id;
+    const { assignedToId, excludeAssignedToId, dateFrom, dateTo } = req.query;
 
-    // Get status-wise counts
-    const stats = await prisma.rawImportRecord.groupBy({
-      by: ['status'],
-      where: {
-        organizationId,
-        assignedToId: userId,
-        convertedLeadId: null,
-      },
-      _count: { status: true },
-    });
+    const whereClause: any = {
+      organizationId,
+      convertedLeadId: null,
+    };
 
-    // Get count of NEW records (assigned but never called - callAttempts = 0)
-    const newCount = await prisma.rawImportRecord.count({
-      where: {
-        organizationId,
-        assignedToId: userId,
-        convertedLeadId: null,
-        status: { in: ['ASSIGNED', 'PENDING'] },
-        callAttempts: 0,
-      },
-    });
+    // Default to "caller only" when neither scope param is provided, so existing
+    // callers (web AssignedDataPage, telecaller "My Tasks") keep their semantics.
+    if (!assignedToId && !excludeAssignedToId) {
+      whereClause.assignedToId = userId;
+    } else {
+      const allowedIds = await getAccessibleAssigneeIds(userId, userRole, organizationId);
+      applyAssigneeScope(whereClause, allowedIds, assignedToId, excludeAssignedToId);
+    }
+
+    if (dateFrom || dateTo) {
+      whereClause.assignedAt = {};
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom as string);
+        fromDate.setHours(0, 0, 0, 0);
+        whereClause.assignedAt.gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo as string);
+        toDate.setHours(23, 59, 59, 999);
+        whereClause.assignedAt.lte = toDate;
+      }
+    }
+
+    const [stats, newCount] = await Promise.all([
+      prisma.rawImportRecord.groupBy({
+        by: ['status'],
+        where: whereClause,
+        _count: { status: true },
+      }),
+      prisma.rawImportRecord.count({
+        where: {
+          ...whereClause,
+          status: { in: ['ASSIGNED', 'PENDING'] },
+          callAttempts: 0,
+        },
+      }),
+    ]);
 
     const result = {
       total: 0,
@@ -1184,138 +1345,79 @@ router.post('/assigned-data/:id/convert', async (req: TenantRequest, res: Respon
 // ==================== TELECALLER DASHBOARD ====================
 
 // Get telecaller's assigned leads (admin sees all leads)
-router.get('/leads', async (req: TenantRequest, res: Response) => {
-  try {
-    const userId = req.user!.id;
-    const userRole = req.user!.roleSlug;
-    const { status, search, limit = '50', offset = '0', showTeam } = req.query;
+// Build the base where-clause (role-based scope + date + search) used by both
+// the /leads list and /leads/stats endpoints so they stay consistent.
+async function buildLeadsBaseWhere(req: TenantRequest): Promise<{
+  whereClause: any;
+  extraClauses: any[];
+}> {
+  const userId = req.user!.id;
+  const userRole = req.user!.roleSlug;
+  const organizationId = req.organization!.id;
+  const { search, showTeam, dateFrom, dateTo } = req.query;
 
-    const whereClause: any = {
-      organizationId: req.organization!.id,
-    };
+  const whereClause: any = { organizationId };
 
-    const normalizedRole = (userRole || '').toLowerCase().replace(/[_-]/g, '');
-    const isTeamLead = normalizedRole === 'teamlead';
-    const isManager = normalizedRole === 'manager';
-    const isAdmin = normalizedRole === 'admin';
+  const assignmentFilter = await getLeadsAssignmentFilter(
+    userId,
+    userRole as string | undefined,
+    organizationId,
+    showTeam === 'true',
+  );
+  if (assignmentFilter) {
+    whereClause.assignments = assignmentFilter;
+  }
 
-    console.log(`[Telecaller/Leads] User: ${req.user!.email}, Role: ${userRole}, Normalized: ${normalizedRole}, isAdmin: ${isAdmin}, isManager: ${isManager}, isTeamLead: ${isTeamLead}`);
-
-    // Admin sees all leads
-    // Manager sees leads assigned to their team (team leads + telecallers under them)
-    // Team Lead sees leads assigned to their telecallers
-    // Telecaller sees only their own assigned leads
-    if (isAdmin) {
-      // Admin sees all leads - no filter needed
-    } else if (isManager) {
-      // Manager: Get team leads under them + telecallers under those team leads
-      const teamLeads = await prisma.user.findMany({
-        where: {
-          organizationId: req.organization!.id,
-          managerId: userId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      const teamLeadIds = teamLeads.map(tl => tl.id);
-
-      // Get telecallers under those team leads
-      const telecallers = await prisma.user.findMany({
-        where: {
-          organizationId: req.organization!.id,
-          managerId: { in: teamLeadIds },
-          isActive: true,
-        },
-        select: { id: true },
-      });
-
-      // Include manager + team leads + telecallers
-      const allTeamIds = [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
-
-      if (showTeam === 'true') {
-        // Show all team leads
-        whereClause.assignments = {
-          some: {
-            assignedToId: { in: allTeamIds },
-            isActive: true,
-          },
-        };
-      } else {
-        // Show only manager's own leads
-        whereClause.assignments = {
-          some: {
-            assignedToId: userId,
-            isActive: true,
-          },
-        };
-      }
-    } else if (isTeamLead) {
-      // Team lead: Get telecallers under them
-      const teamMembers = await prisma.user.findMany({
-        where: {
-          organizationId: req.organization!.id,
-          managerId: userId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      const teamMemberIds = [userId, ...teamMembers.map(m => m.id)];
-
-      if (showTeam === 'true') {
-        // Show team leads
-        whereClause.assignments = {
-          some: {
-            assignedToId: { in: teamMemberIds },
-            isActive: true,
-          },
-        };
-      } else {
-        // Show only team lead's own leads
-        whereClause.assignments = {
-          some: {
-            assignedToId: userId,
-            isActive: true,
-          },
-        };
-      }
-    } else {
-      // Telecaller - only their own leads
-      whereClause.assignments = {
-        some: {
-          assignedToId: userId,
-          isActive: true,
-        },
-      };
+  if (dateFrom || dateTo) {
+    whereClause.createdAt = {};
+    if (dateFrom) {
+      const from = new Date(dateFrom as string);
+      from.setHours(0, 0, 0, 0);
+      whereClause.createdAt.gte = from;
     }
-
-    // Note: Lead model doesn't have a 'status' field - filter by stage if provided
-    if (status && status !== 'ALL') {
-      // Map app status to stage-based filtering or skip invalid status filters
-      // The app sends statuses like NEW, CONTACTED, QUALIFIED which don't exist as Lead fields
-      // Instead, we can filter by stage name or ignore the status filter
-      const stageMapping: Record<string, string> = {
-        'NEW': 'New',
-        'CONTACTED': 'Contacted',
-        'QUALIFIED': 'Qualified',
-        'CONVERTED': 'Converted',
-        'LOST': 'Lost',
-      };
-      const stageName = stageMapping[status as string];
-      if (stageName) {
-        whereClause.stage = { name: { equals: stageName, mode: 'insensitive' } };
-      }
+    if (dateTo) {
+      const to = new Date(dateTo as string);
+      to.setHours(23, 59, 59, 999);
+      whereClause.createdAt.lte = to;
     }
+  }
 
-    if (search) {
-      whereClause.OR = [
+  // Conditions that need to be ANDed with the lifecycle filter (so search +
+  // lifecycle compose correctly even when both use OR internally).
+  const extraClauses: any[] = [];
+  if (search) {
+    extraClauses.push({
+      OR: [
         { firstName: { contains: search as string, mode: 'insensitive' } },
         { lastName: { contains: search as string, mode: 'insensitive' } },
         { phone: { contains: search as string } },
         { email: { contains: search as string, mode: 'insensitive' } },
-      ];
-    }
+      ],
+    });
+  }
 
-    console.log(`[Telecaller/Leads] Where clause:`, JSON.stringify(whereClause, null, 2));
+  return { whereClause, extraClauses };
+}
+
+router.get('/leads', async (req: TenantRequest, res: Response) => {
+  try {
+    const { status, limit = '50', offset, page } = req.query;
+
+    const { whereClause, extraClauses } = await buildLeadsBaseWhere(req);
+
+    const lifecycleClause = buildLeadLifecycleWhere(status as string | undefined);
+    if (lifecycleClause) extraClauses.push(lifecycleClause);
+    if (extraClauses.length > 0) whereClause.AND = extraClauses;
+
+    // Support both page and offset — mobile sends page, web sends offset.
+    const limitNum = parseInt(limit as string) || 50;
+    let skipNum = 0;
+    if (page) {
+      const pageNum = parseInt(page as string) || 1;
+      skipNum = (pageNum - 1) * limitNum;
+    } else if (offset) {
+      skipNum = parseInt(offset as string) || 0;
+    }
 
     const [leads, total] = await Promise.all([
       prisma.lead.findMany({
@@ -1335,13 +1437,11 @@ router.get('/leads', async (req: TenantRequest, res: Response) => {
           _count: { select: { activities: true, notes: true, telecallerCalls: true } },
         },
         orderBy: { createdAt: 'desc' },
-        take: parseInt(limit as string),
-        skip: parseInt(offset as string),
+        take: limitNum,
+        skip: skipNum,
       }),
       prisma.lead.count({ where: whereClause }),
     ]);
-
-    console.log(`[Telecaller/Leads] Found ${leads.length} leads, total: ${total}`);
 
     // Decorate each lead with totalCalls and lastCallOutcome so the mobile app
     // can move it into the right tab without further API calls.
@@ -1352,6 +1452,48 @@ router.get('/leads', async (req: TenantRequest, res: Response) => {
     }));
 
     ApiResponse.success(res, 'Leads retrieved', { leads: decorated, total });
+  } catch (error) {
+    ApiResponse.error(res, (error as Error).message, 500);
+  }
+});
+
+// Get lifecycle counts for the leads visible to the caller. Honors the same
+// scope + search + date filters as /leads, so badge counts always match.
+router.get('/leads/stats', async (req: TenantRequest, res: Response) => {
+  try {
+    const { whereClause, extraClauses } = await buildLeadsBaseWhere(req);
+
+    const baseAnd = extraClauses;
+    const buildWhereFor = (lifecycle: string | null) => {
+      const ands = [...baseAnd];
+      if (lifecycle) {
+        const lc = buildLeadLifecycleWhere(lifecycle);
+        if (lc) ands.push(lc);
+      }
+      return ands.length > 0 ? { ...whereClause, AND: ands } : whereClause;
+    };
+
+    const [total, newCount, contacted, qualified, negotiation, converted, lost] = await Promise.all([
+      prisma.lead.count({ where: buildWhereFor(null) }),
+      prisma.lead.count({ where: buildWhereFor('NEW') }),
+      prisma.lead.count({ where: buildWhereFor('CONTACTED') }),
+      prisma.lead.count({ where: buildWhereFor('QUALIFIED') }),
+      prisma.lead.count({ where: buildWhereFor('NEGOTIATION') }),
+      prisma.lead.count({ where: buildWhereFor('CONVERTED') }),
+      prisma.lead.count({ where: buildWhereFor('LOST') }),
+    ]);
+
+    ApiResponse.success(res, 'Lead stats retrieved', {
+      total,
+      new: newCount,
+      contacted,
+      qualified,
+      negotiation,
+      converted,
+      lost,
+      // Active = anything not converted/lost. Cheaper to derive than to query.
+      active: Math.max(0, total - converted - lost),
+    });
   } catch (error) {
     ApiResponse.error(res, (error as Error).message, 500);
   }
@@ -1605,11 +1747,49 @@ router.get('/calls', async (req: TenantRequest, res: Response) => {
   res.set('Expires', '0');
   try {
     const userId = req.user!.id;
-    const { leadId, dateFrom, dateTo, outcome, limit = '50', offset = '0', search } = req.query;
+    const organizationId = req.organization!.id;
+    const { leadId, dateFrom, dateTo, outcome, limit = '50', offset = '0', search, showTeam } = req.query;
 
-    const whereClause: any = {
-      telecallerId: userId,
-    };
+    // showTeam=true → caller wants their team's calls in addition to their own.
+    // Only honored for roles that have visibility into other telecallers
+    // (manager, teamlead). Mirrors getLeadsAssignmentFilter's semantics.
+    let telecallerScope: any = userId;
+    if (showTeam === 'true') {
+      const userRole = req.user?.role || req.user?.roleSlug;
+      const normalizedRole = (userRole || '').toLowerCase().replace(/[_-]/g, '');
+
+      if (normalizedRole === 'admin') {
+        telecallerScope = undefined; // see all calls in org (org scope applied via include below)
+      } else if (normalizedRole === 'manager') {
+        const teamLeads = await prisma.user.findMany({
+          where: { organizationId, managerId: userId, isActive: true },
+          select: { id: true },
+        });
+        const teamLeadIds = teamLeads.map(tl => tl.id);
+        const telecallers = await prisma.user.findMany({
+          where: { organizationId, managerId: { in: teamLeadIds }, isActive: true },
+          select: { id: true },
+        });
+        const allTeamIds = [userId, ...teamLeadIds, ...telecallers.map(t => t.id)];
+        telecallerScope = { in: allTeamIds };
+      } else if (normalizedRole === 'teamlead') {
+        const teamMembers = await prisma.user.findMany({
+          where: { organizationId, managerId: userId, isActive: true },
+          select: { id: true },
+        });
+        const teamMemberIds = [userId, ...teamMembers.map(m => m.id)];
+        telecallerScope = { in: teamMemberIds };
+      }
+      // Plain telecallers stay scoped to their own userId even if showTeam=true.
+    }
+
+    const whereClause: any = {};
+    if (telecallerScope !== undefined) {
+      whereClause.telecallerId = telecallerScope;
+    } else {
+      // Admin + showTeam: still scope to the organization.
+      whereClause.telecaller = { organizationId };
+    }
 
     if (leadId) {
       whereClause.leadId = leadId;
@@ -1660,16 +1840,24 @@ router.get('/calls', async (req: TenantRequest, res: Response) => {
       prisma.telecallerCall.count({ where: whereClause }),
     ]);
 
-    // Get outcome counts for filter badges
+    // Badge counts honor the same caller/team scope as the list, so the
+    // numbers always match what's visible.
+    const scopeWhere: any = {};
+    if (telecallerScope !== undefined) {
+      scopeWhere.telecallerId = telecallerScope;
+    } else {
+      scopeWhere.telecaller = { organizationId };
+    }
+
     const outcomeCounts = await prisma.telecallerCall.groupBy({
       by: ['outcome'],
-      where: { telecallerId: userId },
+      where: scopeWhere,
       _count: { _all: true },
     });
 
-    const totalCalls = await prisma.telecallerCall.count({ where: { telecallerId: userId } });
+    const totalCalls = await prisma.telecallerCall.count({ where: scopeWhere });
     const pendingCalls = await prisma.telecallerCall.count({
-      where: { telecallerId: userId, outcome: null }
+      where: { ...scopeWhere, outcome: null }
     });
 
     const counts: Record<string, number> = {
@@ -1683,7 +1871,7 @@ router.get('/calls', async (req: TenantRequest, res: Response) => {
     // Date-range counts for the date filter badges. Counted from the same
     // outcome-filtered set the user is viewing (so badges match the current tab),
     // ignoring any active date filter (so all date-buckets stay visible).
-    const dateCountsWhere: any = { telecallerId: userId };
+    const dateCountsWhere: any = { ...scopeWhere };
     if (whereClause.leadId) dateCountsWhere.leadId = whereClause.leadId;
     if (whereClause.outcome !== undefined) dateCountsWhere.outcome = whereClause.outcome;
 

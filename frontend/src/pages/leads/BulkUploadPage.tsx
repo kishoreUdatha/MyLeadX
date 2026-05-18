@@ -42,6 +42,7 @@ export default function BulkUploadPage() {
   const [assignmentType, setAssignmentType] = useState<'assignableUsers' | 'ai-agent' | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [pipelineStages, setPipelineStages] = useState<string[]>([]);
+  const [showAllErrors, setShowAllErrors] = useState(false);
 
   useEffect(() => {
     dispatch(fetchAssignableUsers());
@@ -198,7 +199,7 @@ export default function BulkUploadPage() {
         'Location': 'Delhi',
         'Status': stages[0] || 'New Enquiry', // First stage
         'Priority': 'Warm',
-        'Assigned To': counselorNames[1] || '',
+        'Assigned To': counselorNames[1] || counselorNames[0] || 'Counselor Name',
         'Notes': 'Follow up next week',
         'Gender': 'Female',
         'City': 'Delhi',
@@ -307,14 +308,20 @@ export default function BulkUploadPage() {
                   <li>
                     <span className="font-medium">Phone</span> - phone, mobile, stu_mobileno, contact_number, etc.
                   </li>
+                  <li>
+                    <span className="font-medium">Email</span> - email, email_address, contact email, etc.
+                  </li>
+                  <li>
+                    <span className="font-medium">Status</span> - status, lead status, stage, enquiry status, etc.
+                  </li>
+                  <li>
+                    <span className="font-medium">Assigned To</span> - assigned to, counselor, telecaller, agent name, owner
+                  </li>
                 </ul>
                 <h3 className="text-sm font-medium text-gray-900 mt-4 mb-2">
                   {t('leads:bulkUpload.optionalColumns')}
                 </h3>
                 <ul className="text-sm text-gray-600 space-y-1">
-                  <li>
-                    <span className="font-medium">Email</span> - email, email_address, contact email, etc.
-                  </li>
                   <li>
                     <span className="font-medium">Location</span> - location, place, area, region, branch, center, etc.
                   </li>
@@ -323,12 +330,6 @@ export default function BulkUploadPage() {
                   </li>
                   <li>
                     <span className="font-medium">Priority</span> - priority (Hot/Warm/Cold or High/Medium/Low)
-                  </li>
-                  <li>
-                    <span className="font-medium">Status</span> - status, lead status, stage, enquiry status, etc.
-                  </li>
-                  <li>
-                    <span className="font-medium">Assigned To</span> - assigned to, counselor, telecaller, agent name, owner
                   </li>
                   <li>alternate_phone, course_name, gender, address, city, state, etc.</li>
                   <li>{t('leads:bulkUpload.customFieldsNote')}</li>
@@ -405,21 +406,101 @@ export default function BulkUploadPage() {
               </div>
             )}
 
-            {bulkUploadResult.errors.length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-sm font-medium text-gray-900 mb-2 flex items-center">
-                  <XCircleIcon className="h-5 w-5 text-red-500 mr-2" />
-                  {t('leads:bulkUpload.validationErrors')} ({bulkUploadResult.errors.length})
-                </h3>
-                <div className="max-h-40 overflow-y-auto bg-red-50 rounded-lg p-3">
-                  {bulkUploadResult.errors.map((err, index) => (
-                    <div key={index} className="text-sm text-gray-700">
-                      {t('leads:bulkUpload.row')} {err.row}: {err.errors.join(', ')}
+            {bulkUploadResult.errors.length > 0 && (() => {
+              const totalInvalid = bulkUploadResult.errors.length;
+
+              // Tally how many invalid rows hit each unique error message
+              const errorCounts = new Map<string, { count: number; rows: number[] }>();
+              bulkUploadResult.errors.forEach((err) => {
+                err.errors.forEach((msg) => {
+                  const existing = errorCounts.get(msg);
+                  if (existing) {
+                    existing.count += 1;
+                    existing.rows.push(err.row);
+                  } else {
+                    errorCounts.set(msg, { count: 1, rows: [err.row] });
+                  }
+                });
+              });
+
+              // An error hitting >=80% of invalid rows almost certainly means the
+              // column is missing from the file entirely (not a per-row data issue).
+              const missingColumns: string[] = [];
+              errorCounts.forEach((info, msg) => {
+                const m = msg.match(/^(.+?) is required$/);
+                if (m && info.count / totalInvalid >= 0.8) {
+                  missingColumns.push(m[1]);
+                }
+              });
+
+              const groupedErrors = Array.from(errorCounts.entries())
+                .map(([msg, info]) => ({ msg, count: info.count, rows: info.rows }))
+                .sort((a, b) => b.count - a.count);
+
+              return (
+                <div className="mb-4 space-y-3">
+                  {missingColumns.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                      <div className="flex items-start">
+                        <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 mr-2 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <h3 className="text-sm font-semibold text-amber-900">
+                            Your file is missing required column{missingColumns.length > 1 ? 's' : ''}: {missingColumns.join(', ')}
+                          </h3>
+                          <p className="text-sm text-amber-800 mt-1">
+                            Add {missingColumns.length > 1 ? 'these columns' : 'this column'} to your spreadsheet and upload again. Download the sample template for the expected format.
+                          </p>
+                          <button
+                            onClick={downloadSampleTemplate}
+                            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-amber-900 hover:text-amber-700 underline"
+                          >
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                            Download template
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  )}
+
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-900 mb-2 flex items-center">
+                      <XCircleIcon className="h-5 w-5 text-red-500 mr-2" />
+                      {totalInvalid} row{totalInvalid > 1 ? 's' : ''} skipped
+                    </h3>
+                    <div className="bg-red-50 rounded-lg p-3 space-y-1.5">
+                      {groupedErrors.map((g) => (
+                        <div key={g.msg} className="text-sm text-gray-800 flex justify-between gap-3">
+                          <span>{g.msg}</span>
+                          <span className="text-gray-500 whitespace-nowrap">
+                            {g.count} row{g.count > 1 ? 's' : ''}
+                            {g.count <= 5 && ` (row ${g.rows.join(', ')})`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {totalInvalid > 0 && (
+                      <button
+                        onClick={() => setShowAllErrors((s) => !s)}
+                        className="mt-2 text-sm text-gray-600 hover:text-gray-900 underline"
+                      >
+                        {showAllErrors ? 'Hide row-by-row details' : 'Show row-by-row details'}
+                      </button>
+                    )}
+
+                    {showAllErrors && (
+                      <div className="mt-2 max-h-40 overflow-y-auto bg-gray-50 rounded-lg p-3">
+                        {bulkUploadResult.errors.map((err, index) => (
+                          <div key={index} className="text-sm text-gray-700">
+                            {t('leads:bulkUpload.row')} {err.row}: {err.errors.join(', ')}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Assignment Options */}
             {bulkUploadResult.insertedLeads > 0 && !assignmentType && (

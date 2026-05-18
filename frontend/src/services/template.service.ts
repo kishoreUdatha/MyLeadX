@@ -37,7 +37,7 @@ export interface MessageTemplate {
   footerContent?: string;
   buttons?: TemplateButton[];
   whatsappTemplateId?: string;
-  whatsappStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  whatsappStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAUSED';
   whatsappLanguage?: string;
   isActive: boolean;
   isDefault: boolean;
@@ -148,6 +148,25 @@ export const templateService = {
 
   async getSmsInfo(content: string): Promise<SmsInfo> {
     const response = await api.post('/templates/sms-info', { content });
+    return response.data.data;
+  },
+
+  // Submit a WhatsApp template to Meta for approval. Returns the Meta template
+  // ID + current status. The local template row is updated server-side so the
+  // caller usually re-fetches afterward.
+  async submitToMeta(id: string): Promise<{
+    templateId: string;
+    metaTemplateId: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAUSED';
+  }> {
+    const response = await api.post(`/whatsapp/templates/${id}/submit`);
+    return response.data.data;
+  },
+
+  // Pull current statuses from Meta for the caller's org and update any
+  // diverged local rows. Used by a "Refresh status" button.
+  async syncMetaStatus(): Promise<{ checked: number; updated: number }> {
+    const response = await api.post('/whatsapp/templates/sync-status');
     return response.data.data;
   },
 };

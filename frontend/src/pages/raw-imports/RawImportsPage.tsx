@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store';
@@ -48,6 +48,8 @@ export default function RawImportsPage() {
   });
   const [selectedManagerId, setSelectedManagerId] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const { imports, total, stats, isLoading } = useSelector(
     (state: RootState) => state.rawImports
@@ -155,6 +157,29 @@ export default function RawImportsPage() {
     setSelectedManagerId('');
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const result = await rawImportService.uploadBulkImport(file);
+      showToast.success(
+        `Uploaded ${result.insertedRecords} records (${result.duplicateRows} duplicates, ${result.invalidRows} invalid)`,
+      );
+      dispatch(fetchBulkImports({ page: 1, limit: 50 }));
+      dispatch(fetchStats());
+    } catch (error: any) {
+      showToast.error(error?.response?.data?.message || 'Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'COMPLETED':
@@ -215,12 +240,20 @@ export default function RawImportsPage() {
             <ArrowPathIcon className="h-4 w-4" />
             Refresh
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            className="hidden"
+            onChange={handleFileSelected}
+          />
           <button
-            onClick={() => navigate('/leads/bulk-upload')}
-            className="btn btn-primary btn-sm flex items-center gap-1 text-xs"
+            onClick={handleUploadClick}
+            disabled={isUploading}
+            className="btn btn-primary btn-sm flex items-center gap-1 text-xs disabled:opacity-50"
           >
             <DocumentArrowUpIcon className="h-4 w-4" />
-            Upload New Data
+            {isUploading ? 'Uploading...' : 'Upload New Data'}
           </button>
         </div>
       </div>

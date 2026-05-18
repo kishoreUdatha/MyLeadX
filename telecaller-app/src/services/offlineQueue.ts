@@ -438,21 +438,31 @@ class OfflineQueue {
     return () => this.statusListeners.delete(listener);
   }
 
+  // Coalesce a burst of mutations (e.g. processing a batch where the
+  // `processing` flag flips twice per item) into a single notify per tick.
+  // Without this, processing 50 items can fire 100+ re-renders across the app.
+  private notifyScheduled = false;
+
   /**
-   * Notify queue listeners
+   * Notify queue listeners (coalesced — at most once per microtask)
    */
   private notifyListeners(): void {
-    const queueCopy = [...this.queue];
-    this.queueListeners.forEach(listener => listener(queueCopy));
-    this.notifyStatusListeners();
+    if (this.notifyScheduled) return;
+    this.notifyScheduled = true;
+    Promise.resolve().then(() => {
+      this.notifyScheduled = false;
+      const queueCopy = [...this.queue];
+      this.queueListeners.forEach(listener => listener(queueCopy));
+      const status = this.getStatus();
+      this.statusListeners.forEach(listener => listener(status));
+    });
   }
 
   /**
-   * Notify status listeners
+   * Notify status listeners only — also coalesced via notifyListeners().
    */
   private notifyStatusListeners(): void {
-    const status = this.getStatus();
-    this.statusListeners.forEach(listener => listener(status));
+    this.notifyListeners();
   }
 
   /**

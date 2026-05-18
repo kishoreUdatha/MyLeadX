@@ -75,35 +75,26 @@ const CallScreen: React.FC = () => {
     submitOutcome,
   } = useCallRecording();
 
-  const [callInitiated, setCallInitiated] = useState(false);
+  // Sync ref guard prevents a double-dial if this effect ever re-runs before
+  // the state update lands (initiateCall identity from useCallRecording can
+  // change between renders). Empty deps + ref = run exactly once on mount.
+  const callInitiatedRef = useRef(false);
 
-  // Initiate the call when screen mounts
   useEffect(() => {
     const startCall = async () => {
-      console.log('============================================');
-      console.log('[CallScreen] useEffect triggered');
-      console.log('[CallScreen] callInitiated:', callInitiated);
-      console.log('[CallScreen] lead:', lead?.id, lead?.phone);
-      console.log('============================================');
+      if (callInitiatedRef.current || !lead) return;
+      callInitiatedRef.current = true;
 
-      if (!callInitiated && lead) {
-        setCallInitiated(true);
-        console.log('[CallScreen] >>>>>> CALLING initiateCall NOW <<<<<<');
-        const success = await initiateCall(lead);
-        console.log('[CallScreen] initiateCall returned:', success);
-        if (!success) {
-          console.log('[CallScreen] Call initiation failed, going back');
-          // Go back if call initiation failed
-          navigation.goBack();
-        } else {
-          console.log('[CallScreen] Call initiation succeeded!');
-        }
-      } else {
-        console.log('[CallScreen] Skipping - already initiated or no lead');
+      if (__DEV__) console.log('[CallScreen] Initiating call for lead', lead.id);
+      const success = await initiateCall(lead);
+      if (!success) {
+        if (__DEV__) console.log('[CallScreen] Call initiation failed, going back');
+        navigation.goBack();
       }
     };
     startCall();
-  }, [lead, callInitiated, initiateCall, navigation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Messaging state
   const [showMessageModal, setShowMessageModal] = useState(false);
@@ -153,15 +144,15 @@ const CallScreen: React.FC = () => {
       if (next === 'background' || next === 'inactive') {
         // App went to background — assume the dialer took over.
         dialerLeftRef.current = true;
-      } else if (next === 'active' && dialerLeftRef.current && callInitiated && !showOutcomeModal) {
+      } else if (next === 'active' && dialerLeftRef.current && callInitiatedRef.current && !showOutcomeModal) {
         // Returned from the dialer — finalize the call and ask for the outcome.
         dialerLeftRef.current = false;
-        try { await endCall(); } catch (e) { console.warn('endCall failed:', e); }
+        try { await endCall(); } catch (e) { if (__DEV__) console.warn('endCall failed:', e); }
         setShowOutcomeModal(true);
       }
     });
     return () => sub.remove();
-  }, [callInitiated, endCall, showOutcomeModal]);
+  }, [endCall, showOutcomeModal]);
 
   const handleAutoSend = async () => {
     try {

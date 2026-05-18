@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,8 +20,9 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useLeads } from '../hooks/useLeads';
 import { useCallRecording } from '../hooks/useCallRecording';
+import { leadsApi } from '../api/leads';
 import LeadCard from '../components/LeadCard';
-import { Lead, LeadStatus, RootStackParamList, STORAGE_KEYS, isTeamLeadOrAbove } from '../types';
+import { Lead, LeadStatus, LeadsStats, RootStackParamList, STORAGE_KEYS, isTeamLeadOrAbove } from '../types';
 import { DateRangeType } from '../components/DateRangeFilter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -90,10 +91,7 @@ const LeadsScreen: React.FC = () => {
     leads,
     isLoading,
     hasMore,
-    filters,
     loadLeads,
-    search,
-    filterByStatus,
   } = useLeads();
   const { initiateCall } = useCallRecording();
 
@@ -109,7 +107,6 @@ const LeadsScreen: React.FC = () => {
   const [showTeamLeads, setShowTeamLeads] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const isLoadingRef = useRef(false);
-  const hasInitializedRef = useRef(false);
   const lastLoadTimeRef = useRef(0);
 
   const isTeamLead = isTeamLeadOrAbove(userRole);
@@ -124,113 +121,101 @@ const LeadsScreen: React.FC = () => {
           setUserRole(user.role || 'telecaller');
         }
       } catch (e) {
-        console.log('[LeadsScreen] Error loading role:', e);
+        if (__DEV__) console.log('[LeadsScreen] Error loading role:', e);
       }
     };
     loadRole();
   }, []);
 
+  // Stats from server (lifecycle counts) — drives tab badges + conversion totals.
+  const [stats, setStats] = useState<LeadsStats | null>(null);
+
+  // Translate UI filters into the single `status` param the backend understands.
+  // Status filter wins; otherwise the conversion tab maps to ACTIVE/CONVERTED.
+  const getEffectiveStatus = useCallback((): LeadStatus | 'ALL' => {
+    if (activeFilter !== 'ALL') return activeFilter;
+    if (conversionTab === 'converted') return 'CONVERTED' as LeadStatus;
+    if (conversionTab === 'active') return 'ACTIVE' as any;
+    return 'ALL';
+  }, [activeFilter, conversionTab]);
+
+  const getDateParams = useCallback(() => {
+    const dates = getDateRange(dateRange, customDates);
+    return {
+      dateFrom: dates?.startDate?.toISOString().split('T')[0],
+      dateTo: dates?.endDate?.toISOString().split('T')[0],
+    };
+  }, [dateRange, customDates]);
+
+  // doFetch reads the latest state via a ref so we can put it behind a stable
+  // debounced effect without triggering re-fetches on every render's callback
+  // identity churn (the old useFocusEffect deps caused 2–3 requests per tap).
+  const doFetchRef = useRef<() => void>(() => {});
+  doFetchRef.current = () => {
+    const effectiveStatus = getEffectiveStatus();
+    const dateParams = getDateParams();
+    const search = searchQuery.length >= 2 ? searchQuery : undefined;
+    loadLeads(true, showTeamLeads, { status: effectiveStatus, ...dateParams, search });
+    leadsApi
+      .getLeadsStats({ showTeam: showTeamLeads, ...dateParams })
+      .then(setStats)
+      .catch(err => { if (__DEV__) console.log('[LeadsScreen] Stats fetch failed:', err); });
+  };
+
+  // Single signature string of all server-side filters. The effect re-fires
+  // only when one of these actually changes, not on every render.
+  const filterSig =
+    `${activeFilter}|${conversionTab}|${dateRange}` +
+    `|${customDates.startDate?.toISOString() ?? ''}` +
+    `|${customDates.endDate?.toISOString() ?? ''}` +
+    `|${showTeamLeads}|${searchQuery}`;
+
+  const isFirstFilterRun = useRef(true);
   useEffect(() => {
-    // Only load once on mount
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      console.log('[LeadsScreen] Initial load triggered');
-      loadLeads(true, showTeamLeads).then(() => {
-        console.log('[LeadsScreen] Leads loaded, count:', leads.length);
-      });
+    // Fire immediately on first mount, debounce subsequent changes (so typing
+    // in the search box coalesces to one request).
+    if (isFirstFilterRun.current) {
+      isFirstFilterRun.current = false;
+      doFetchRef.current();
+      return;
     }
-  }, [loadLeads, showTeamLeads]);
+    const t = setTimeout(() => doFetchRef.current(), 300);
+    return () => clearTimeout(t);
+  }, [filterSig]);
 
-  useEffect(() => {
-    console.log('[LeadsScreen] Leads state updated, count:', leads.length, 'isLoading:', isLoading);
-  }, [leads, isLoading]);
-
-  // Refresh leads when the screen regains focus (e.g. returning from CallScreen)
-  // so lastContactedAt / totalCalls reflect the call we just made and the NEW
-  // bucket count drops accordingly.
+  // Re-fetch on re-focus (e.g. coming back from CallScreen) — but skip the
+  // initial focus, since the signature effect above already loaded the data.
+  const skipFirstFocus = useRef(true);
   useFocusEffect(
     useCallback(() => {
-      if (hasInitializedRef.current) {
-        loadLeads(true, showTeamLeads);
+      if (skipFirstFocus.current) {
+        skipFirstFocus.current = false;
+        return;
       }
-    }, [loadLeads, showTeamLeads])
+      doFetchRef.current();
+    }, [])
   );
 
-  // Reload leads when team toggle changes
-  useEffect(() => {
-    if (hasInitializedRef.current) {
-      console.log('[LeadsScreen] Team toggle changed, reloading leads. showTeam:', showTeamLeads);
-      loadLeads(true, showTeamLeads);
-    }
-  }, [showTeamLeads, loadLeads]);
+  // Server already filtered — render the loaded page directly.
+  const displayLeads = leads;
 
-  // Filter leads by date range first
-  const dateFilteredLeads = useMemo(() => {
-    const dates = getDateRange(dateRange, customDates);
-    if (!dates) return leads;
-    return leads.filter(lead => {
-      const leadDate = new Date(lead.createdAt || Date.now());
-      return leadDate >= dates.startDate && leadDate <= dates.endDate;
-    });
-  }, [leads, dateRange, customDates]);
-
-  // A lead is "NEW" (uncalled) if it has never been contacted.
-  // It moves to "CONTACTED" after the first call, unless it has progressed to a
-  // later stage (Qualified / Negotiation / Converted / Lost).
-  const isUncalled = (l: any) =>
-    !l.lastContactedAt && (l.totalCalls === undefined || l.totalCalls === 0);
-
-  const isContacted = (l: any) => {
-    if (isUncalled(l)) return false;
-    const advanced = ['QUALIFIED', 'NEGOTIATION', 'CONVERTED', 'LOST'];
-    return !advanced.includes(l.status);
+  const conversionCounts = {
+    all: stats?.total ?? 0,
+    active: stats?.active ?? 0,
+    converted: stats?.converted ?? 0,
   };
 
-  const matchesFilter = (l: any, filter: LeadStatus | 'ALL') => {
-    if (filter === 'ALL') return true;
-    if (filter === 'NEW') return isUncalled(l);
-    if (filter === 'CONTACTED') return isContacted(l);
-    return l.status === filter;
+  const statusCounts: Record<string, number> = {
+    ALL: conversionTab === 'converted' ? (stats?.converted ?? 0)
+       : conversionTab === 'active'    ? (stats?.active ?? 0)
+       : (stats?.total ?? 0),
+    NEW: stats?.new ?? 0,
+    CONTACTED: stats?.contacted ?? 0,
+    QUALIFIED: stats?.qualified ?? 0,
+    NEGOTIATION: stats?.negotiation ?? 0,
+    CONVERTED: stats?.converted ?? 0,
+    LOST: stats?.lost ?? 0,
   };
-
-  // Filter by conversion tab
-  const matchesConversionTab = (l: any, tab: ConversionTab) => {
-    if (tab === 'all') return true;
-    if (tab === 'converted') return l.status === 'CONVERTED';
-    // Active = not converted and not lost
-    return l.status !== 'CONVERTED' && l.status !== 'LOST';
-  };
-
-  // Get final filtered leads (date + conversion tab + status)
-  const displayLeads = useMemo(() => {
-    return dateFilteredLeads
-      .filter(l => matchesConversionTab(l, conversionTab))
-      .filter(l => matchesFilter(l, activeFilter));
-  }, [dateFilteredLeads, conversionTab, activeFilter]);
-
-  // Calculate counts for conversion tabs
-  const conversionCounts = useMemo(() => {
-    return {
-      all: dateFilteredLeads.length,
-      active: dateFilteredLeads.filter(l => l.status !== 'CONVERTED' && l.status !== 'LOST').length,
-      converted: dateFilteredLeads.filter(l => l.status === 'CONVERTED').length,
-    };
-  }, [dateFilteredLeads]);
-
-  // Calculate counts for each status (based on conversion-tab-filtered leads)
-  const conversionFilteredLeads = useMemo(() => {
-    return dateFilteredLeads.filter(l => matchesConversionTab(l, conversionTab));
-  }, [dateFilteredLeads, conversionTab]);
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { ALL: conversionFilteredLeads.length };
-    STATUS_FILTERS.forEach(filter => {
-      if (filter.value !== 'ALL') {
-        counts[filter.value] = conversionFilteredLeads.filter(l => matchesFilter(l, filter.value)).length;
-      }
-    });
-    return counts;
-  }, [conversionFilteredLeads]);
 
   const handleDateRangeChange = useCallback(
     (range: DateRangeType, dates?: { startDate: Date | null; endDate: Date | null }) => {
@@ -244,47 +229,37 @@ const LeadsScreen: React.FC = () => {
 
   const handleRefresh = useCallback(() => {
     isLoadingRef.current = false; // Reset on refresh
-    loadLeads(true, showTeamLeads);
-  }, [loadLeads, showTeamLeads]);
+    doFetchRef.current();
+  }, []);
 
   const handleLoadMore = useCallback(() => {
     const now = Date.now();
-    // Debounce: prevent calls within 1 second of each other
-    if (now - lastLoadTimeRef.current < 1000) {
-      return;
-    }
-    // Prevent multiple concurrent calls
-    if (isLoadingRef.current || isLoading || !hasMore) {
-      return;
-    }
-    // Prevent loading if we have no data yet (initial load in progress)
-    if (displayLeads.length === 0) {
-      return;
-    }
+    if (now - lastLoadTimeRef.current < 1000) return;
+    if (isLoadingRef.current || isLoading || !hasMore) return;
+    if (displayLeads.length === 0) return;
+
     lastLoadTimeRef.current = now;
     isLoadingRef.current = true;
-    loadLeads(false, showTeamLeads).finally(() => {
-      // Reset after a delay to prevent rapid re-triggering
+    const search = searchQuery.length >= 2 ? searchQuery : undefined;
+    loadLeads(false, showTeamLeads, {
+      status: getEffectiveStatus(),
+      ...getDateParams(),
+      search,
+    }).finally(() => {
       setTimeout(() => {
         isLoadingRef.current = false;
       }, 500);
     });
-  }, [isLoading, hasMore, loadLeads, displayLeads.length, showTeamLeads]);
+  }, [isLoading, hasMore, loadLeads, displayLeads.length, showTeamLeads, getEffectiveStatus, getDateParams, searchQuery]);
 
-  const handleSearch = useCallback(
-    (text: string) => {
-      setSearchQuery(text);
-      if (text.length >= 2) {
-        search(text);
-      } else if (text.length === 0) {
-        loadLeads(true, showTeamLeads);
-      }
-    },
-    [search, loadLeads, showTeamLeads]
-  );
+  // The debounced signature effect re-fetches whenever searchQuery changes —
+  // no need to fire a request here on every keystroke.
+  const handleSearch = useCallback((text: string) => {
+    setSearchQuery(text);
+  }, []);
 
-  // Tab change is purely client-side: filter the already-loaded leads instead of
-  // refetching, so the badge counts remain stable across tab switches.
+  // Tab change now triggers a server-side refetch via useFocusEffect's deps
+  // (getEffectiveStatus changes → focus effect re-runs).
   const handleFilterChange = useCallback(
     (status: LeadStatus | 'ALL') => {
       setActiveFilter(status);

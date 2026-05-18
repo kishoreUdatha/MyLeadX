@@ -57,7 +57,7 @@ export const fetchCalls = createAsyncThunk(
       refresh = false,
     }: {
       page?: number;
-      filters?: { startDate?: string; endDate?: string; outcome?: string };
+      filters?: { startDate?: string; endDate?: string; outcome?: string; showTeam?: boolean };
       refresh?: boolean;
     },
     { rejectWithValue }

@@ -27,6 +27,9 @@ import {
   MessageSquare,
   Globe,
   ArrowLeft,
+  Send,
+  RefreshCw,
+  PauseCircle,
 } from 'lucide-react';
 import {
   templateService,
@@ -90,6 +93,10 @@ export default function WhatsAppTemplateBuilderPage() {
   });
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
+  // In-flight states for per-row Meta actions. Keyed by templateId so two
+  // submits to different rows don't lock each other out.
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [syncingStatus, setSyncingStatus] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -200,6 +207,59 @@ export default function WhatsAppTemplateBuilderPage() {
     }
   };
 
+  // Send the template to Meta's approval pipeline. After Meta accepts the
+  // submission, the local row gets `whatsappTemplateId` + a starting status
+  // of PENDING. We re-fetch so the UI swaps the "Submit" button for the
+  // "Refresh status" button.
+  const handleSubmitToMeta = async (id: string) => {
+    if (!window.confirm(
+      'Submit this template to Meta for approval?\n\n' +
+      'Meta typically reviews templates within 24 hours. ' +
+      'Once submitted, you cannot edit the body or buttons until approved or rejected.'
+    )) {
+      return;
+    }
+    setSubmittingId(id);
+    try {
+      const result = await templateService.submitToMeta(id);
+      setToast({
+        type: 'success',
+        message: `Submitted to Meta (status: ${result.status}). Approval usually within 24h.`,
+      });
+      await fetchTemplates();
+    } catch (error: any) {
+      setToast({
+        type: 'error',
+        message: error.response?.data?.message || 'Failed to submit to Meta',
+      });
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  // Pull latest statuses from Meta. Useful when the webhook event was
+  // missed or the user just wants to confirm current state.
+  const handleRefreshStatus = async () => {
+    setSyncingStatus(true);
+    try {
+      const result = await templateService.syncMetaStatus();
+      setToast({
+        type: 'success',
+        message: result.updated > 0
+          ? `Refreshed — ${result.updated} template status(es) updated`
+          : `Refreshed — all ${result.checked} template(s) already up to date`,
+      });
+      await fetchTemplates();
+    } catch (error: any) {
+      setToast({
+        type: 'error',
+        message: error.response?.data?.message || 'Failed to refresh from Meta',
+      });
+    } finally {
+      setSyncingStatus(false);
+    }
+  };
+
   const handleDuplicate = async (id: string) => {
     try {
       await templateService.duplicate(id);
@@ -251,6 +311,13 @@ export default function WhatsAppTemplateBuilderPage() {
             Rejected
           </span>
         );
+      case 'PAUSED':
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-slate-200 text-slate-700 text-xs rounded-full">
+            <PauseCircle className="w-3 h-3" />
+            Paused
+          </span>
+        );
       case 'PENDING':
       default:
         return (
@@ -299,13 +366,24 @@ export default function WhatsAppTemplateBuilderPage() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={openCreateEditor}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Create Template
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefreshStatus}
+                disabled={syncingStatus}
+                className="flex items-center gap-2 px-3 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                title="Pull latest approval status from Meta"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncingStatus ? 'animate-spin' : ''}`} />
+                {syncingStatus ? 'Syncing...' : 'Refresh from Meta'}
+              </button>
+              <button
+                onClick={openCreateEditor}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Create Template
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
@@ -388,6 +466,28 @@ export default function WhatsAppTemplateBuilderPage() {
                     </div>
 
                     <div className="flex items-center gap-1">
+                      {/* Submit-to-Meta — only for templates never submitted before.
+                          Once whatsappTemplateId exists, Meta owns the lifecycle. */}
+                      {!template.whatsappTemplateId && (
+                        <button
+                          onClick={() => handleSubmitToMeta(template.id)}
+                          disabled={submittingId === template.id}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg transition-colors"
+                          title="Submit this template to Meta for approval"
+                        >
+                          <Send className={`w-3.5 h-3.5 ${submittingId === template.id ? 'animate-pulse' : ''}`} />
+                          {submittingId === template.id ? 'Submitting...' : 'Submit to Meta'}
+                        </button>
+                      )}
+                      {/* Already-submitted templates show their Meta ID for reference. */}
+                      {template.whatsappTemplateId && (
+                        <span
+                          className="hidden md:inline-flex items-center px-2 py-1 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg"
+                          title={`Meta template ID: ${template.whatsappTemplateId}`}
+                        >
+                          Meta ID: {template.whatsappTemplateId.slice(0, 8)}…
+                        </span>
+                      )}
                       <button
                         onClick={() => openEditEditor(template)}
                         className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"

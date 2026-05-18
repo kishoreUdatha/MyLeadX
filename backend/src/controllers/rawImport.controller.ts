@@ -1,11 +1,34 @@
 import { Response, NextFunction } from 'express';
 import { rawImportService } from '../services/rawImport.service';
+import { bulkUploadService } from '../services/bulkUpload.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { TenantRequest } from '../middlewares/tenant';
 import { RawImportRecordStatus, LeadSource, LeadPriority } from '@prisma/client';
 
 export class RawImportController {
   // ==================== BULK IMPORTS ====================
+
+  async uploadFile(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.file) {
+        ApiResponse.error(res, 'No file uploaded', 400);
+        return;
+      }
+
+      const result = await bulkUploadService.processUploadToRaw(
+        req.organizationId!,
+        req.user!.id,
+        req.file.buffer,
+        req.file.mimetype,
+        req.file.originalname,
+        req.file.size,
+      );
+
+      ApiResponse.created(res, 'File uploaded to raw imports successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
 
   async listBulkImports(req: TenantRequest, res: Response, next: NextFunction): Promise<void> {
     try {

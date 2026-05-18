@@ -104,6 +104,7 @@ class NotificationService {
   private listeners: Set<NotificationListener> = new Set();
   private navigationListener: NavigationListener | null = null;
   private appState: AppStateStatus = 'active';
+  private appStateSubscription: { remove: () => void } | null = null;
 
   /**
    * Initialize notification service
@@ -154,8 +155,13 @@ class NotificationService {
       // Setup Notifee event handlers
       this.setupNotifeeHandlers();
 
-      // Track app state for foreground/background notifications
-      AppState.addEventListener('change', (state) => {
+      // Track app state for foreground/background notifications. Store the
+      // subscription so a future init() (e.g. after logout/login) can replace
+      // it instead of stacking listeners.
+      if (this.appStateSubscription) {
+        this.appStateSubscription.remove();
+      }
+      this.appStateSubscription = AppState.addEventListener('change', (state) => {
         this.appState = state;
       });
 

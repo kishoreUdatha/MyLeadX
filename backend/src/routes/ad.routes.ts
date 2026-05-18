@@ -151,7 +151,8 @@ router.get('/facebook/webhook', async (req: Request, res: Response) => {
   const mode = req.query['hub.mode'] as string;
   const token = req.query['hub.verify_token'] as string;
   const challenge = req.query['hub.challenge'] as string;
-  const orgId = req.query['org'] as string; // Optional: org ID in webhook URL
+  // Accept both `organizationId` (current wizard format) and `org` (legacy).
+  const orgId = (req.query['organizationId'] || req.query['org']) as string | undefined;
 
   console.log(`[Facebook] Webhook verification request - mode: ${mode}, token: [REDACTED]`);
 

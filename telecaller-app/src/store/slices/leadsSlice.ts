@@ -21,18 +21,47 @@ export const fetchLeads = createAsyncThunk(
   'leads/fetchLeads',
   async (
     {
-      page = 1,
+      page,
       refresh = false,
       showTeam = false,
-    }: { page?: number; refresh?: boolean; showTeam?: boolean },
+      status,
+      search,
+      dateFrom,
+      dateTo,
+    }: {
+      page?: number;
+      refresh?: boolean;
+      showTeam?: boolean;
+      status?: LeadStatus | 'ALL';
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    },
     { getState, rejectWithValue }
   ) => {
     try {
       const state = getState() as { leads: LeadsState };
-      const { filters } = state.leads;
+      // Caller-provided params win; fall back to Redux-tracked filters for
+      // legacy callers (filterByStatus, search).
+      const reduxFilters = state.leads.filters;
+      const effective = {
+        status: status !== undefined ? status : reduxFilters.status,
+        search: search !== undefined ? search : reduxFilters.search,
+        showTeam,
+        dateFrom,
+        dateTo,
+      };
 
-      const response = await leadsApi.getAssignedLeads(page, 20, { ...filters, showTeam });
-      console.log('[LeadsSlice] Got leads:', response.data?.length, 'pagination:', response.pagination);
+      // Compute effective page from live state when not explicitly provided —
+      // callers in hooks would otherwise capture a stale value via closure.
+      const effectivePage = page !== undefined
+        ? page
+        : refresh
+          ? 1
+          : state.leads.pagination.page + 1;
+
+      const response = await leadsApi.getAssignedLeads(effectivePage, 20, effective);
+      if (__DEV__) console.log('[LeadsSlice] Got leads:', response.data?.length, 'pagination:', response.pagination);
 
       return {
         leads: response.data,

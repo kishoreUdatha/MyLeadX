@@ -5,10 +5,12 @@ import { prisma } from '../config/database';
 import { AdPlatform, LeadSource, LeadPriority } from '@prisma/client';
 import { leadAutoAssignService } from '../services/leadAutoAssign.service';
 import { circuitBreakers, CircuitBreakerError } from '../utils/circuitBreaker';
-import { API_VERSIONS, API_ENDPOINTS } from '../utils/constants';
+import { API_VERSIONS } from '../utils/constants';
 import { externalLeadImportService } from '../services/external-lead-import.service';
 
-const FB_GRAPH_URL = API_ENDPOINTS.FACEBOOK_GRAPH;
+// API_ENDPOINTS doesn't actually expose FACEBOOK_GRAPH (only EXOTEL). Compose
+// the URL from config + the version constant — yields https://graph.facebook.com/v18.0.
+const FB_GRAPH_URL = `${config.apiUrls.facebookGraph}/${API_VERSIONS.FACEBOOK_GRAPH}`;
 
 interface FacebookLeadData {
   id: string;
@@ -431,8 +433,10 @@ export class FacebookService {
         return response.data.data;
       }
     } catch (error: any) {
-      // If /me/accounts fails, the token might be a Page token
-      console.info('[Facebook] /me/accounts failed, checking if this is a Page token');
+      // Log the real Meta error so caller can diagnose token/permission issues
+      // instead of silently falling through to the "is this a Page token" branch.
+      const metaError = error.response?.data?.error;
+      console.warn(`[Facebook] /me/accounts failed: status=${error.response?.status} code=${metaError?.code} message="${metaError?.message ?? error.message}"`);
     }
 
     // If /me/accounts returns empty or fails, check if this is a Page token
@@ -474,17 +478,40 @@ export class FacebookService {
   }
 
   /**
-   * Get lead forms for a page
+   * Get lead forms for a page.
+   * Meta requires a Page Access Token for /{pageId}/leadgen_forms — user/system
+   * user tokens get rejected with (#190). If the caller-set token is a Page
+   * token already it works directly; otherwise we exchange it for the page's
+   * own token first.
    */
   async getLeadForms(pageId: string) {
     if (!this.accessToken) {
       throw new Error('Facebook access token not set');
     }
 
+    // Try to get the Page-specific access token. /{pageId}?fields=access_token
+    // returns it when the caller's token has page access (works for both User
+    // and System User tokens with pages_show_list).
+    let pageToken = this.accessToken;
+    try {
+      const pageResp = await circuitBreakers.facebook.execute(() =>
+        axios.get(`${FB_GRAPH_URL}/${pageId}`, {
+          params: { access_token: this.accessToken, fields: 'access_token' },
+        })
+      );
+      if (pageResp.data?.access_token) {
+        pageToken = pageResp.data.access_token;
+      }
+    } catch (err: any) {
+      // If we can't fetch a page token, fall through and try with the original
+      // token — caller might already be passing a page token.
+      console.warn(`[Facebook] Could not fetch page token for ${pageId}, using caller token. Reason: ${err.response?.data?.error?.message ?? err.message}`);
+    }
+
     const response = await circuitBreakers.facebook.execute(() =>
       axios.get(`${FB_GRAPH_URL}/${pageId}/leadgen_forms`, {
         params: {
-          access_token: this.accessToken,
+          access_token: pageToken,
           fields: 'id,name,status,leads_count,locale,created_time',
         },
       })

@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 
 // Report types available for scheduling
 const REPORT_TYPES = [
+  { value: 'daily_manager_digest', label: 'Daily Manager Digest', description: 'Per-manager rollup of calls, interested, conversions, with lead-level detail' },
   { value: 'leads', label: 'Lead Reports', description: 'Daily/weekly lead statistics and conversions' },
   { value: 'calls', label: 'Call Reports', description: 'Call activity, duration, and outcomes' },
   { value: 'payments', label: 'Payment Reports', description: 'Revenue and payment collection data' },

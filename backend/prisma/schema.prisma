@@ -779,11 +779,17 @@ model LeadStage {
   journeyOrder   Int?    @default(0) // Order in journey tracker visualization
   icon           String? // Icon name for display (e.g., "AcademicCapIcon")
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subStages    LeadSubStage[]
-  leads        Lead[]
+  // Follow-up rhythm: which FollowUpConfig governs leads in this stage.
+  // When null, the org's default FollowUpConfig applies.
+  followUpConfigId String?
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  followUpConfig FollowUpConfig? @relation(fields: [followUpConfigId], references: [id], onDelete: SetNull)
+  subStages      LeadSubStage[]
+  leads          Lead[]
 
   @@unique([organizationId, slug])
+  @@index([followUpConfigId])
   @@map("lead_stages")
 }
 
@@ -883,6 +889,7 @@ model FollowUpConfig {
   updatedAt             DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadStages   LeadStage[]
 
   @@unique([organizationId, slug])
   @@map("follow_up_configs")

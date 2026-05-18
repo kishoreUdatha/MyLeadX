@@ -37,6 +37,12 @@ type CallRouteProp = RouteProp<RootStackParamList, 'CallAssignedData'>;
 // Native modules
 const { CallRecording, CallLogModule, AccessibilityRecording } = NativeModules;
 
+// Module-scope NativeEventEmitter singletons. Creating one inside each
+// useEffect re-instantiated the bridge listener per screen mount; once is
+// enough since these underlying native modules are global.
+const callRecordingEmitter = CallRecording ? new NativeEventEmitter(CallRecording) : null;
+const accessibilityRecordingEmitter = AccessibilityRecording ? new NativeEventEmitter(AccessibilityRecording) : null;
+
 // Native module interface
 interface CallRecordingModuleType {
   startRecording: (callId: string) => Promise<string>;
@@ -182,12 +188,12 @@ const CallAssignedDataScreen: React.FC = () => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         if (CallLogModule && CallLogModule.getLastCall) {
-          console.log(`[CallAssignedDataScreen] Attempt ${attempt}/${maxAttempts} - querying call log`);
+          if (__DEV__) console.log(`[CallAssignedDataScreen] Attempt ${attempt}/${maxAttempts} - querying call log`);
           const callDetails = await CallLogModule.getLastCall(data.phone);
-          console.log('[CallAssignedDataScreen] Call log result:', JSON.stringify(callDetails));
+          if (__DEV__) console.log('[CallAssignedDataScreen] Call log result:', callDetails);
 
           if (callDetails && callDetails.duration !== undefined) {
-            console.log('[CallAssignedDataScreen] Got duration from call log:', callDetails.duration);
+            if (__DEV__) console.log('[CallAssignedDataScreen] Got duration from call log:', callDetails.duration);
             return callDetails.duration;
           }
 
@@ -536,15 +542,14 @@ const CallAssignedDataScreen: React.FC = () => {
 
   // Listen for native recording auto-stop events
   useEffect(() => {
-    if (!CallRecording) {
-      console.log('[CallAssignedDataScreen] CallRecording module not available');
+    if (!callRecordingEmitter) {
+      if (__DEV__) console.log('[CallAssignedDataScreen] CallRecording module not available');
       return;
     }
 
-    console.log('[CallAssignedDataScreen] Setting up recording event listener');
-    const eventEmitter = new NativeEventEmitter(CallRecording);
-    const subscription = eventEmitter.addListener('onRecordingAutoStopped', async (event) => {
-      console.log('[CallAssignedDataScreen] Recording auto-stopped event:', JSON.stringify(event));
+    if (__DEV__) console.log('[CallAssignedDataScreen] Setting up recording event listener');
+    const subscription = callRecordingEmitter.addListener('onRecordingAutoStopped', async (event) => {
+      if (__DEV__) console.log('[CallAssignedDataScreen] Recording auto-stopped event:', event);
       setIsRecording(false);
 
       const recPath = event.path || null;
@@ -562,16 +567,15 @@ const CallAssignedDataScreen: React.FC = () => {
 
   // Listen for accessibility recording events (works on Android 10+)
   useEffect(() => {
-    if (!AccessibilityRecording) {
-      console.log('[CallAssignedDataScreen] AccessibilityRecording module not available');
+    if (!accessibilityRecordingEmitter) {
+      if (__DEV__) console.log('[CallAssignedDataScreen] AccessibilityRecording module not available');
       return;
     }
 
-    console.log('[CallAssignedDataScreen] Setting up accessibility recording listener');
-    const eventEmitter = new NativeEventEmitter(AccessibilityRecording);
+    if (__DEV__) console.log('[CallAssignedDataScreen] Setting up accessibility recording listener');
 
-    const stoppedSubscription = eventEmitter.addListener('onAccessibilityRecordingStopped', async (event) => {
-      console.log('[CallAssignedDataScreen] Accessibility recording stopped:', JSON.stringify(event));
+    const stoppedSubscription = accessibilityRecordingEmitter.addListener('onAccessibilityRecordingStopped', async (event) => {
+      if (__DEV__) console.log('[CallAssignedDataScreen] Accessibility recording stopped:', event);
       setIsRecording(false);
 
       const recPath = event.path || null;
@@ -584,8 +588,8 @@ const CallAssignedDataScreen: React.FC = () => {
       await autoEndCall(duration, recPath);
     });
 
-    const startedSubscription = eventEmitter.addListener('onAccessibilityRecordingStarted', (event) => {
-      console.log('[CallAssignedDataScreen] Accessibility recording started:', event.path);
+    const startedSubscription = accessibilityRecordingEmitter.addListener('onAccessibilityRecordingStarted', (event) => {
+      if (__DEV__) console.log('[CallAssignedDataScreen] Accessibility recording started:', event.path);
       setIsRecording(true);
       if (event.path) {
         setRecordingPath(event.path);
@@ -598,19 +602,23 @@ const CallAssignedDataScreen: React.FC = () => {
     };
   }, [autoEndCall]);
 
-  // Initialize call
+  // Initialize call — run exactly once on mount. The ref guard prevents a
+  // double dial/record if React ever re-fires this effect (e.g. fast
+  // re-render before the previous run finishes), and empty deps removes the
+  // unstable `data`/`navigation`/`startTimer` identities from the dep array.
+  const initCallStartedRef = useRef(false);
   useEffect(() => {
     const initCall = async () => {
-      console.log('============================================');
-      console.log('[CallAssignedDataScreen] INIT CALL');
-      console.log('[CallAssignedDataScreen] Data:', data.id, data.phone);
-      console.log('============================================');
+      if (initCallStartedRef.current) return;
+      initCallStartedRef.current = true;
+
+      if (__DEV__) console.log('[CallAssignedDataScreen] INIT CALL', data.id);
 
       try {
         // Request permissions
         setStatusMessage('Requesting permissions...');
         const hasPermissions = await requestCallPermissions();
-        console.log('[CallAssignedDataScreen] Permissions:', hasPermissions);
+        if (__DEV__) console.log('[CallAssignedDataScreen] Permissions:', hasPermissions);
 
         if (!hasPermissions) {
           setStatusMessage('Permissions denied');
@@ -621,7 +629,7 @@ const CallAssignedDataScreen: React.FC = () => {
         // Start call in backend
         setStatusMessage('Creating call record...');
         const result = await telecallerApi.startAssignedDataCall(data.id);
-        console.log('[CallAssignedDataScreen] Call created:', result.call.id);
+        if (__DEV__) console.log('[CallAssignedDataScreen] Call created:', result.call.id);
         setCallId(result.call.id);
 
         // Check for accessibility recording (works on Android 10+)
@@ -629,32 +637,28 @@ const CallAssignedDataScreen: React.FC = () => {
         if (AccessibilityRecording) {
           try {
             accessibilityEnabled = await AccessibilityRecording.isAccessibilityEnabled();
-            console.log('[CallAssignedDataScreen] Accessibility service enabled:', accessibilityEnabled);
+            if (__DEV__) console.log('[CallAssignedDataScreen] Accessibility service enabled:', accessibilityEnabled);
 
             if (accessibilityEnabled) {
-              // Start recording via accessibility service
-              console.log('[CallAssignedDataScreen] Starting accessibility recording...');
+              if (__DEV__) console.log('[CallAssignedDataScreen] Starting accessibility recording...');
               await AccessibilityRecording.startRecording(data.phone);
               setIsRecording(true);
-            } else {
-              // Prompt user to enable accessibility (one-time prompt)
-              console.log('[CallAssignedDataScreen] Accessibility not enabled, will use duration-based classification');
             }
           } catch (err: any) {
-            console.warn('[CallAssignedDataScreen] Accessibility check failed:', err?.message);
+            if (__DEV__) console.warn('[CallAssignedDataScreen] Accessibility check failed:', err?.message);
           }
         }
 
         // Fallback to regular recording service (may capture silence on Android 10+)
         if (!accessibilityEnabled) {
           try {
-            console.log('[CallAssignedDataScreen] Starting fallback recording...');
+            if (__DEV__) console.log('[CallAssignedDataScreen] Starting fallback recording...');
             const path = await CallRecordingModule.startRecording(result.call.id);
-            console.log('[CallAssignedDataScreen] Recording path:', path);
+            if (__DEV__) console.log('[CallAssignedDataScreen] Recording path:', path);
             setRecordingPath(path);
             setIsRecording(true);
           } catch (err: any) {
-            console.warn('[CallAssignedDataScreen] Recording failed:', err?.message);
+            if (__DEV__) console.warn('[CallAssignedDataScreen] Recording failed:', err?.message);
           }
         }
 
@@ -665,17 +669,17 @@ const CallAssignedDataScreen: React.FC = () => {
 
         // Open phone dialer
         const phoneUrl = Platform.OS === 'android' ? `tel:${data.phone}` : `tel://${data.phone}`;
-        console.log('[CallAssignedDataScreen] Opening:', phoneUrl);
+        if (__DEV__) console.log('[CallAssignedDataScreen] Opening:', phoneUrl);
 
         if (await Linking.canOpenURL(phoneUrl)) {
           await Linking.openURL(phoneUrl);
           setDialerOpened(true);
-          console.log('[CallAssignedDataScreen] Dialer opened');
+          if (__DEV__) console.log('[CallAssignedDataScreen] Dialer opened');
         }
 
         setStatusMessage('Call in progress');
       } catch (error: any) {
-        console.error('[CallAssignedDataScreen] Init failed:', error?.message);
+        if (__DEV__) console.error('[CallAssignedDataScreen] Init failed:', error?.message);
         setStatusMessage('Failed to start call');
         setTimeout(() => navigation.goBack(), 1500);
       }
@@ -686,7 +690,8 @@ const CallAssignedDataScreen: React.FC = () => {
     return () => {
       stopTimer();
     };
-  }, [data, navigation, startTimer, stopTimer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle back button
   useEffect(() => {
@@ -721,7 +726,7 @@ const CallAssignedDataScreen: React.FC = () => {
       // Fall back to regular recording
       try {
         const result = await CallRecordingModule.stopRecording();
-        console.log('[CallAssignedDataScreen] Recording stopped:', JSON.stringify(result));
+        if (__DEV__) console.log('[CallAssignedDataScreen] Recording stopped:', result);
         setIsRecording(false);
         if (result.duration) {
           await autoEndCall(result.duration, result.path);

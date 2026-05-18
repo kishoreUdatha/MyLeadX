@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -142,6 +142,27 @@ const LeadDispositionScreen: React.FC<Props> = ({ route, navigation }) => {
       hour: '2-digit',
       minute: '2-digit',
     })}`;
+
+  // Stable renderItem for the teammate modal FlatList. Deps include the
+  // currently-selected teammate id so the checkmark stays accurate.
+  const renderTeamItem = useCallback(
+    ({ item }: { item: { id: string; name: string } }) => (
+      <TouchableOpacity
+        style={styles.teamRow}
+        onPress={() => {
+          setReassignTo(item);
+          setShowTeamModal(false);
+        }}
+      >
+        <Icon name="account-circle" size={28} color={PURPLE} />
+        <Text style={styles.teamName}>{item.name}</Text>
+        {reassignTo?.id === item.id && (
+          <Icon name="check" size={20} color={PURPLE} />
+        )}
+      </TouchableOpacity>
+    ),
+    [reassignTo?.id]
+  );
 
   return (
     <View style={styles.container}>
@@ -446,21 +467,7 @@ const LeadDispositionScreen: React.FC<Props> = ({ route, navigation }) => {
               <FlatList
                 data={team}
                 keyExtractor={(i) => i.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.teamRow}
-                    onPress={() => {
-                      setReassignTo(item);
-                      setShowTeamModal(false);
-                    }}
-                  >
-                    <Icon name="account-circle" size={28} color={PURPLE} />
-                    <Text style={styles.teamName}>{item.name}</Text>
-                    {reassignTo?.id === item.id && (
-                      <Icon name="check" size={20} color={PURPLE} />
-                    )}
-                  </TouchableOpacity>
-                )}
+                renderItem={renderTeamItem}
               />
             )}
           </View>

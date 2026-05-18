@@ -13,6 +13,9 @@ import {
   ArrowLeftIcon,
   ClockIcon,
   ExclamationCircleIcon,
+  LightBulbIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
 import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid';
@@ -182,6 +185,10 @@ export default function WhatsAppSettingsPage() {
   const [loadingFailed, setLoadingFailed] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
+  // "First time? Read this" panel — defaults open for new tenants, auto-collapses
+  // once they have an isConfigured credential set.
+  const [showSetupGuide, setShowSetupGuide] = useState(true);
+
   useEffect(() => {
     fetchConfig();
     // Fetch retry stats on initial load to show badge count
@@ -201,6 +208,10 @@ export default function WhatsAppSettingsPage() {
       const response = await api.get('/organization/settings/whatsapp');
       if (response.data.data) {
         setConfig(response.data.data);
+        // Already configured — start with the setup guide collapsed.
+        if (response.data.data.isConfigured) {
+          setShowSetupGuide(false);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch WhatsApp config:', error);
@@ -371,6 +382,100 @@ export default function WhatsAppSettingsPage() {
         </div>
       </div>
 
+      {/* First-time Setup Guide — pick-your-provider explainer for non-technical admins */}
+      <div className="border border-indigo-200 bg-indigo-50 rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowSetupGuide((v) => !v)}
+          className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-indigo-100 transition"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-indigo-900">
+            <LightBulbIcon className="w-5 h-5" />
+            First time setting up WhatsApp? Read this before picking a provider
+          </span>
+          {showSetupGuide
+            ? <ChevronDownIcon className="w-4 h-4 text-indigo-700" />
+            : <ChevronRightIcon className="w-4 h-4 text-indigo-700" />}
+        </button>
+        {showSetupGuide && (
+          <div className="px-5 pb-5 pt-1 border-t border-indigo-200 text-sm text-slate-700 space-y-4">
+            <p className="text-indigo-900">
+              MyLeadX supports 5 WhatsApp providers. The "right" one depends on how technical your
+              team is, your budget, and how fast you need to go live.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-white border border-indigo-200 rounded-lg p-3">
+                <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  <span>🎯</span> Wati or 🇮🇳 Gupshup
+                </p>
+                <p className="text-xs text-emerald-700 font-medium mt-0.5">Recommended for most customers</p>
+                <ul className="text-xs text-slate-600 mt-2 space-y-1 list-disc pl-4">
+                  <li>No Meta Developer Account needed</li>
+                  <li>BSP handles all Meta complexity</li>
+                  <li>Live in same day (Wati) / 1-2 days (Gupshup)</li>
+                  <li>~₹999-2,500/month + per-message fees</li>
+                  <li>Template approvals handled by BSP</li>
+                </ul>
+              </div>
+
+              <div className="bg-white border border-indigo-200 rounded-lg p-3">
+                <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  <span>🔵</span> Meta Cloud API (direct)
+                </p>
+                <p className="text-xs text-amber-700 font-medium mt-0.5">Cheapest but technical</p>
+                <ul className="text-xs text-slate-600 mt-2 space-y-1 list-disc pl-4">
+                  <li>Requires Meta Developer Account</li>
+                  <li>Free first 1000 conversations/month</li>
+                  <li>Setup takes 2-7 days (business verification)</li>
+                  <li>You manage tokens, templates, webhooks yourself</li>
+                  <li>Best if you already use Facebook Lead Ads</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="bg-white border border-indigo-200 rounded-lg p-3 text-xs text-slate-700 space-y-1.5">
+              <p>
+                <span className="font-medium text-slate-800">⚡ 360dialog:</span>{' '}
+                Like Wati/Gupshup but EU-based. Pay-per-message instead of subscription.
+              </p>
+              <p>
+                <span className="font-medium text-slate-800">📞 Exotel:</span>{' '}
+                Only relevant if you already use Exotel for voice calls — bundles WhatsApp with voice.
+              </p>
+            </div>
+
+            <div className="bg-white border border-indigo-200 rounded-lg p-3 text-xs">
+              <p className="font-medium text-indigo-900 mb-1">Quick decision guide</p>
+              <ul className="space-y-1 text-slate-700">
+                <li>
+                  <span className="font-medium">Non-technical admin, going live this week?</span> → Pick{' '}
+                  <span className="font-medium">Wati</span> (same-day setup)
+                </li>
+                <li>
+                  <span className="font-medium">India-based with high message volume?</span> → Pick{' '}
+                  <span className="font-medium">Gupshup</span> (best India pricing)
+                </li>
+                <li>
+                  <span className="font-medium">Cost-sensitive + have technical team?</span> → Pick{' '}
+                  <span className="font-medium">Meta Cloud API</span> (free tier)
+                </li>
+                <li>
+                  <span className="font-medium">Already using Exotel for calls?</span> → Pick{' '}
+                  <span className="font-medium">Exotel</span> (consolidated billing)
+                </li>
+              </ul>
+            </div>
+
+            <div className="bg-white border border-indigo-200 rounded p-3 text-xs text-slate-700">
+              <span className="font-medium text-indigo-900">Stuck?</span>{' '}
+              Reach out to <span className="font-medium">support@myleadx.ai</span> — we'll walk
+              you through provider selection and onboarding in a 30-min screenshare.
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
         <button
@@ -493,6 +598,135 @@ export default function WhatsAppSettingsPage() {
                     className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
                   />
                   {field.hint && <p className="text-xs text-gray-500 mt-1">{field.hint}</p>}
+
+                  {/* Meta-specific deep walkthroughs — these are the gnarly steps non-technical admins get stuck on */}
+                  {config.provider === 'meta' && field.key === 'accessToken' && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                        How do I generate this Access Token?
+                      </summary>
+                      <div className="text-xs text-slate-600 mt-2 pl-2 leading-5 space-y-2">
+                        <p>
+                          <span className="font-medium text-slate-800">Recommended (permanent System User token):</span>
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                          <li>
+                            Open{' '}
+                            <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline inline-flex items-center gap-1">
+                              Business Settings → System Users
+                              <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                            </a>
+                          </li>
+                          <li>Click <span className="font-medium">"Add"</span> → name it (e.g., "MyLeadX WhatsApp") → role <span className="font-medium">"Admin"</span></li>
+                          <li>
+                            Assign your WhatsApp Business Account (WABA) to this user with <span className="font-medium">"Manage WhatsApp Business Account"</span> permission
+                          </li>
+                          <li>Click <span className="font-medium">"Generate New Token"</span> → pick your App → expiry <span className="font-medium">"Never"</span></li>
+                          <li>
+                            Check permissions:{' '}
+                            <code className="bg-white px-1 rounded border">whatsapp_business_messaging</code>,{' '}
+                            <code className="bg-white px-1 rounded border">whatsapp_business_management</code>
+                          </li>
+                          <li>Copy the token (starts with <code className="bg-white px-1 rounded border">EAA...</code>) and paste it above</li>
+                        </ol>
+                      </div>
+                    </details>
+                  )}
+
+                  {config.provider === 'meta' && field.key === 'phoneNumberId' && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                        How do I find the Phone Number ID?
+                      </summary>
+                      <div className="text-xs text-slate-600 mt-2 pl-2 leading-5">
+                        <ol className="list-decimal pl-5 space-y-1">
+                          <li>
+                            Open your{' '}
+                            <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline inline-flex items-center gap-1">
+                              Meta App Dashboard
+                              <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                            </a>
+                          </li>
+                          <li>Click your App → sidebar → <span className="font-medium">WhatsApp → API Setup</span></li>
+                          <li>The Phone Number ID is shown right under your registered business phone — it's a 15-digit number</li>
+                          <li>Important: this is the <em>ID</em>, NOT your phone number itself</li>
+                        </ol>
+                      </div>
+                    </details>
+                  )}
+
+                  {config.provider === 'meta' && field.key === 'businessAccountId' && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                        How do I find the WhatsApp Business Account (WABA) ID?
+                      </summary>
+                      <div className="text-xs text-slate-600 mt-2 pl-2 leading-5">
+                        <ol className="list-decimal pl-5 space-y-1">
+                          <li>
+                            Open{' '}
+                            <a href="https://business.facebook.com/wa/manage" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline inline-flex items-center gap-1">
+                              WhatsApp Manager
+                              <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                            </a>{' '}
+                            in Meta Business Suite
+                          </li>
+                          <li>Pick your WhatsApp Business Account from the left sidebar</li>
+                          <li>Click <span className="font-medium">Settings</span> → the WABA ID is shown at the top — a 15-16 digit number</li>
+                          <li>This is required for sending message templates (welcome messages, follow-ups, etc.)</li>
+                        </ol>
+                      </div>
+                    </details>
+                  )}
+
+                  {config.provider === 'meta' && field.key === 'appSecret' && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                        Where do I find the App Secret?
+                      </summary>
+                      <div className="text-xs text-slate-600 mt-2 pl-2 leading-5">
+                        Open your{' '}
+                        <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline">
+                          Meta App
+                        </a>{' '}
+                        → Settings → Basic → "App Secret" field → click "Show" → confirm with your password.
+                        It's a 32-character hex string. Used to verify webhooks came from Meta. Keep it secret.
+                      </div>
+                    </details>
+                  )}
+
+                  {(config.provider === 'wati' || config.provider === 'gupshup' || config.provider === '360dialog')
+                    && field.key === 'apiKey' && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                        Where do I find this in {selectedProvider?.name}?
+                      </summary>
+                      <div className="text-xs text-slate-600 mt-2 pl-2 leading-5">
+                        {config.provider === 'wati' && (
+                          <ol className="list-decimal pl-5 space-y-1">
+                            <li>Log into your Wati dashboard at <a href="https://app.wati.io" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline">app.wati.io</a></li>
+                            <li>Click your profile (top-right) → API Docs</li>
+                            <li>Copy the <span className="font-medium">API Endpoint</span> (looks like <code className="bg-white px-1 rounded border">https://live-server-XXXXX.wati.io</code>)</li>
+                            <li>Below it you'll find the <span className="font-medium">Access Token</span> — paste both into MyLeadX</li>
+                          </ol>
+                        )}
+                        {config.provider === 'gupshup' && (
+                          <ol className="list-decimal pl-5 space-y-1">
+                            <li>Log into <a href="https://www.gupshup.io" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline">gupshup.io</a></li>
+                            <li>Go to your WhatsApp App → Dashboard</li>
+                            <li>Click <span className="font-medium">API key</span> at the top of the page</li>
+                            <li>Copy the API key shown — paste it into MyLeadX above</li>
+                          </ol>
+                        )}
+                        {config.provider === '360dialog' && (
+                          <ol className="list-decimal pl-5 space-y-1">
+                            <li>Log into <a href="https://hub.360dialog.com" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline">360dialog Hub</a></li>
+                            <li>Click your WhatsApp Account → Settings → API</li>
+                            <li>Copy your API key shown there</li>
+                          </ol>
+                        )}
+                      </div>
+                    </details>
+                  )}
                 </div>
               ))}
 

@@ -38,41 +38,50 @@ const App: React.FC = () => {
   const servicesInitialized = useRef(false);
 
   useEffect(() => {
-    // Initialize services on app start
+    // Initialize services on app start. Each branch runs independently so the
+    // UI can mount immediately — only offlineQueue.init() is awaited because
+    // other code expects the singleton to be ready before queueing.
     const initializeServices = async () => {
       if (servicesInitialized.current) return;
+      servicesInitialized.current = true;
 
-      try {
-        console.log('[App] Initializing services...');
+      console.log('[App] Initializing services...');
 
-        // Request all call permissions on app startup
-        // This ensures READ_CALL_LOG is granted for accurate call duration
-        const { requestCallPermissions } = require('./utils/permissions');
-        const permissionsGranted = await requestCallPermissions();
-        console.log('[App] Permissions granted:', permissionsGranted);
+      // Offline queue: small, fast, and other code relies on it being ready.
+      offlineQueue.init().catch(err =>
+        console.error('[App] Offline queue init failed:', err)
+      );
 
-        // Initialize offline queue (includes network monitoring)
-        await offlineQueue.init();
-        console.log('[App] Offline queue initialized');
+      // Permissions: prompt the user but don't block the UI behind it.
+      (async () => {
+        try {
+          const { requestCallPermissions } = require('./utils/permissions');
+          const granted = await requestCallPermissions();
+          console.log('[App] Permissions granted:', granted);
+        } catch (err) {
+          console.error('[App] Permission request failed:', err);
+        }
+      })();
 
-        // Cleanup old recording backups
-        const cleanupResult = await recordingBackupService.cleanup();
-        console.log('[App] Recording backup cleanup:', cleanupResult);
+      // Housekeeping: stale-recording cleanup. Pure background work.
+      recordingBackupService.cleanup()
+        .then(result => console.log('[App] Recording backup cleanup:', result))
+        .catch(err => console.error('[App] Recording cleanup failed:', err));
 
-        // Initialize push notifications
-        const notificationsInitialized = await notificationService.init();
-        console.log('[App] Notifications initialized:', notificationsInitialized);
+      // Push notifications: Firebase getToken + backend registration. Slow,
+      // and the first screen doesn't depend on it.
+      notificationService.init()
+        .then(ok => console.log('[App] Notifications initialized:', ok))
+        .catch(err => console.error('[App] Notification init failed:', err));
 
-        // Schedule hourly recording cleanup with server reporting
+      // Schedule hourly native cleanup. Independent of the rest.
+      (async () => {
         try {
           const { NativeModules } = require('react-native');
           const { CallRecording } = NativeModules;
           const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-
-          // Get API URL and auth token for cleanup reporting
-          const apiUrl = await AsyncStorage.getItem('apiUrl') || '';
-          const authToken = await AsyncStorage.getItem('authToken') || '';
-
+          const apiUrl = (await AsyncStorage.getItem('apiUrl')) || '';
+          const authToken = (await AsyncStorage.getItem('authToken')) || '';
           if (CallRecording && CallRecording.scheduleHourlyCleanup) {
             const result = await CallRecording.scheduleHourlyCleanup(apiUrl, authToken);
             console.log('[App] Hourly cleanup scheduled:', result);
@@ -80,12 +89,7 @@ const App: React.FC = () => {
         } catch (cleanupError) {
           console.log('[App] Could not schedule hourly cleanup:', cleanupError);
         }
-
-        servicesInitialized.current = true;
-        console.log('[App] All services initialized');
-      } catch (error) {
-        console.error('[App] Failed to initialize services:', error);
-      }
+      })();
     };
 
     initializeServices();

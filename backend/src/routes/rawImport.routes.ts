@@ -4,6 +4,7 @@ import { rawImportController } from '../controllers/rawImport.controller';
 import { validate } from '../middlewares/validate';
 import { authenticate, authorize } from '../middlewares/auth';
 import { tenantMiddleware } from '../middlewares/tenant';
+import { uploadSpreadsheet } from '../middlewares/upload';
 import { externalLeadImportService } from '../services/external-lead-import.service';
 
 const router = Router();
@@ -70,6 +71,14 @@ const listRecordsValidation = [
 ];
 
 // Routes
+
+// Upload spreadsheet -> creates a BulkImport and RawImportRecords (NOT leads)
+router.post(
+  '/upload',
+  authorize('admin', 'manager'),
+  uploadSpreadsheet.single('file'),
+  rawImportController.uploadFile.bind(rawImportController)
+);
 
 // Stats
 router.get(

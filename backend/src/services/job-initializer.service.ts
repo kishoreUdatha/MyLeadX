@@ -5,10 +5,13 @@ import { assignmentScheduleService } from './assignmentSchedule.service';
 import { messageRetryService } from './message-retry.service';
 import { appointmentReminderService } from './appointment-reminder.service';
 import { crmAutomationService } from './crm-automation.service';
+import { followUpProcessorService } from './follow-up-processor.service';
 import { autoReportsService } from './auto-reports.service';
 import { resendService } from './resend.service';
 import { reportGeneratorService } from './report-generator.service';
+import { dailyManagerDigestService } from './daily-manager-digest.service';
 import { trialManagementService } from './trial-management.service';
+import { whatsappTemplateMetaService } from './whatsapp-template-meta.service';
 
 /**
  * Job Initializer Service
@@ -60,11 +63,18 @@ class JobInitializerService {
       // 10. Start the CRM automation checker (runs every 30 minutes)
       this.startCrmAutomationChecker();
 
-      // 11. Start the auto-report scheduler (runs every minute to check for due reports)
+      // 11. Start the follow-up processor (runs every 5 minutes: reminders, escalations, priority bumps)
+      this.startFollowUpProcessorChecker();
+
+      // 12. Start the auto-report scheduler (runs every minute to check for due reports)
       this.startAutoReportChecker();
 
-      // 12. Start the trial reminder checker (runs daily at 9 AM)
+      // 13. Start the trial reminder checker (runs daily at 9 AM)
       this.startTrialReminderChecker();
+
+      // 14. WhatsApp template status sync — safety net in case Meta's webhook
+      // events are missed. Runs hourly across all orgs.
+      this.startWhatsAppTemplateStatusSync();
 
       this.initialized = true;
       console.log('[JobInitializer] All scheduled jobs initialized successfully');
@@ -307,6 +317,43 @@ class JobInitializerService {
   }
 
   /**
+   * Start the follow-up processor
+   * Reads the org's default FollowUpConfig and applies its rules:
+   * reminders, escalations (notify/reassign/move stage), priority bumps.
+   */
+  private startFollowUpProcessorChecker(): void {
+    setInterval(async () => {
+      try {
+        const counts = await followUpProcessorService.runAll();
+        const total = counts.reminders + counts.escalated + counts.priorityBumped;
+        if (total > 0) {
+          console.log(
+            `[FollowUpProcessor] Reminders=${counts.reminders}, escalated=${counts.escalated}, priorityBumped=${counts.priorityBumped}`
+          );
+        }
+      } catch (error) {
+        console.error('[FollowUpProcessor] Error in run:', error);
+      }
+    }, 5 * 60 * 1000);
+
+    setTimeout(async () => {
+      try {
+        const counts = await followUpProcessorService.runAll();
+        const total = counts.reminders + counts.escalated + counts.priorityBumped;
+        if (total > 0) {
+          console.log(
+            `[FollowUpProcessor] Initial check: reminders=${counts.reminders}, escalated=${counts.escalated}, priorityBumped=${counts.priorityBumped}`
+          );
+        }
+      } catch (error) {
+        console.error('[FollowUpProcessor] Error in initial run:', error);
+      }
+    }, 50_000);
+
+    console.log('[JobInitializer] Follow-up processor started (runs every 5 minutes)');
+  }
+
+  /**
    * Start the auto-report scheduler
    * Checks for due report schedules and sends them via email
    */
@@ -419,16 +466,64 @@ class JobInitializerService {
   }
 
   /**
-   * Generate and send a report via email with attachment
+   * Periodically reconcile local MessageTemplate.whatsappStatus with Meta's
+   * actual status. Acts as a fallback when message_template_status_update
+   * webhook events are missed (e.g. during webhook outages, signature
+   * verification failures, or for templates created outside MyLeadX).
+   *
+   * Runs once at startup (after 90s settle), then every hour.
+   */
+  private startWhatsAppTemplateStatusSync(): void {
+    const intervalMs = 60 * 60 * 1000; // 1 hour
+
+    const runOnce = async () => {
+      try {
+        const result = await whatsappTemplateMetaService.syncAllOrgs();
+        if (result.orgsChecked > 0 || result.templatesUpdated > 0) {
+          console.log(
+            `[WhatsAppTemplateSync] Checked ${result.orgsChecked} org(s), ` +
+            `updated ${result.templatesUpdated} template status(es)`
+          );
+        }
+      } catch (error) {
+        console.error('[WhatsAppTemplateSync] Error during sync:', error);
+      }
+    };
+
+    setInterval(runOnce, intervalMs);
+
+    // Run once shortly after startup to catch any drift from the previous run.
+    setTimeout(runOnce, 90 * 1000);
+
+    console.log('[JobInitializer] WhatsApp template status sync scheduled (every hour)');
+  }
+
+  /**
+   * Generate and send a report via email with attachment.
+   *
+   * Most report types render once and fan out the same email to every recipient.
+   * The Daily Manager Digest is special: each recipient may see a different slice
+   * (admin sees org-wide; a branch manager only sees their branch), so we render
+   * per-recipient and route through a dedicated helper.
    */
   private async generateAndSendReport(schedule: any): Promise<void> {
+    if (schedule.reportType === 'daily_manager_digest') {
+      await this.sendDigestPerRecipient(schedule);
+      return;
+    }
+
     const orgName = schedule.organization?.name || 'Your Organization';
     const reportTypeLabel = autoReportsService.REPORT_TYPES.find(
       (t: any) => t.value === schedule.reportType
     )?.label || schedule.reportType;
 
     // Generate the report file
-    let reportFile: { buffer: Buffer; filename: string; contentType: string } | null = null;
+    let reportFile: {
+      buffer: Buffer;
+      filename: string;
+      contentType: string;
+      htmlBody?: string;
+    } | null = null;
     try {
       const format = schedule.format === 'excel' ? 'excel' : 'csv';
       reportFile = await reportGeneratorService.generateReport(
@@ -441,7 +536,7 @@ class JobInitializerService {
       console.error(`[AutoReports] Failed to generate report:`, error);
     }
 
-    const emailContent = `
+    const genericEmailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 8px 8px 0 0;">
           <h2 style="color: white; margin: 0;">${reportTypeLabel}</h2>
@@ -473,6 +568,10 @@ class JobInitializerService {
       </div>
     `;
 
+    // Reports may carry their own rich HTML body (e.g. the daily manager digest).
+    // Fall back to the generic template otherwise.
+    const emailContent = reportFile?.htmlBody ?? genericEmailContent;
+
     // Send to all recipients
     for (const recipient of schedule.recipients) {
       try {
@@ -490,6 +589,58 @@ class JobInitializerService {
         console.log(`[AutoReports] Email sent to ${recipient} with attachment`);
       } catch (error) {
         console.error(`[AutoReports] Failed to send to ${recipient}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Send the Daily Manager Digest, rendered per recipient with branch scoping.
+   *
+   * For each recipient email we resolve who they are inside the org and decide
+   * what slice they should see:
+   *   - admin/super_admin/owner → full org
+   *   - any user with a branch (incl. managedBranches[]) → just those branches
+   *   - email not in the org → full org (advisors/auditors)
+   *
+   * Each scope means a separate set of Prisma queries + a fresh Excel and HTML,
+   * so this is N renders for N recipients. That's fine at the typical scale
+   * (handful of recipients per org) and avoids leaking other branches' data.
+   */
+  private async sendDigestPerRecipient(schedule: any): Promise<void> {
+    const orgName = schedule.organization?.name || 'Your Organization';
+    const orgId: string = schedule.organizationId;
+    const todayLabel = new Date().toLocaleDateString('en-IN');
+
+    for (const recipient of schedule.recipients) {
+      try {
+        const scope = await dailyManagerDigestService.resolveRecipientScope(orgId, recipient);
+
+        const data = await dailyManagerDigestService.getDigestData(orgId, {
+          branchIds: scope.branchIds,
+          scopeLabel: scope.scopeLabel,
+        });
+        const html = dailyManagerDigestService.renderHtml(data);
+        const xlsx = await dailyManagerDigestService.generateExcel(data);
+
+        const scopeSuffix = scope.scopeLabel ? ` — ${scope.scopeLabel}` : '';
+        await resendService.sendEmail({
+          to: recipient,
+          subject: `[${orgName}] Daily Manager Digest${scopeSuffix} - ${todayLabel}`,
+          body: `Your scheduled Daily Manager Digest${scopeSuffix} is attached.`,
+          html,
+          attachments: [
+            {
+              filename: xlsx.filename,
+              content: xlsx.buffer,
+              contentType: xlsx.contentType,
+            },
+          ],
+        });
+        console.log(
+          `[AutoReports] Digest sent to ${recipient} (scope: ${scope.resolvedAs}${scope.scopeLabel ? ` / ${scope.scopeLabel}` : ''})`
+        );
+      } catch (error) {
+        console.error(`[AutoReports] Failed to send digest to ${recipient}:`, error);
       }
     }
   }

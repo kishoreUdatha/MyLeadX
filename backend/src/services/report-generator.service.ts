@@ -5,12 +5,21 @@
 
 import { prisma } from '../config/database';
 import ExcelJS from 'exceljs';
+import { dailyManagerDigestService } from './daily-manager-digest.service';
 
 interface ReportData {
   title: string;
   headers: string[];
   rows: any[][];
   generatedAt: Date;
+}
+
+export interface GeneratedReport {
+  buffer: Buffer;
+  filename: string;
+  contentType: string;
+  /** Rich HTML body to use as the email content. When absent, the caller falls back to a generic template. */
+  htmlBody?: string;
 }
 
 class ReportGeneratorService {
@@ -21,7 +30,15 @@ class ReportGeneratorService {
     organizationId: string,
     reportType: string,
     format: 'csv' | 'excel' | 'pdf' = 'csv'
-  ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  ): Promise<GeneratedReport> {
+    // Reports that own their own HTML body + attachment layout (e.g. digest)
+    // bypass the generic ReportData/CSV/Excel path.
+    if (reportType === 'daily_manager_digest') {
+      const data = await dailyManagerDigestService.getDigestData(organizationId);
+      const file = await dailyManagerDigestService.generateExcel(data);
+      return { ...file, htmlBody: dailyManagerDigestService.renderHtml(data) };
+    }
+
     // Get report data based on type
     const reportData = await this.getReportData(organizationId, reportType);
 

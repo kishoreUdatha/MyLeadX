@@ -9,20 +9,13 @@ const API_BASE_URL = API_URL;
 
 // Proactive token refresh - prevents auto-logout during continuous use
 let tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
-let lastRefreshTime = 0;
-const TOKEN_REFRESH_INTERVAL = 12 * 60 * 60 * 1000; // Refresh every 12 hours
+const TOKEN_REFRESH_INTERVAL = 12 * 60 * 60 * 1000; // Refresh every 12 hours (access tokens last 7d)
 
 /**
- * Proactively refresh tokens to prevent session expiry
- * Called every 5 minutes while the app is active
+ * Proactively refresh tokens to prevent session expiry.
+ * Runs on the TOKEN_REFRESH_INTERVAL cadence (12h) once started.
  */
 const proactiveTokenRefresh = async () => {
-  const now = Date.now();
-  // Avoid refreshing too frequently (minimum 6 hours between refreshes)
-  if (now - lastRefreshTime < 6 * 60 * 60 * 1000) {
-    return;
-  }
-
   try {
     const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
     if (!refreshToken) {
@@ -49,7 +42,6 @@ const proactiveTokenRefresh = async () => {
       if (newRefreshToken) {
         await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
       }
-      lastRefreshTime = now;
       console.log('[API] Proactive token refresh successful');
     }
   } catch (error: any) {
@@ -67,10 +59,8 @@ export const startProactiveTokenRefresh = () => {
     clearInterval(tokenRefreshInterval);
   }
 
-  lastRefreshTime = Date.now();
-  console.log('[API] Starting proactive token refresh (every 5 min)');
+  console.log('[API] Starting proactive token refresh (every 12h)');
 
-  // Refresh every 5 minutes
   tokenRefreshInterval = setInterval(proactiveTokenRefresh, TOKEN_REFRESH_INTERVAL);
 };
 
@@ -163,9 +153,17 @@ api.interceptors.response.use(
 
         if (refreshToken) {
           console.log('[API] Attempting token refresh...');
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
-            refreshToken,
-          });
+          const response = await axios.post(
+            `${API_BASE_URL}/auth/refresh-token`,
+            { refreshToken },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'x-client-type': 'mobile',
+              },
+              timeout: 15000,
+            }
+          );
 
           const { token, refreshToken: newRefreshToken } = response.data.data || response.data;
 

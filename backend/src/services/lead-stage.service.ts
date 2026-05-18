@@ -11,6 +11,19 @@ import { NotFoundError } from '../utils/errors';
 import { CachedIndustryStage, toIndustrySlug } from '../types/industry.types';
 
 export class LeadStageService {
+  private async assertFollowUpConfigInOrg(
+    followUpConfigId: string,
+    organizationId: string
+  ): Promise<void> {
+    const config = await prisma.followUpConfig.findFirst({
+      where: { id: followUpConfigId, organizationId },
+      select: { id: true },
+    });
+    if (!config) {
+      throw new Error('Follow-up config not found in this organization');
+    }
+  }
+
   /**
    * Get stage templates from dynamic industry or fallback to config
    * Priority: Dynamic Industry -> Config File -> Empty array
@@ -312,9 +325,14 @@ export class LeadStageService {
       journeyOrder?: number;
       icon?: string;
       autoSyncStatus?: 'WON' | 'LOST';
+      followUpConfigId?: string | null;
     }
   ): Promise<LeadStage> {
     const slug = data.slug || data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+    if (data.followUpConfigId) {
+      await this.assertFollowUpConfigInOrg(data.followUpConfigId, organizationId);
+    }
 
     return prisma.leadStage.create({
       data: {
@@ -326,6 +344,7 @@ export class LeadStageService {
         journeyOrder: data.journeyOrder || 0,
         icon: data.icon,
         autoSyncStatus: data.autoSyncStatus,
+        followUpConfigId: data.followUpConfigId ?? null,
         isSystemStage: false,
         isActive: true,
       },
@@ -346,8 +365,13 @@ export class LeadStageService {
       icon?: string;
       autoSyncStatus?: 'WON' | 'LOST' | null;
       isActive?: boolean;
+      followUpConfigId?: string | null;
     }
   ): Promise<LeadStage> {
+    if (data.followUpConfigId) {
+      await this.assertFollowUpConfigInOrg(data.followUpConfigId, organizationId);
+    }
+
     return prisma.leadStage.update({
       where: {
         id: stageId,

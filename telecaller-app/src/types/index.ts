@@ -289,6 +289,17 @@ export interface AssignedDataStats {
   converted: number;
 }
 
+export interface LeadsStats {
+  total: number;
+  new: number;
+  contacted: number;
+  qualified: number;
+  negotiation: number;
+  converted: number;
+  lost: number;
+  active: number;
+}
+
 // Storage Keys
 export const STORAGE_KEYS = {
   AUTH_TOKEN: '@telecaller/auth_token',

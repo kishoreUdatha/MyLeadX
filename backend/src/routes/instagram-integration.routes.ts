@@ -7,6 +7,7 @@ import { authenticate, authorize } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { prisma } from '../config/database';
 import { config } from '../config';
+import { getOrCreateTenantVerifyToken } from './facebook-integration.routes';
 
 const router = Router();
 
@@ -258,12 +259,17 @@ router.get(
   async (req: TenantRequest, res: Response, next: NextFunction) => {
     try {
       const baseUrl = config.baseUrl || `${req.protocol}://${req.get('host')}`;
-      const webhookUrl = `${baseUrl}/api/ads/instagram/webhook`;
-      const verifyToken = config.facebook.verifyToken || 'your-verify-token';
+      // organizationId in the query so multi-tenant webhook delivery can be routed
+      // to the right tenant (parity with the Facebook webhook URL).
+      const webhookUrl = `${baseUrl}/api/ads/instagram/webhook?organizationId=${req.organizationId}`;
+      // Shared per-tenant token (one Meta App per tenant → one verify token).
+      // Generated and persisted on first call; reused across FB + IG wizards.
+      const verifyToken = await getOrCreateTenantVerifyToken(req.organizationId!);
 
       ApiResponse.success(res, 'Webhook URL retrieved', {
         webhookUrl,
         verifyToken,
+        organizationId: req.organizationId,
         instructions: [
           '1. Go to Facebook Developer Console (developers.facebook.com)',
           '2. Navigate to your app > Webhooks',

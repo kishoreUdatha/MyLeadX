@@ -34,6 +34,7 @@ export const telecallerApi = {
       startDate?: string;
       endDate?: string;
       outcome?: string;
+      showTeam?: boolean;
     }
   ): Promise<PaginatedResponse<Call> & { outcomeCounts?: Record<string, number>; dateCounts?: Record<string, number> }> => {
     try {
@@ -46,10 +47,10 @@ export const telecallerApi = {
       if (filters?.startDate) params.append('dateFrom', filters.startDate);
       if (filters?.endDate) params.append('dateTo', filters.endDate);
       if (filters?.outcome) params.append('outcome', filters.outcome);
+      if (filters?.showTeam) params.append('showTeam', 'true');
 
-      console.log('[TelecallerAPI] Fetching calls with params:', params.toString());
+      if (__DEV__) console.log('[TelecallerAPI] Fetching calls with params:', params.toString());
       const response = await api.get(`/telecaller/calls?${params.toString()}`);
-      console.log('[TelecallerAPI] Calls response:', JSON.stringify(response.data));
 
       // Backend returns { success, message, data: { calls, total, outcomeCounts, dateCounts } }
       const responseData = response.data.data || response.data;
@@ -79,7 +80,7 @@ export const telecallerApi = {
         summary: call.summary || undefined,
       } as any));
 
-      console.log('[TelecallerAPI] Transformed calls count:', transformedCalls.length);
+      if (__DEV__) console.log('[TelecallerAPI] Transformed calls count:', transformedCalls.length);
 
       return {
         success: true,
@@ -368,32 +369,38 @@ export const telecallerApi = {
    * Get telecaller's assigned raw data (not yet leads)
    */
   getAssignedData: async (
-    status?: string,
-    search?: string,
-    limit: number = 200,
-    offset: number = 0
+    options: {
+      status?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+      page?: number;
+      dateFrom?: string;
+      dateTo?: string;
+      assignedToId?: string;
+      excludeAssignedToId?: string;
+    } = {}
   ): Promise<{ records: AssignedData[]; total: number }> => {
+    const { status, search, limit = 50, offset, page, dateFrom, dateTo, assignedToId, excludeAssignedToId } = options;
     try {
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-        offset: offset.toString(),
-      });
+      const params = new URLSearchParams();
+      params.append('limit', limit.toString());
+      if (page !== undefined) {
+        params.append('page', page.toString());
+      } else if (offset !== undefined) {
+        params.append('offset', offset.toString());
+      }
       if (status && status !== 'ALL') params.append('status', status);
       if (search) params.append('search', search);
+      if (dateFrom) params.append('dateFrom', dateFrom);
+      if (dateTo) params.append('dateTo', dateTo);
+      if (assignedToId) params.append('assignedToId', assignedToId);
+      if (excludeAssignedToId) params.append('excludeAssignedToId', excludeAssignedToId);
 
       const url = `/telecaller/assigned-data?${params.toString()}`;
-      console.log('[TelecallerAPI] GET', url);
       const response = await api.get<ApiResponse<{ records: AssignedData[]; total: number }>>(url);
-      const payload = response.data.data;
-      console.log(
-        '[TelecallerAPI] assigned-data returned:',
-        payload?.records?.length ?? 0,
-        '/ total',
-        payload?.total ?? 0,
-      );
-      return payload;
+      return response.data.data;
     } catch (error) {
-      console.error('[TelecallerAPI] assigned-data error:', getErrorMessage(error));
       throw new Error(getErrorMessage(error));
     }
   },
@@ -401,9 +408,25 @@ export const telecallerApi = {
   /**
    * Get assigned data stats
    */
-  getAssignedDataStats: async (): Promise<AssignedDataStats> => {
+  getAssignedDataStats: async (
+    options: {
+      dateFrom?: string;
+      dateTo?: string;
+      assignedToId?: string;
+      excludeAssignedToId?: string;
+    } = {}
+  ): Promise<AssignedDataStats> => {
+    const { dateFrom, dateTo, assignedToId, excludeAssignedToId } = options;
     try {
-      const response = await api.get<ApiResponse<AssignedDataStats>>('/telecaller/assigned-data/stats');
+      const params = new URLSearchParams();
+      if (dateFrom) params.append('dateFrom', dateFrom);
+      if (dateTo) params.append('dateTo', dateTo);
+      if (assignedToId) params.append('assignedToId', assignedToId);
+      if (excludeAssignedToId) params.append('excludeAssignedToId', excludeAssignedToId);
+
+      const qs = params.toString();
+      const url = qs ? `/telecaller/assigned-data/stats?${qs}` : '/telecaller/assigned-data/stats';
+      const response = await api.get<ApiResponse<AssignedDataStats>>(url);
       return response.data.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -554,22 +577,15 @@ export const telecallerApi = {
    * Returns outcomes configured by admin for selection after calls
    */
   getCallOutcomes: async (): Promise<CustomCallOutcome[]> => {
-    console.log('[TelecallerAPI] getCallOutcomes() called');
     try {
-      console.log('[TelecallerAPI] Making GET request to /call-outcomes/telecaller-app');
       const response = await api.get<ApiResponse<{ outcomes: CustomCallOutcome[] }>>(
         '/call-outcomes/telecaller-app'
       );
-      console.log('[TelecallerAPI] Response status:', response.status);
-      console.log('[TelecallerAPI] Response data:', JSON.stringify(response.data, null, 2));
-      const outcomes = response.data.data.outcomes;
-      console.log('[TelecallerAPI] Parsed outcomes count:', outcomes?.length || 0);
-      return outcomes;
+      return response.data.data.outcomes;
     } catch (error: any) {
-      console.error('[TelecallerAPI] === ERROR fetching call outcomes ===');
-      console.error('[TelecallerAPI] Error message:', error?.message);
-      console.error('[TelecallerAPI] Response status:', error?.response?.status);
-      console.error('[TelecallerAPI] Response data:', JSON.stringify(error?.response?.data, null, 2));
+      if (__DEV__) {
+        console.error('[TelecallerAPI] Error fetching call outcomes:', error?.message, error?.response?.status);
+      }
       throw new Error(getErrorMessage(error));
     }
   },

@@ -63,7 +63,7 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
     }
 
     setLoading(true);
-    console.log('[Login] Attempting login with:', email);
+    if (__DEV__) console.log('[Login] Attempting login with:', email);
 
     try {
       // Use axios api instance for consistent URL handling and interceptors
@@ -72,9 +72,8 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
         password: password,
       });
 
-      console.log('[Login] Response status:', response.status);
+      if (__DEV__) console.log('[Login] Response status:', response.status);
       const data = response.data;
-      console.log('[Login] Response data:', data);
 
       // Handle both response formats: { accessToken } or { data: { accessToken } }
       const responseData = data.data || data;
@@ -102,10 +101,10 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
           await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, responseData.refreshToken);
         }
 
-        console.log('[Login] Login successful, syncing to Redux...');
+        if (__DEV__) console.log('[Login] Login successful, syncing to Redux...');
         // Sync user data to Redux store so Dashboard can display firstName
         await dispatch(checkAuth());
-        console.log('[Login] Redux synced, navigating...');
+        if (__DEV__) console.log('[Login] Redux synced, navigating...');
         onLoginSuccess();
       } else {
         Alert.alert('Login Failed', data.message || 'Invalid credentials');
@@ -117,7 +116,7 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
         // Server responded with error
         const status = error.response.status;
         const serverMessage = error.response.data?.message;
-        console.log('[Login] Server error:', status, serverMessage);
+        if (__DEV__) console.log('[Login] Server error:', status, serverMessage);
 
         if (status === 429) {
           message = 'Too many attempts. Please wait a minute and try again.';
@@ -127,9 +126,9 @@ const LoginScreen: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess 
           message = serverMessage;
         }
       } else if (error.message?.includes('Network Error') || error.message?.includes('timeout')) {
-        console.log('[Login] Network error - server unreachable');
+        if (__DEV__) console.log('[Login] Network error - server unreachable');
         message = 'Cannot connect to server. Please check:\n• Internet connection\n• Phone is on same WiFi as server\n• Server is running';
-      } else {
+      } else if (__DEV__) {
         console.log('[Login] Unexpected error:', error.message);
       }
 
@@ -194,10 +193,10 @@ const MainTabNavigator: React.FC = () => {
         if (userData) {
           const user = JSON.parse(userData) as User;
           setUserRole(user.role || 'telecaller');
-          console.log('[MainTabNavigator] User role:', user.role);
+          if (__DEV__) console.log('[MainTabNavigator] User role:', user.role);
         }
       } catch (e) {
-        console.log('[MainTabNavigator] Error loading user role:', e);
+        if (__DEV__) console.log('[MainTabNavigator] Error loading user role:', e);
       }
     };
     loadUserRole();
@@ -208,6 +207,10 @@ const MainTabNavigator: React.FC = () => {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
+        // Freeze background tabs so e.g. Dashboard's 30s polling and unrelated
+        // re-renders stop while the user is on another tab. AppState listeners
+        // and native event emitters keep working — only the React tree pauses.
+        freezeOnBlur: true,
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: string;
 
@@ -303,7 +306,7 @@ const AppNavigator: React.FC = () => {
   const checkAuth = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-      console.log('[AppNavigator] Auth check, token exists:', !!token);
+      if (__DEV__) console.log('[AppNavigator] Auth check, token exists:', !!token);
       setIsLoggedIn(!!token);
     } catch (e) {
       setIsLoggedIn(false);
@@ -317,16 +320,12 @@ const AppNavigator: React.FC = () => {
 
     // Listen for logout event
     const subscription = DeviceEventEmitter.addListener('logout', () => {
-      console.log('[AppNavigator] Logout event received, setting isLoggedIn to false');
+      if (__DEV__) console.log('[AppNavigator] Logout event received');
       setIsLoggedIn(false);
       setChecking(false); // Ensure we're not stuck in loading state
-      console.log('[AppNavigator] State updated, should show login screen');
     });
 
-    console.log('[AppNavigator] Logout event listener registered');
-
     return () => {
-      console.log('[AppNavigator] Removing logout event listener');
       subscription.remove();
     };
   }, [checkAuth]);
@@ -343,6 +342,9 @@ const AppNavigator: React.FC = () => {
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
+          // Freeze screens that aren't on top of the stack — when user goes
+          // Leads → Call, Leads pauses its React tree until they come back.
+          freezeOnBlur: true,
           headerStyle: {
             backgroundColor: '#3B82F6',
           },

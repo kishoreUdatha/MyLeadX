@@ -12,6 +12,7 @@ import { authenticate } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { validate } from '../middlewares/validate';
 import { createWhatsAppService } from '../integrations/whatsapp.service';
+import { whatsappTemplateMetaService } from '../services/whatsapp-template-meta.service';
 
 const router = Router();
 
@@ -185,6 +186,9 @@ router.post('/webhook', validateWebhookSignature, async (req: Request, res: Resp
                 await handleStatusUpdate(status);
               }
             }
+          } else if (change.field === 'message_template_status_update') {
+            // Template approval/rejection event from Meta — sync local row.
+            await whatsappTemplateMetaService.handleStatusWebhook(change.value || {});
           }
         }
       }
@@ -265,6 +269,71 @@ router.get('/templates', async (req: TenantRequest, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.response?.data?.error?.message || 'Failed to fetch templates',
+    });
+  }
+});
+
+/**
+ * Submit a local MessageTemplate to Meta for approval.
+ * POST /api/whatsapp/templates/:templateId/submit
+ *
+ * Body: none (template fields are read from the existing MessageTemplate row)
+ * Response: { templateId, metaTemplateId, status }
+ *
+ * Errors:
+ *  - 404 if template doesn't exist for this org
+ *  - 400 if template was already submitted, or Meta rejects the payload
+ *  - 400 if WhatsApp Meta credentials are not configured
+ */
+router.post('/templates/:templateId/submit', async (req: TenantRequest, res: Response) => {
+  try {
+    const { templateId } = req.params;
+    const organizationId = req.organizationId;
+
+    if (!organizationId) {
+      return res.status(401).json({ success: false, message: 'Organization not found' });
+    }
+    if (!templateId) {
+      return res.status(400).json({ success: false, message: 'templateId is required' });
+    }
+
+    const result = await whatsappTemplateMetaService.submitForApproval(templateId, organizationId);
+
+    return res.json({
+      success: true,
+      message: 'Template submitted to Meta for approval',
+      data: result,
+    });
+  } catch (error: any) {
+    const message = error?.message || 'Failed to submit template to Meta';
+    const status = /not found/i.test(message) ? 404 : 400;
+    return res.status(status).json({ success: false, message });
+  }
+});
+
+/**
+ * Manually trigger a status sync for the caller's organization. Useful when
+ * the user clicks a "Refresh status from Meta" button in the UI, or when the
+ * webhook event was missed.
+ * POST /api/whatsapp/templates/sync-status
+ */
+router.post('/templates/sync-status', async (req: TenantRequest, res: Response) => {
+  try {
+    const organizationId = req.organizationId;
+    if (!organizationId) {
+      return res.status(401).json({ success: false, message: 'Organization not found' });
+    }
+
+    const result = await whatsappTemplateMetaService.syncStatusForOrg(organizationId);
+    return res.json({
+      success: true,
+      message: `Synced ${result.checked} template(s), updated ${result.updated}`,
+      data: result,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error?.message || 'Failed to sync template statuses',
     });
   }
 });

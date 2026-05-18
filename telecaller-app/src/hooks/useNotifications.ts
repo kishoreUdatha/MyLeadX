@@ -65,7 +65,7 @@ export const useNotifications = (): UseNotificationsReturn => {
   // Handle notification tap - navigate to relevant screen
   const handleNotificationTap = useCallback(
     (notification: NotificationPayload) => {
-      console.log('[useNotifications] Notification tapped:', notification);
+      if (__DEV__) console.log('[useNotifications] Notification tapped:', notification);
 
       const { data, type } = notification;
 
@@ -133,7 +133,7 @@ export const useNotifications = (): UseNotificationsReturn => {
 
       // Don't schedule if reminder time is in the past
       if (reminderTime <= new Date()) {
-        console.log('[useNotifications] Reminder time is in the past, skipping');
+        if (__DEV__) console.log('[useNotifications] Reminder time is in the past, skipping');
         return null;
       }
 

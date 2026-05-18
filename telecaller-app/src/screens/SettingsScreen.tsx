@@ -18,6 +18,7 @@ import { getInitials } from '../utils/formatters';
 import { openAppSettings } from '../utils/permissions';
 import { RootStackParamList } from '../types';
 import { workSessionApi } from '../api/telecaller';
+import { getCrashLog, clearCrashLog, CrashLogEntry } from '../components/ErrorBoundary';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -199,6 +200,37 @@ const SettingsScreen: React.FC = () => {
     Linking.openURL('https://telecallercrm.com/terms');
   }, []);
 
+  // --- Crash log ----------------------------------------------------------
+  const [crashes, setCrashes] = useState<CrashLogEntry[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      getCrashLog().then(setCrashes);
+    }, [])
+  );
+
+  const handleViewCrashes = useCallback(() => {
+    if (crashes.length === 0) return;
+    // Show the most recent crash in an Alert; tapping Copy details isn't
+    // available, but this is enough to read the error without needing Logcat.
+    const latest = crashes[0];
+    const preview =
+      `When: ${new Date(latest.timestamp).toLocaleString()}\n\n` +
+      `Error: ${latest.message}\n\n` +
+      `Component stack:\n${latest.componentStack.slice(0, 800)}`;
+    Alert.alert(
+      `Recent crash (${crashes.length} total)`,
+      preview,
+      [
+        { text: 'Clear all', style: 'destructive', onPress: async () => {
+          await clearCrashLog();
+          setCrashes([]);
+        }},
+        { text: 'Close', style: 'cancel' },
+      ]
+    );
+  }, [crashes]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Profile Section */}
@@ -294,6 +326,15 @@ const SettingsScreen: React.FC = () => {
             title="Terms of Service"
             onPress={handleTerms}
           />
+          {crashes.length > 0 && (
+            <SettingItem
+              icon="bug-outline"
+              iconColor="#EF4444"
+              title="Recent Crashes"
+              subtitle={`${crashes.length} captured — tap to view`}
+              onPress={handleViewCrashes}
+            />
+          )}
         </View>
       </View>
 

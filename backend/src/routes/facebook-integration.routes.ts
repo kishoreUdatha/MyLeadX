@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { body, param, query } from 'express-validator';
+import crypto from 'crypto';
 import { facebookService } from '../integrations/facebook.service';
 import { ApiResponse } from '../utils/apiResponse';
 import { validate } from '../middlewares/validate';
@@ -7,6 +8,44 @@ import { authenticate, authorize } from '../middlewares/auth';
 import { tenantMiddleware, TenantRequest } from '../middlewares/tenant';
 import { prisma } from '../config/database';
 import { config } from '../config';
+
+// Multi-tenant guarantee: every tenant gets a unique webhook verify token, NOT
+// the shared FACEBOOK_VERIFY_TOKEN env default. The token lives on the
+// per-tenant pending-webhook-setup FacebookIntegration row and is reused by the
+// Instagram wizard (one Meta App per tenant → one verify token per tenant).
+const WEBHOOK_PLACEHOLDER_PAGE_ID = 'pending-webhook-setup';
+
+async function getOrCreateTenantVerifyToken(organizationId: string): Promise<string> {
+  // 1. Any active integration with a token already set → reuse it (covers both
+  //    real page rows and the placeholder row).
+  const existing = await prisma.facebookIntegration.findFirst({
+    where: {
+      organizationId,
+      verifyToken: { not: null },
+    },
+  });
+  if (existing?.verifyToken) return existing.verifyToken;
+
+  // 2. No token anywhere for this tenant — mint one and persist on a placeholder
+  //    row so the next call is idempotent and Instagram setup sees the same value.
+  const newToken = crypto.randomBytes(24).toString('hex');
+  await prisma.facebookIntegration.upsert({
+    where: {
+      organizationId_pageId: { organizationId, pageId: WEBHOOK_PLACEHOLDER_PAGE_ID },
+    },
+    update: { verifyToken: newToken, isActive: true },
+    create: {
+      organizationId,
+      pageId: WEBHOOK_PLACEHOLDER_PAGE_ID,
+      verifyToken: newToken,
+      accessToken: 'pending-webhook-setup',
+      isActive: true,
+    },
+  });
+  return newToken;
+}
+
+export { getOrCreateTenantVerifyToken };
 
 const router = Router();
 
@@ -271,9 +310,22 @@ router.get(
 
       ApiResponse.success(res, 'Lead forms retrieved', forms);
     } catch (error: any) {
-      // 403 means no lead forms exist yet or page not linked - return empty array
-      if (error.response?.status === 403 || error.status === 403) {
-        return ApiResponse.success(res, 'No lead forms found', []);
+      // Meta returns HTTP 403 for BOTH "page has no forms / app not subscribed"
+      // AND "your token is missing pages_manage_ads / leads_retrieval". The old
+      // code lumped both into "No lead forms found" — which hid the real
+      // permission errors and sent users on a long debugging chase.
+      //
+      // Now: if Meta returned an error body with a message, surface it. Only
+      // treat as "no forms" when Meta gave a successful empty response (which
+      // would not reach this catch block anyway — getLeadForms returns []).
+      const metaError = error.response?.data?.error;
+      if (metaError) {
+        console.warn(`[Facebook] getLeadForms error: status=${error.response?.status} code=${metaError.code} message="${metaError.message}"`);
+        return ApiResponse.error(
+          res,
+          `Facebook: ${metaError.message}`,
+          error.response?.status || 400
+        );
       }
       next(error);
     }
@@ -308,14 +360,8 @@ router.get(
       // Include organizationId in webhook URL for proper routing
       const webhookUrl = `${baseUrl}/api/ads/facebook/webhook?organizationId=${req.organizationId}`;
 
-      // Try to get verifyToken from existing integration first
-      let verifyToken = config.facebook.verifyToken || 'your-verify-token';
-      const existingIntegration = await prisma.facebookIntegration.findFirst({
-        where: { organizationId: req.organizationId, isActive: true },
-      });
-      if (existingIntegration?.verifyToken) {
-        verifyToken = existingIntegration.verifyToken;
-      }
+      // Per-tenant verify token (generated on first call, persisted, idempotent).
+      const verifyToken = await getOrCreateTenantVerifyToken(req.organizationId!);
 
       ApiResponse.success(res, 'Webhook URL retrieved', {
         webhookUrl,

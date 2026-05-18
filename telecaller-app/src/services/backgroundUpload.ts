@@ -35,8 +35,8 @@ class BackgroundUploadService {
       this.eventEmitter = new NativeEventEmitter(BackgroundUpload);
       this.setupListeners();
       this.isInitialized = true;
-      console.log('[BackgroundUpload] Service initialized');
-    } else {
+      if (__DEV__) console.log('[BackgroundUpload] Service initialized');
+    } else if (__DEV__) {
       console.warn('[BackgroundUpload] Native module not available');
     }
   }
@@ -45,7 +45,7 @@ class BackgroundUploadService {
     if (!this.eventEmitter) return;
 
     this.eventEmitter.addListener('onUploadSuccess', (event: UploadSuccessEvent) => {
-      console.log('[BackgroundUpload] Upload success:', event.callId, event.recordingUrl);
+      if (__DEV__) console.log('[BackgroundUpload] Upload success:', event.callId);
       const callback = this.callbacks.get(event.callId);
       if (callback?.onSuccess) {
         callback.onSuccess(event.callId, event.recordingUrl);
@@ -54,7 +54,7 @@ class BackgroundUploadService {
     });
 
     this.eventEmitter.addListener('onUploadError', (event: UploadErrorEvent) => {
-      console.log('[BackgroundUpload] Upload error:', event.callId, event.error);
+      if (__DEV__) console.log('[BackgroundUpload] Upload error:', event.callId, event.error);
       const callback = this.callbacks.get(event.callId);
       if (callback?.onError) {
         callback.onError(event.callId, event.error);
@@ -62,8 +62,9 @@ class BackgroundUploadService {
       this.callbacks.delete(event.callId);
     });
 
+    // Progress fires per percent (~100 times per upload) — no log even in dev
+    // because Logcat noise drowns out everything else during an upload.
     this.eventEmitter.addListener('onUploadProgress', (event: UploadProgressEvent) => {
-      console.log('[BackgroundUpload] Upload progress:', event.callId, event.progress + '%');
       const callback = this.callbacks.get(event.callId);
       if (callback?.onProgress) {
         callback.onProgress(event.callId, event.progress);

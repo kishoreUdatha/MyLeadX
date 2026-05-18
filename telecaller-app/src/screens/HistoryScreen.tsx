@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { API_URL } from '../config';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppDispatch, useAppSelector } from '../store';
 import { fetchCalls } from '../store/slices/callsSlice';
@@ -150,7 +150,7 @@ const ExpandedCallContent: React.FC<{ item: Call }> = ({ item }) => {
         });
       }, 1000);
     } catch (e) {
-      console.error('[Audio] Play failed:', e);
+      if (__DEV__) console.error('[Audio] Play failed:', e);
     }
     setIsLoading(false);
   };
@@ -288,13 +288,12 @@ const HistoryScreen: React.FC = () => {
           setUserRole(user.role || 'telecaller');
         }
       } catch (e) {
-        console.log('[HistoryScreen] Error loading role:', e);
+        if (__DEV__) console.log('[HistoryScreen] Error loading role:', e);
       }
     };
     loadRole();
   }, []);
 
-  const hasInitializedRef = useRef(false);
   const isLoadingRef = useRef(false);
   const lastLoadTimeRef = useRef(0);
   const currentPageRef = useRef(1);
@@ -306,7 +305,12 @@ const HistoryScreen: React.FC = () => {
         currentPageRef.current = 1;
       }
 
-      let filters: { outcome?: string; startDate?: string; endDate?: string } | undefined = {};
+      let filters: {
+        outcome?: string;
+        startDate?: string;
+        endDate?: string;
+        showTeam?: boolean;
+      } = {};
 
       // Add outcome filter
       if (activeFilter === 'PENDING') {
@@ -322,6 +326,12 @@ const HistoryScreen: React.FC = () => {
         filters.endDate = dates.endDate;
       }
 
+      // Team scope (team leads / managers only — backend ignores it for plain
+      // telecallers, so it's safe to always forward).
+      if (showTeamCalls) {
+        filters.showTeam = true;
+      }
+
       await dispatch(
         fetchCalls({
           page,
@@ -333,15 +343,16 @@ const HistoryScreen: React.FC = () => {
         currentPageRef.current = page;
       }
     },
-    [dispatch, activeFilter, dateRange, customDates]
+    [dispatch, activeFilter, dateRange, customDates, showTeamCalls]
   );
 
-  useEffect(() => {
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
+  // Single source of truth: refetches on focus and whenever activeFilter /
+  // dateRange / customDates change (those flow into loadCalls' deps).
+  useFocusEffect(
+    useCallback(() => {
       loadCalls(true);
-    }
-  }, [loadCalls]);
+    }, [loadCalls])
+  );
 
   const handleRefresh = useCallback(() => {
     isLoadingRef.current = false;
@@ -390,12 +401,7 @@ const HistoryScreen: React.FC = () => {
     []
   );
 
-  // Reload when filters change
-  useEffect(() => {
-    if (hasInitializedRef.current) {
-      loadCalls(true);
-    }
-  }, [activeFilter, dateRange, customDates]);
+  // Filter changes are handled by useFocusEffect above (loadCalls' deps cover them).
 
   const toggleExpand = useCallback((callId: string) => {
     setExpandedCallId((prev) => (prev === callId ? null : callId));

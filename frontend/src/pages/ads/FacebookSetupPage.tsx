@@ -12,6 +12,10 @@ import {
   BellAlertIcon,
   ExclamationTriangleIcon,
   ClipboardDocumentIcon,
+  ArrowTopRightOnSquareIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  LightBulbIcon,
 } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 
@@ -90,6 +94,9 @@ export default function FacebookSetupPage() {
   const [isSavingCredentials, setIsSavingCredentials] = useState(false);
   const [existingIntegrationId, setExistingIntegrationId] = useState<string | null>(null);
 
+  // First-time setup guide (open by default until the tenant has saved an integration).
+  const [showSetupGuide, setShowSetupGuide] = useState(true);
+
   // Load existing integration on mount
   useEffect(() => {
     const loadExistingIntegration = async () => {
@@ -148,12 +155,35 @@ export default function FacebookSetupPage() {
           }
           if (existing.fieldMapping) setFieldMapping(existing.fieldMapping);
           setCredentialsSaved(true);
+          // Already configured before — start with the setup guide collapsed.
+          setShowSetupGuide(false);
         }
       } catch (error) {
         console.error('Error loading existing integration:', error);
       }
     };
-    loadExistingIntegration();
+
+    // Auto-fill the Verify Token from the backend (per-tenant, auto-generated).
+    // Without this, the Save button stays disabled on a fresh wizard load
+    // because the field is required — and tenants don't know they're supposed
+    // to invent one. The backend generates and persists a unique token per
+    // tenant on first call; later calls return the same value.
+    const autoFillVerifyToken = async () => {
+      try {
+        const res = await api.get('/facebook/webhook-url');
+        const generated = res.data?.data?.verifyToken;
+        if (generated) {
+          // Only set if the user hasn't already typed something OR if no
+          // existing integration loaded a verify token. setState callback form
+          // checks current value to avoid clobbering a typed override.
+          setVerifyToken((current) => current || generated);
+        }
+      } catch (err) {
+        console.warn('Could not auto-fill verify token:', err);
+      }
+    };
+
+    loadExistingIntegration().then(autoFillVerifyToken);
   }, []);
 
   const testConnection = async () => {
@@ -333,7 +363,7 @@ export default function FacebookSetupPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       <div className="mb-8">
         <button
           onClick={() => navigate('/ad-integrations')}
@@ -381,6 +411,123 @@ export default function FacebookSetupPage() {
             <div className="space-y-5">
               <h3 className="text-lg font-semibold text-slate-900">Connect Your Facebook Account</h3>
 
+              {/* First-time Setup Guide — collapsible prerequisites */}
+              <div className="border border-indigo-200 bg-indigo-50 rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSetupGuide((v) => !v)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-indigo-100 transition"
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold text-indigo-900">
+                    <LightBulbIcon className="w-5 h-5" />
+                    First time here? Read this before you fill the form
+                  </span>
+                  {showSetupGuide
+                    ? <ChevronDownIcon className="w-4 h-4 text-indigo-700" />
+                    : <ChevronRightIcon className="w-4 h-4 text-indigo-700" />}
+                </button>
+                {showSetupGuide && (
+                  <div className="px-4 pb-4 pt-1 border-t border-indigo-200 text-sm text-slate-700 space-y-4">
+                    <p className="text-indigo-900">
+                      Connecting Facebook Lead Ads needs a one-time, ~30-minute setup on Meta's side.
+                      You'll create a free "Meta Developer App" tied to your Facebook Page, copy a
+                      few credentials, and paste them below. Follow these 5 steps in order:
+                    </p>
+
+                    <ol className="space-y-3 list-decimal pl-5">
+                      <li>
+                        <span className="font-medium">Create a Meta Developer Account</span>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          Use the same Facebook account that admins your business Page.
+                        </p>
+                        <a
+                          href="https://developers.facebook.com/async/registration"
+                          target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-indigo-700 hover:underline text-xs mt-1"
+                        >
+                          Open Meta Developer signup
+                          <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                        </a>
+                      </li>
+
+                      <li>
+                        <span className="font-medium">Create a new App</span>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          Click <span className="font-medium">"Create App"</span> → choose
+                          <span className="font-medium"> "Business"</span> as the type → name it
+                          something like <span className="font-mono bg-white px-1 rounded border">"YourBrand CRM"</span>.
+                        </p>
+                        <a
+                          href="https://developers.facebook.com/apps/creation/"
+                          target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-indigo-700 hover:underline text-xs mt-1"
+                        >
+                          Open Create App page
+                          <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                        </a>
+                      </li>
+
+                      <li>
+                        <span className="font-medium">Add the Lead Ads use case to your App</span>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          On the App Dashboard, click <span className="font-medium">"Add use cases"</span> (top-right). The <span className="font-medium">"Add more use cases"</span> dialog opens with a <span className="font-medium">"Filter by"</span> panel on the left:
+                        </p>
+                        <ol className="text-xs text-slate-600 mt-1 ml-2 list-decimal list-inside space-y-0.5">
+                          <li>Click <span className="font-medium">"Ads and monetization (6)"</span> in the Filter panel (the default "Featured (3)" doesn't show it).</li>
+                          <li>Tick the checkbox next to <span className="font-medium">"Capture &amp; manage ad leads with Marketing API"</span> — described as <span className="italic">"Give potential customers a quick and safe way to sign up to get info about your business or products."</span></li>
+                          <li>Click <span className="font-medium">"Add use case"</span> at the bottom of the dialog.</li>
+                          <li>You'll land on the use case page. Click <span className="font-medium">"Customize"</span> and make sure these permissions are enabled: <span className="font-mono bg-white px-1 rounded border text-[10px]">pages_show_list</span>, <span className="font-mono bg-white px-1 rounded border text-[10px]">leads_retrieval</span>, <span className="font-mono bg-white px-1 rounded border text-[10px]">pages_manage_metadata</span>, <span className="font-mono bg-white px-1 rounded border text-[10px]">pages_read_engagement</span>.</li>
+                        </ol>
+                        <p className="text-xs text-slate-600 mt-2">
+                          <span className="font-medium">Webhooks setup</span> (for real-time lead delivery): this no longer appears as a separate "Add Products" item. Inside the use case page, scroll to <span className="font-medium">"Webhooks"</span> or open <span className="font-medium">App Settings → Webhooks</span> in the sidebar — that's where you'll paste the Callback URL and Verify Token from Step 4 of this wizard.
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1 italic">
+                          Older apps may still show an "Add Products" sidebar. In that case add <span className="font-medium">Webhooks</span>, <span className="font-medium">Facebook Login for Business</span>, and <span className="font-medium">Lead Ads</span> as separate products instead.
+                        </p>
+                      </li>
+
+                      <li>
+                        <span className="font-medium">Get your App ID, App Secret, and Page Access Token</span>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          App ID + Secret are in <span className="font-medium">App Settings → Basic</span>.
+                          Page Access Token comes from <span className="font-medium">Business Settings → System Users</span>{' '}
+                          (best for permanent tokens) or temporarily from{' '}
+                          <a
+                            href="https://developers.facebook.com/tools/explorer/"
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-indigo-700 hover:underline inline-flex items-center gap-1"
+                          >
+                            Graph API Explorer <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                          </a>.
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Required permissions when generating the token:{' '}
+                          <code className="bg-white px-1 rounded border">pages_show_list</code>,{' '}
+                          <code className="bg-white px-1 rounded border">leads_retrieval</code>,{' '}
+                          <code className="bg-white px-1 rounded border">pages_manage_metadata</code>,{' '}
+                          <code className="bg-white px-1 rounded border">pages_read_engagement</code>.
+                        </p>
+                      </li>
+
+                      <li>
+                        <span className="font-medium">Fill in the form below and continue</span>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          Paste your App ID, App Secret, and Page Access Token, then click
+                          <span className="font-medium"> "Test Connection"</span>. We'll list your Pages
+                          and you can pick the one running ads. Webhook setup happens in Step 4.
+                        </p>
+                      </li>
+                    </ol>
+
+                    <div className="bg-white border border-indigo-200 rounded p-3 text-xs text-slate-700">
+                      <span className="font-medium text-indigo-900">Stuck?</span>{' '}
+                      Most customers complete this in one screenshare with our team. Reach out to
+                      <span className="font-medium"> support@myleadx.ai</span> and we'll walk you through it.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* App Credentials Section */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm font-medium text-blue-800 mb-3">Facebook App Credentials (from developers.facebook.com)</p>
@@ -394,6 +541,18 @@ export default function FacebookSetupPage() {
                       className="input w-full text-sm"
                       placeholder="Your Facebook App ID"
                     />
+                    <details className="mt-1">
+                      <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                        Where do I find this?
+                      </summary>
+                      <div className="text-xs text-slate-600 mt-1 pl-2 leading-5">
+                        Go to your{' '}
+                        <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline">
+                          Meta Apps Dashboard
+                        </a>{' '}
+                        → click your App → look at the top of the page. It's a 16-digit number.
+                      </div>
+                    </details>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">App Secret</label>
@@ -404,10 +563,23 @@ export default function FacebookSetupPage() {
                       className="input w-full text-sm"
                       placeholder="Your Facebook App Secret"
                     />
+                    <details className="mt-1">
+                      <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                        Where do I find this?
+                      </summary>
+                      <div className="text-xs text-slate-600 mt-1 pl-2 leading-5">
+                        In your{' '}
+                        <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline">
+                          Meta App
+                        </a>{' '}
+                        → Settings → Basic → "App Secret" field → click "Show" → confirm with your password.
+                        It's a 32-character string. Keep it secret.
+                      </div>
+                    </details>
                   </div>
                 </div>
                 <div className="mt-3">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Webhook Verify Token (create your own)</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Webhook Verify Token (auto-generated for you)</label>
                   <input
                     type="text"
                     value={verifyToken}
@@ -416,6 +588,15 @@ export default function FacebookSetupPage() {
                     placeholder="e.g., my-secret-verify-token-123"
                   />
                   <p className="text-xs text-blue-600 mt-1">This token is used when setting up webhooks in Facebook Developer Console</p>
+                  <details className="mt-1">
+                    <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                      What is this for?
+                    </summary>
+                    <div className="text-xs text-slate-600 mt-1 pl-2 leading-5">
+                      MyLeadX auto-generated this for you — a unique, per-tenant secret that proves Meta's webhook calls
+                      actually came from your App. You'll paste this exact value into Facebook's Webhook config in Step 4. You can override it with your own random string if you prefer.
+                    </div>
+                  </details>
                 </div>
                 <div className="mt-4 flex items-center gap-3">
                   <button
@@ -468,6 +649,49 @@ export default function FacebookSetupPage() {
                     {isTestingConnection ? <span className="spinner"></span> : connectionValid ? <><CheckCircleIcon className="w-4 h-4" /> Connected</> : 'Test Connection'}
                   </button>
                 </div>
+                <details className="mt-2">
+                  <summary className="text-xs text-indigo-700 cursor-pointer hover:underline">
+                    How do I generate this token?
+                  </summary>
+                  <div className="text-xs text-slate-600 mt-2 pl-2 leading-5 space-y-2">
+                    <p>
+                      <span className="font-medium text-slate-800">Recommended (permanent token via System User):</span>
+                    </p>
+                    <ol className="list-decimal pl-5 space-y-1">
+                      <li>
+                        Open{' '}
+                        <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline inline-flex items-center gap-1">
+                          Business Settings → System Users
+                          <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                        </a>
+                      </li>
+                      <li>Click <span className="font-medium">"Add"</span> → name it (e.g., "MyLeadX Integration") → role <span className="font-medium">"Admin"</span></li>
+                      <li>
+                        Assign your Facebook Page to this System User with{' '}
+                        <span className="font-medium">"Manage Page"</span> + <span className="font-medium">"Lead Access"</span> permissions
+                      </li>
+                      <li>Click <span className="font-medium">"Generate New Token"</span> → pick your App → set expiry to <span className="font-medium">"Never"</span></li>
+                      <li>
+                        Check these permission boxes:{' '}
+                        <code className="bg-white px-1 rounded border">pages_show_list</code>,{' '}
+                        <code className="bg-white px-1 rounded border">leads_retrieval</code>,{' '}
+                        <code className="bg-white px-1 rounded border">pages_manage_metadata</code>,{' '}
+                        <code className="bg-white px-1 rounded border">pages_read_engagement</code>
+                      </li>
+                      <li>Copy the long token string (starts with <code className="bg-white px-1 rounded border">EAAB...</code>) and paste it above</li>
+                    </ol>
+                    <p className="mt-3 pt-2 border-t border-slate-200">
+                      <span className="font-medium text-slate-800">Quick alternative (60-day token via Graph Explorer):</span>{' '}
+                      Use the{' '}
+                      <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" className="text-indigo-700 hover:underline inline-flex items-center gap-1">
+                        Graph API Explorer
+                        <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                      </a>{' '}
+                      → select your App → "Get Token" → "Get Page Access Token" → check the same permissions above.
+                      Faster but the token expires in 60 days. Only use this for testing.
+                    </p>
+                  </div>
+                </details>
               </div>
               {connectionValid && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">

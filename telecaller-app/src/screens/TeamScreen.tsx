@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
 import api from '../api';
@@ -52,17 +52,19 @@ const TeamScreen: React.FC = () => {
       const response = await api.get('/telecaller/team-dashboard-stats');
       setStats(response.data?.data || null);
     } catch (err) {
-      console.log('[TeamScreen] Failed to fetch team stats:', err);
+      if (__DEV__) console.log('[TeamScreen] Failed to fetch team stats:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchTeamStats();
-    const interval = setInterval(fetchTeamStats, 30000);
-    return () => clearInterval(interval);
-  }, [fetchTeamStats]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchTeamStats();
+      const interval = setInterval(fetchTeamStats, 30000);
+      return () => clearInterval(interval);
+    }, [fetchTeamStats])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -70,7 +72,7 @@ const TeamScreen: React.FC = () => {
     setRefreshing(false);
   }, [fetchTeamStats]);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = useCallback((status: string) => {
     switch (status) {
       case 'active':
         return '#22C55E';
@@ -79,9 +81,9 @@ const TeamScreen: React.FC = () => {
       default:
         return '#9CA3AF';
     }
-  };
+  }, []);
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = useCallback((status: string) => {
     switch (status) {
       case 'active':
         return 'Active';
@@ -90,9 +92,9 @@ const TeamScreen: React.FC = () => {
       default:
         return 'Offline';
     }
-  };
+  }, []);
 
-  const renderMember = ({ item }: { item: TeamMember }) => (
+  const renderMember = useCallback(({ item }: { item: TeamMember }) => (
     <View style={styles.memberCard}>
       <View style={styles.memberHeader}>
         <View style={styles.memberAvatar}>
@@ -139,7 +141,7 @@ const TeamScreen: React.FC = () => {
         </View>
       </View>
     </View>
-  );
+  ), [getStatusColor, getStatusLabel]);
 
   if (loading) {
     return (

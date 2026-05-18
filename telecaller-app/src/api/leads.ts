@@ -1,6 +1,6 @@
 import api, { getErrorMessage } from './index';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Lead, LeadStatus, LeadFormData, ApiResponse, PaginatedResponse, STORAGE_KEYS } from '../types';
+import { Lead, LeadStatus, LeadFormData, ApiResponse, PaginatedResponse, LeadsStats, STORAGE_KEYS } from '../types';
 
 export interface LeadDispositionPayload {
   lead_id: string;
@@ -55,9 +55,11 @@ export const leadsApi = {
     page: number = 1,
     limit: number = 20,
     filters?: {
-      status?: LeadStatus;
+      status?: LeadStatus | 'ALL';
       search?: string;
       showTeam?: boolean;
+      dateFrom?: string;
+      dateTo?: string;
     }
   ): Promise<PaginatedResponse<Lead>> => {
     try {
@@ -66,11 +68,13 @@ export const leadsApi = {
         limit: limit.toString(),
       });
 
-      if (filters?.status) params.append('status', filters.status);
+      if (filters?.status && filters.status !== 'ALL') params.append('status', filters.status);
       if (filters?.search) params.append('search', filters.search);
       if (filters?.showTeam) params.append('showTeam', 'true');
+      if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
+      if (filters?.dateTo) params.append('dateTo', filters.dateTo);
 
-      console.log('[LeadsAPI] Fetching leads from /telecaller/leads');
+      if (__DEV__) console.log('[LeadsAPI] Fetching leads from /telecaller/leads');
       const response = await api.get(`/telecaller/leads?${params.toString()}`);
 
       // Parse response - backend returns { success, message, data: { leads, total } }
@@ -115,31 +119,25 @@ export const leadsApi = {
         updatedAt: lead.updatedAt || new Date().toISOString(),
       } as any));
 
-      // Cache leads for offline access
+      // Cache leads for offline access. Use a Map keyed by id so the merge
+      // is O(n+m) instead of O(n*m) — the previous forEach+findIndex was
+      // measurably slow once cached leads exceeded ~50.
       try {
         const cachedLeads = await AsyncStorage.getItem(STORAGE_KEYS.CACHED_LEADS);
         const existingLeads: Lead[] = cachedLeads ? JSON.parse(cachedLeads) : [];
-        const mergedLeads = [...existingLeads];
 
-        transformedLeads.forEach((newLead: Lead) => {
-          const existingIndex = mergedLeads.findIndex((l) => l.id === newLead.id);
-          if (existingIndex >= 0) {
-            mergedLeads[existingIndex] = newLead;
-          } else {
-            mergedLeads.push(newLead);
-          }
-        });
+        const byId = new Map<string, Lead>();
+        for (const lead of existingLeads) byId.set(lead.id, lead);
+        for (const lead of transformedLeads) byId.set(lead.id, lead); // newer wins
 
+        const mergedLeads = Array.from(byId.values());
         const leadsToCache = mergedLeads.slice(-100);
         await AsyncStorage.setItem(STORAGE_KEYS.CACHED_LEADS, JSON.stringify(leadsToCache));
       } catch (e) {
-        console.log('Cache error:', e);
+        if (__DEV__) console.log('Cache error:', e);
       }
 
-      console.log('[LeadsAPI] Transformed leads count:', transformedLeads.length);
-      if (transformedLeads.length > 0) {
-        console.log('[LeadsAPI] First lead:', JSON.stringify(transformedLeads[0]));
-      }
+      if (__DEV__) console.log('[LeadsAPI] Transformed leads count:', transformedLeads.length);
 
       return {
         success: true,
@@ -158,13 +156,47 @@ export const leadsApi = {
   },
 
   /**
+   * Get lifecycle counts for the leads visible to the caller. Honors the same
+   * scope + search + date filters as getAssignedLeads.
+   */
+  getLeadsStats: async (filters?: {
+    search?: string;
+    showTeam?: boolean;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<LeadsStats> => {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.search) params.append('search', filters.search);
+      if (filters?.showTeam) params.append('showTeam', 'true');
+      if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
+      if (filters?.dateTo) params.append('dateTo', filters.dateTo);
+      const qs = params.toString();
+      const url = qs ? `/telecaller/leads/stats?${qs}` : '/telecaller/leads/stats';
+      const response = await api.get(url);
+      const data = response.data?.data || response.data;
+      return {
+        total: data.total || 0,
+        new: data.new || 0,
+        contacted: data.contacted || 0,
+        qualified: data.qualified || 0,
+        negotiation: data.negotiation || 0,
+        converted: data.converted || 0,
+        lost: data.lost || 0,
+        active: data.active || 0,
+      };
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
    * Get single lead details
    */
   getLead: async (leadId: string): Promise<Lead> => {
     try {
-      console.log('[LeadsAPI] Fetching single lead:', leadId);
+      if (__DEV__) console.log('[LeadsAPI] Fetching single lead:', leadId);
       const response = await api.get(`/leads/${leadId}`);
-      console.log('[LeadsAPI] Single lead response:', JSON.stringify(response.data));
 
       const leadData = response.data.data || response.data;
 
@@ -203,10 +235,9 @@ export const leadsApi = {
         updatedAt: leadData.updatedAt || new Date().toISOString(),
       } as any;
 
-      console.log('[LeadsAPI] Transformed lead with stage:', JSON.stringify(lead));
       return lead;
     } catch (error) {
-      console.error('[LeadsAPI] Error fetching lead:', error);
+      if (__DEV__) console.error('[LeadsAPI] Error fetching lead:', error);
       throw new Error(getErrorMessage(error));
     }
   },

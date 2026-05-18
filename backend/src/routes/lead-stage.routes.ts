@@ -52,6 +52,7 @@ const createStageValidation = [
   body('journeyOrder').optional().isInt().withMessage('Journey order must be an integer'),
   body('icon').optional().trim(),
   body('autoSyncStatus').optional().isIn(['WON', 'LOST']).withMessage('Auto sync status must be WON or LOST'),
+  body('followUpConfigId').optional({ nullable: true }).isUUID().withMessage('followUpConfigId must be a UUID or null'),
 ];
 
 const updateStageValidation = [
@@ -63,6 +64,7 @@ const updateStageValidation = [
   body('icon').optional().trim(),
   body('autoSyncStatus').optional().isIn(['WON', 'LOST', null]).withMessage('Auto sync status must be WON, LOST, or null'),
   body('isActive').optional().isBoolean().withMessage('isActive must be a boolean'),
+  body('followUpConfigId').optional({ nullable: true }).isUUID().withMessage('followUpConfigId must be a UUID or null'),
 ];
 
 const updateLeadStageValidation = [
@@ -242,7 +244,7 @@ router.get('/journey', async (req: TenantRequest, res: Response) => {
 router.post('/', authorize('admin'), validate(createStageValidation), async (req: TenantRequest, res: Response) => {
   try {
     const organizationId = req.organizationId!;
-    const { name, slug, color, order, journeyOrder, icon, autoSyncStatus } = req.body;
+    const { name, slug, color, order, journeyOrder, icon, autoSyncStatus, followUpConfigId } = req.body;
 
     const stage = await leadStageService.createCustomStage(organizationId, {
       name,
@@ -252,6 +254,7 @@ router.post('/', authorize('admin'), validate(createStageValidation), async (req
       journeyOrder,
       icon,
       autoSyncStatus,
+      followUpConfigId,
     });
 
     return ApiResponse.success(res, 'Lead stage created successfully', { stage }, 201);
@@ -273,7 +276,7 @@ router.put('/:stageId', authorize('admin'), validate(updateStageValidation), asy
   try {
     const organizationId = req.organizationId!;
     const { stageId } = req.params;
-    const { name, color, order, journeyOrder, icon, autoSyncStatus, isActive } = req.body;
+    const { name, color, order, journeyOrder, icon, autoSyncStatus, isActive, followUpConfigId } = req.body;
 
     const stage = await leadStageService.updateStage(stageId, organizationId, {
       name,
@@ -283,6 +286,7 @@ router.put('/:stageId', authorize('admin'), validate(updateStageValidation), asy
       icon,
       autoSyncStatus,
       isActive,
+      followUpConfigId,
     });
 
     return ApiResponse.success(res, 'Lead stage updated successfully', { stage });

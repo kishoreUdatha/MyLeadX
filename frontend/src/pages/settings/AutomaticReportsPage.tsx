@@ -16,6 +16,7 @@ import {
   PlayIcon,
   PauseIcon,
   DocumentArrowDownIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
 import { autoReportsService, AutoReportSchedule } from '../../services/auto-reports.service';
@@ -269,6 +270,19 @@ export default function AutomaticReportsPage() {
           <PlusIcon className="w-4 h-4" />
           Add Schedule
         </button>
+      </div>
+
+      {/* Tenant-controlled hint */}
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <InformationCircleIcon className="w-5 h-5 mt-0.5 flex-shrink-0 text-blue-600" />
+        <div className="text-sm text-blue-900">
+          <p className="font-medium">Reports are sent only when your organization configures them.</p>
+          <p className="mt-1 text-blue-800/90">
+            Nothing is sent by default. Every schedule below was created inside your organization, runs on the timing
+            you choose, and emails only the recipients you list. The Voicebridge platform does not auto-enable any
+            report on your behalf — pause or delete any schedule at any time.
+          </p>
+        </div>
       </div>
 
       {/* Stats */}

@@ -109,7 +109,9 @@ const QualifiedLeadsScreen: React.FC = () => {
     </View>
   );
 
-  const renderItem = ({ item }: { item: QualifiedLead }) => {
+  // Stable identity so FlatList doesn't re-render every visible card when
+  // the parent re-renders (filter taps, refresh, etc.).
+  const renderItem = useCallback(({ item }: { item: QualifiedLead }) => {
     const statusConfig = STATUS_CONFIG[item.status] || STATUS_CONFIG.NEW;
 
     return (
@@ -163,7 +165,7 @@ const QualifiedLeadsScreen: React.FC = () => {
         )}
       </View>
     );
-  };
+  }, []);
 
   if (loading) {
     return (

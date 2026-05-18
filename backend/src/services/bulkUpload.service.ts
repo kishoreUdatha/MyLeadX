@@ -462,8 +462,13 @@ export class BulkUploadService {
     return { phoneColumn, emailColumn, nameColumn };
   }
 
-  // Validate leads
-  validateLeads(leads: ParsedLead[]): {
+  // Validate leads. `options` lets each caller opt into stricter rules — the
+  // direct leads upload requires email/status/assignedTo, but the raw-imports
+  // staging flow does not (those get filled in later in the UI).
+  validateLeads(
+    leads: ParsedLead[],
+    options: { requireEmail?: boolean; requireStatus?: boolean; requireAssignedTo?: boolean } = {}
+  ): {
     valid: ParsedLead[];
     invalid: Array<{ row: number; errors: string[] }>;
   } {
@@ -474,7 +479,7 @@ export class BulkUploadService {
       const errors: string[] = [];
 
       if (!lead.firstName || lead.firstName.trim() === '') {
-        errors.push('First name is required');
+        errors.push('Name is required');
       }
 
       if (!lead.phone || lead.phone.trim() === '') {
@@ -487,8 +492,19 @@ export class BulkUploadService {
         }
       }
 
-      if (lead.email && !this.isValidEmail(lead.email)) {
+      const hasEmail = !!lead.email && lead.email.trim() !== '';
+      if (options.requireEmail && !hasEmail) {
+        errors.push('Email is required');
+      } else if (hasEmail && !this.isValidEmail(lead.email!)) {
         errors.push('Invalid email format');
+      }
+
+      if (options.requireStatus && (!lead.status || lead.status.trim() === '')) {
+        errors.push('Status is required');
+      }
+
+      if (options.requireAssignedTo && (!lead.assignedTo || lead.assignedTo.trim() === '')) {
+        errors.push('Assigned To is required');
       }
 
       if (errors.length > 0) {
@@ -842,8 +858,13 @@ export class BulkUploadService {
     // 1. Parse file
     const parsedLeads = await this.parseFile(buffer, mimetype);
 
-    // 2. Validate leads
-    const { valid, invalid } = this.validateLeads(parsedLeads);
+    // 2. Validate leads — direct lead import requires Email, Status, and Assigned To
+    // so every row lands in the pipeline with a stage and an owner from day one.
+    const { valid, invalid } = this.validateLeads(parsedLeads, {
+      requireEmail: true,
+      requireStatus: true,
+      requireAssignedTo: true,
+    });
 
     // 3. Detect duplicates
     const { unique, duplicates } = await this.detectDuplicates(organizationId, valid);
